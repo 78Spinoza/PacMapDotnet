@@ -5,7 +5,7 @@ use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_int, c_float, c_double};
 use ndarray::Array2;
 use pacmap::Configuration;
-use crate::{fit_transform_normalized, transform_with_model};
+use crate::{fit_transform_normalized_with_progress_and_force_knn, transform_with_model};
 use crate::serialization::PaCMAP;
 use crate::stats::NormalizationMode;
 use crate::hnsw_params::{HnswParams, HnswUseCase};
@@ -58,6 +58,7 @@ pub struct PacmapConfig {
     pub far_pair_ratio: c_double,
     pub seed: c_int,              // -1 for random seed
     pub normalization_mode: c_int, // 0=Auto, 1=ZScore, 2=MinMax, 3=Robust, 4=None
+    pub force_exact_knn: bool,    // If true, disable HNSW and use brute-force KNN
     pub hnsw_config: PacmapHnswConfig,
 }
 
@@ -73,6 +74,7 @@ impl Default for PacmapConfig {
             far_pair_ratio: 0.5,
             seed: -1,
             normalization_mode: 0, // Auto
+            force_exact_knn: false, // Use HNSW by default
             hnsw_config: PacmapHnswConfig::default(),
         }
     }
@@ -80,10 +82,23 @@ impl Default for PacmapConfig {
 
 impl PacmapConfig {
     fn to_pacmap_configuration(&self) -> Configuration {
+        // Convert single n_epochs to PacMAP's three-phase iteration structure
+        // Default proportions: (100, 100, 250) = 450 total
+        // Phase 1: ~22% for mid-near weight reduction
+        // Phase 2: ~22% for balanced weight phase
+        // Phase 3: ~56% for local structure focus
+        let total_epochs = self.n_epochs as usize;
+        let phase1 = (total_epochs as f64 * 0.22).round() as usize;
+        let phase2 = (total_epochs as f64 * 0.22).round() as usize;
+        let phase3 = total_epochs - phase1 - phase2; // Remainder goes to phase 3
+
         Configuration {
             embedding_dimensions: self.embedding_dimensions as usize,
             override_neighbors: Some(self.n_neighbors as usize),
             seed: if self.seed >= 0 { Some(self.seed as u64) } else { None },
+            mid_near_ratio: self.mid_near_ratio as f32,
+            far_pair_ratio: self.far_pair_ratio as f32,
+            num_iters: (phase1, phase2, phase3),
             ..Default::default()
         }
     }
@@ -194,19 +209,23 @@ pub extern "C" fn pacmap_fit_transform_enhanced(
     // Report progress: Starting
     progress_callback("Initializing", 0, 100, 0.0, "Preparing dataset for PacMAP fitting");
 
-    // Get HNSW parameters
+    // Get HNSW parameters (but only report them if not forcing exact KNN)
     let hnsw_params = config.to_hnsw_params(rows as usize, cols as usize);
     let characteristics = hnsw_params.get_characteristics();
 
-    // Report HNSW configuration
-    let hnsw_message = format!(
-        "HNSW: M={}, ef_construction={}, ef_search={}, Memory~{}MB",
-        hnsw_params.m,
-        hnsw_params.ef_construction,
-        hnsw_params.ef_search,
-        characteristics.estimated_memory_mb
-    );
-    progress_callback("HNSW Config", 10, 100, 10.0, &hnsw_message);
+    // Report HNSW configuration only if not forcing exact KNN
+    if !config.force_exact_knn {
+        let hnsw_message = format!(
+            "HNSW: M={}, ef_construction={}, ef_search={}, Memory~{}MB",
+            hnsw_params.m,
+            hnsw_params.ef_construction,
+            hnsw_params.ef_search,
+            characteristics.estimated_memory_mb
+        );
+        progress_callback("HNSW Config", 10, 100, 10.0, &hnsw_message);
+    } else {
+        progress_callback("KNN Config", 10, 100, 10.0, "Exact KNN requested - HNSW disabled for precision");
+    }
 
     // Convert configuration
     let pacmap_config = config.to_pacmap_configuration();
@@ -215,8 +234,37 @@ pub extern "C" fn pacmap_fit_transform_enhanced(
     // Report progress: Normalization
     progress_callback("Normalizing", 20, 100, 20.0, "Applying data normalization");
 
-    // Perform fitting
-    match fit_transform_normalized(data_arr, pacmap_config, norm_mode) {
+    // Perform fitting with progress callback and force_exact_knn control
+    let rust_progress_callback = if callback.is_some() {
+        Some(Box::new(move |phase: &str, current: usize, total: usize, percent: f32, message: &str| {
+            if let Some(cb) = callback {
+                // Convert Rust strings to C strings for FFI
+                let phase_cstr = CString::new(phase).unwrap_or_else(|_| CString::new("Unknown").unwrap());
+                let message_cstr = CString::new(message).unwrap_or_else(|_| CString::new("").unwrap());
+                cb(
+                    phase_cstr.as_ptr(),
+                    current as c_int,
+                    total as c_int,
+                    percent,
+                    message_cstr.as_ptr(),
+                );
+            }
+        }) as Box<dyn Fn(&str, usize, usize, f32, &str) + Send + Sync>)
+    } else {
+        None
+    };
+
+    // DEBUG: Report FFI parameters via callback
+    let ffi_debug_msg = format!("🔍 FFI DEBUG: config.force_exact_knn={}", config.force_exact_knn);
+    progress_callback("FFI Debug", 3, 100, 3.0, &ffi_debug_msg);
+
+    match fit_transform_normalized_with_progress_and_force_knn(
+        data_arr,
+        pacmap_config,
+        norm_mode,
+        rust_progress_callback,
+        config.force_exact_knn
+    ) {
         Ok((result_embedding, model)) => {
             // Report progress: Copying results
             progress_callback("Finalizing", 90, 100, 90.0, "Copying embedding results");

@@ -3,6 +3,7 @@ use ordered_float::OrderedFloat;
 use serde::{Serialize, Deserialize};
 use std::error::Error;
 use std::fmt;
+use rand::Rng;
 
 /// Normalization modes supported by the system
 /// Following UMAP's approach to feature scaling with saved parameters
@@ -373,17 +374,58 @@ impl NormalizationParams {
     }
 }
 
-/// Compute distance statistics for outlier detection
-/// Maintains the original functionality while adding normalization support
+/// Compute distance statistics for outlier detection with smart approximation
+/// Uses sampling for large datasets to avoid O(n²) performance issues
 pub fn compute_distance_stats(embedding: &Array2<f64>, _k: usize) -> (f64, f64, f64) {
     let n = embedding.shape()[0];
     if n < 2 {
         return (0.0, 0.0, 0.0);
     }
 
+    // Use approximation for large datasets to avoid O(n²) bottleneck
+    const EXACT_THRESHOLD: usize = 5000;
+    const MAX_SAMPLE_PAIRS: usize = 50000;
+
     let mut distances = Vec::new();
-    for i in 0..n {
-        for j in (i + 1)..n {
+
+    if n <= EXACT_THRESHOLD {
+        // Exact computation for small datasets
+        for i in 0..n {
+            for j in (i + 1)..n {
+                let mut diff = 0.0;
+                for (&a, &b) in embedding.row(i).iter().zip(embedding.row(j).iter()) {
+                    let d = a - b;
+                    diff += d * d;
+                }
+                let dist = diff.sqrt();
+                distances.push(OrderedFloat(dist));
+            }
+        }
+    } else {
+        // Approximation using random sampling for large datasets
+        if std::env::var("PACMAP_VERBOSE").is_ok() {
+            eprintln!("🔧 Using distance stats approximation for {} samples (n>{}) to avoid O(n²) bottleneck", n, EXACT_THRESHOLD);
+        }
+
+        use std::collections::HashSet;
+        let mut rng = rand::thread_rng();
+        let mut sampled_pairs = HashSet::new();
+
+        // Calculate how many pairs we want to sample
+        let total_possible_pairs = (n * (n - 1)) / 2;
+        let sample_size = MAX_SAMPLE_PAIRS.min(total_possible_pairs);
+
+        while sampled_pairs.len() < sample_size {
+            let i = (rng.gen::<f64>() * n as f64) as usize;
+            let j = (rng.gen::<f64>() * n as f64) as usize;
+
+            if i != j {
+                let (min_idx, max_idx) = if i < j { (i, j) } else { (j, i) };
+                sampled_pairs.insert((min_idx, max_idx));
+            }
+        }
+
+        for &(i, j) in &sampled_pairs {
             let mut diff = 0.0;
             for (&a, &b) in embedding.row(i).iter().zip(embedding.row(j).iter()) {
                 let d = a - b;
@@ -391,6 +433,11 @@ pub fn compute_distance_stats(embedding: &Array2<f64>, _k: usize) -> (f64, f64, 
             }
             let dist = diff.sqrt();
             distances.push(OrderedFloat(dist));
+        }
+
+        if std::env::var("PACMAP_VERBOSE").is_ok() {
+            eprintln!("✅ Sampled {} distance pairs ({}% of total)", distances.len(),
+                     (distances.len() * 100) / total_possible_pairs);
         }
     }
 

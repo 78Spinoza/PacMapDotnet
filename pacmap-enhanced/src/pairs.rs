@@ -1,4 +1,5 @@
 use ndarray::ArrayView2;
+use crate::hnsw_params::HnswParams;
 
 /// Brute-force O(n²) k-NN search - always available, good for small datasets
 pub fn compute_pairs_bruteforce(data: ArrayView2<f64>, n_neighbors: usize, _seed: u64) -> Vec<(usize, usize)> {
@@ -28,7 +29,7 @@ pub fn compute_pairs_bruteforce(data: ArrayView2<f64>, n_neighbors: usize, _seed
 
 /// Adaptive k-NN search with choice between HNSW and brute-force
 pub fn compute_pairs_hnsw(data: ArrayView2<f64>, n_neighbors: usize, seed: u64) -> Vec<(usize, usize)> {
-    let (n_samples, _n_features) = data.dim();
+    let (n_samples, n_features) = data.dim();
 
     if n_samples < 2 {
         return Vec::new(); // Need at least 2 points
@@ -37,14 +38,20 @@ pub fn compute_pairs_hnsw(data: ArrayView2<f64>, n_neighbors: usize, seed: u64) 
     // Use brute-force for small datasets (faster due to no index overhead)
     const HNSW_THRESHOLD: usize = 1000;
     if n_samples <= HNSW_THRESHOLD {
-        eprintln!("🔍 Using brute-force k-NN for small dataset ({} samples)", n_samples);
+        // Only print if verbose mode is enabled (check env var)
+        if std::env::var("PACMAP_VERBOSE").is_ok() {
+            eprintln!("🔍 Using brute-force k-NN for small dataset ({} samples)", n_samples);
+        }
         return compute_pairs_bruteforce(data, n_neighbors, seed);
     }
 
     // For large datasets, decide based on compilation features
     #[cfg(feature = "use_hnsw")]
     {
-        eprintln!("🔧 Using HNSW k-NN for large dataset ({} samples, {} features)", n_samples, n_features);
+        // Only print if verbose mode is enabled (check env var)
+        if std::env::var("PACMAP_VERBOSE").is_ok() {
+            eprintln!("🔧 Using HNSW k-NN for large dataset ({} samples, {} features)", n_samples, n_features);
+        }
 
         // Try HNSW implementation
         match try_hnsw_search(data, n_neighbors, n_samples, n_features) {
@@ -104,11 +111,13 @@ fn try_hnsw_search(data: ArrayView2<f64>, n_neighbors: usize, n_samples: usize, 
         let query_point = &points[i];
         let search_result = hnsw.search(query_point, n_neighbors + 1, hnsw_params.ef_search);
 
+        let mut neighbors_added = 0;
         for neighbor in search_result {
             // Extract the point ID and convert to usize
             let j = neighbor.p_id.0 as usize;
-            if i != j {
+            if i != j && neighbors_added < n_neighbors {
                 pairs.push((i, j));
+                neighbors_added += 1;
             }
         }
     }
@@ -196,7 +205,7 @@ fn try_hnsw_knn_indices(data: ArrayView2<f64>, n_neighbors: usize) -> Result<Vec
                 .into_iter()
                 .map(|neighbor| neighbor.p_id.0 as usize)
                 .filter(|&j| j != i)
-                .take(n_neighbors)
+                .take(n_neighbors)  // Ensure exactly n_neighbors per point
                 .collect()
         })
         .collect();
