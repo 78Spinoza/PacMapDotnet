@@ -14,9 +14,9 @@ mod tests {
         println!("Parameters: M={}, ef_construction={}, ef_search={}",
                  params.m, params.ef_construction, params.ef_search);
 
-        // Small datasets should use conservative parameters
-        assert_eq!(params.m, 16, "Small datasets should use M=16");
-        assert_eq!(params.ef_construction, 64, "Small datasets should use ef_construction=64");
+        // Enhanced logarithmic scaling: 8 + log2(1000) ≈ 17
+        assert_eq!(params.m, 17, "Small datasets should use M=17 (enhanced scaling)");
+        assert_eq!(params.ef_construction, 128, "Small datasets should use ef_construction=128 (doubled base)");
 
         let characteristics = params.get_characteristics();
         println!("{}", characteristics);
@@ -36,9 +36,9 @@ mod tests {
         println!("Parameters: M={}, ef_construction={}, ef_search={}",
                  params.m, params.ef_construction, params.ef_search);
 
-        // Medium datasets should use balanced parameters
-        assert_eq!(params.m, 32, "Medium datasets should use M=32");
-        assert_eq!(params.ef_construction, 128, "Medium datasets should use ef_construction=128");
+        // Enhanced logarithmic scaling: 8 + log2(100000) ≈ 24
+        assert_eq!(params.m, 24, "Medium datasets should use M=24 (enhanced scaling)");
+        assert_eq!(params.ef_construction, 256, "Medium datasets should use ef_construction=256 (enhanced)");
 
         let characteristics = params.get_characteristics();
         println!("{}", characteristics);
@@ -59,9 +59,9 @@ mod tests {
         println!("Parameters: M={}, ef_construction={}, ef_search={}",
                  params.m, params.ef_construction, params.ef_search);
 
-        // Large datasets should use high performance parameters
-        assert_eq!(params.m, 64, "Large datasets should use M=64");
-        assert_eq!(params.ef_construction, 128, "Large datasets should use ef_construction=128");
+        // Enhanced logarithmic scaling: 8 + log2(2000000) ≈ 28
+        assert_eq!(params.m, 28, "Large datasets should use M=28 (enhanced scaling)");
+        assert_eq!(params.ef_construction, 256, "Large datasets should use ef_construction=256 (enhanced)");
 
         let characteristics = params.get_characteristics();
         println!("{}", characteristics);

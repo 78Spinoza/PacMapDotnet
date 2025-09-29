@@ -317,25 +317,28 @@ mod tests {
     #[test]
     fn test_auto_scale_small_dataset() {
         let params = HnswParams::auto_scale(1000, 50, 15);
-        assert_eq!(params.m, 16);
-        assert_eq!(params.ef_construction, 64);
-        assert!(params.ef_search >= 32); // May be scaled up
+        // Enhanced logarithmic scaling: 8 + log2(1000) ≈ 8 + 9.97 = 17
+        assert_eq!(params.m, 17);
+        assert_eq!(params.ef_construction, 128);
+        assert!(params.ef_search >= 128); // Doubled base values and scaling
     }
 
     #[test]
     fn test_auto_scale_medium_dataset() {
         let params = HnswParams::auto_scale(100_000, 100, 15);
-        assert_eq!(params.m, 32);
-        assert_eq!(params.ef_construction, 128);
-        assert!(params.ef_search >= 64);
+        // Enhanced logarithmic scaling: 8 + log2(100000) ≈ 8 + 16.6 = 24
+        assert_eq!(params.m, 24);
+        assert_eq!(params.ef_construction, 256);
+        assert!(params.ef_search >= 256); // Enhanced scaling for medium datasets
     }
 
     #[test]
     fn test_auto_scale_large_dataset() {
         let params = HnswParams::auto_scale(2_000_000, 200, 15);
-        assert_eq!(params.m, 64);
-        assert_eq!(params.ef_construction, 128);
-        assert!(params.ef_search >= 128);
+        // Enhanced logarithmic scaling: 8 + log2(2000000) ≈ 8 + 20.9 = 28
+        assert_eq!(params.m, 28);
+        assert_eq!(params.ef_construction, 256);
+        assert!(params.ef_search >= 512); // Much higher for large datasets
     }
 
     #[test]
