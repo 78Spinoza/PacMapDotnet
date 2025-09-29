@@ -104,17 +104,17 @@ mod tests {
 
         if all_tests_passed {
             println!("🎉 ALL PIPELINE TESTS PASSED!");
-            println!("✅ Normalization pipeline working");
-            println!("✅ k-NN selection pipeline working");
-            println!("✅ Full embedding pipeline working");
-            println!("✅ Persistence pipeline working");
-            println!("✅ Multi-dimensional pipeline working");
-            println!("✅ Performance pipeline working");
+            println!("SUCCESS: Normalization pipeline working");
+            println!("SUCCESS: k-NN selection pipeline working");
+            println!("SUCCESS: Full embedding pipeline working");
+            println!("SUCCESS: Persistence pipeline working");
+            println!("SUCCESS: Multi-dimensional pipeline working");
+            println!("SUCCESS: Performance pipeline working");
             println!();
             println!("Total pipeline test time: {:.2}s", total_time.as_secs_f64());
             println!("PacMAP Enhanced pipeline is fully functional!");
         } else {
-            println!("❌ SOME PIPELINE TESTS FAILED!");
+            println!("ERROR: SOME PIPELINE TESTS FAILED!");
             println!("Check individual test results above for details.");
         }
 

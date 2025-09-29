@@ -18,7 +18,7 @@ mod tests {
         assert_eq!(config.embedding_dimensions, 2);
         assert!(config.hnsw_config.auto_scale);
 
-        println!("✅ Configuration creation test passed");
+        println!("SUCCESS: Configuration creation test passed");
     }
 
     #[test]
@@ -41,7 +41,7 @@ mod tests {
         assert_eq!(accurate.use_case, 2);
         assert_eq!(memory_opt.use_case, 3);
 
-        println!("✅ HNSW configuration creation test passed");
+        println!("SUCCESS: HNSW configuration creation test passed");
     }
 
     #[test]
@@ -156,7 +156,7 @@ mod tests {
 
         // Clean up
         pacmap_free_model_enhanced(handle);
-        println!("✅ Basic fit transform test passed");
+        println!("SUCCESS: Basic fit transform test passed");
     }
 
     #[test]
@@ -194,11 +194,11 @@ mod tests {
         // Compare file sizes
         let size_no_quant = std::fs::metadata("test_ffi_no_quant.bin").unwrap().len();
         let size_with_quant = std::fs::metadata("test_ffi_with_quant.bin").unwrap().len();
-        println!("📊 FFI file sizes:");
+        println!(" FFI file sizes:");
         println!("   No quantization: {} bytes", size_no_quant);
         println!("   With quantization: {} bytes", size_with_quant);
         if size_with_quant < size_no_quant {
-            println!("   ✅ Quantization reduced file size by {} bytes", size_no_quant - size_with_quant);
+            println!("   SUCCESS: Quantization reduced file size by {} bytes", size_no_quant - size_with_quant);
         }
 
         // Test loading both
@@ -215,7 +215,7 @@ mod tests {
         std::fs::remove_file("test_ffi_no_quant.bin").ok();
         std::fs::remove_file("test_ffi_with_quant.bin").ok();
 
-        println!("✅ FFI quantization tests passed");
+        println!("SUCCESS: FFI quantization tests passed");
     }
 
     #[test]
@@ -234,7 +234,7 @@ mod tests {
         model.quantize_on_save = false;
         model.save_compressed("test_no_quant.bin").unwrap();
         let loaded_no_quant = crate::serialization::PaCMAP::load_compressed("test_no_quant.bin").unwrap();
-        println!("✅ No quantization: saved and loaded successfully");
+        println!("SUCCESS: No quantization: saved and loaded successfully");
         println!("   Embedding shape: {:?}", loaded_no_quant.embedding.shape());
         println!("   Has quantized embedding: {}", loaded_no_quant.quantized_embedding.is_some());
 
@@ -243,14 +243,14 @@ mod tests {
         model.quantize_for_save(); // Manually quantize
         model.save_compressed("test_with_quant.bin").unwrap();
         let loaded_with_quant = crate::serialization::PaCMAP::load_compressed("test_with_quant.bin").unwrap();
-        println!("✅ With quantization: saved and loaded successfully");
+        println!("SUCCESS: With quantization: saved and loaded successfully");
         println!("   Embedding shape: {:?}", loaded_with_quant.embedding.shape());
         println!("   Has quantized embedding: {}", loaded_with_quant.quantized_embedding.is_some());
 
         // Test 3: Compare file sizes
         let size_no_quant = std::fs::metadata("test_no_quant.bin").unwrap().len();
         let size_with_quant = std::fs::metadata("test_with_quant.bin").unwrap().len();
-        println!("📊 File sizes:");
+        println!(" File sizes:");
         println!("   No quantization: {} bytes", size_no_quant);
         println!("   With quantization: {} bytes", size_with_quant);
         println!("   Compression ratio: {:.1}%", (size_with_quant as f64 / size_no_quant as f64) * 100.0);
@@ -259,7 +259,7 @@ mod tests {
         std::fs::remove_file("test_no_quant.bin").ok();
         std::fs::remove_file("test_with_quant.bin").ok();
 
-        println!("✅ Quantization tests passed");
+        println!("SUCCESS: Quantization tests passed");
     }
 
     #[test]
@@ -278,16 +278,16 @@ mod tests {
 
                 // Test save
                 match model.save_compressed("test_simple.bin") {
-                    Ok(()) => println!("✅ Save succeeded"),
+                    Ok(()) => println!("SUCCESS: Save succeeded"),
                     Err(e) => panic!("Save failed: {:?}", e),
                 }
 
                 // Test load
                 match crate::serialization::PaCMAP::load_compressed("test_simple.bin") {
                     Ok(loaded) => {
-                        println!("✅ Load succeeded with {} samples", loaded.embedding.shape()[0]);
+                        println!("SUCCESS: Load succeeded with {} samples", loaded.embedding.shape()[0]);
                         assert_eq!(model.embedding.shape(), loaded.embedding.shape());
-                        println!("✅ Simple save/load test passed");
+                        println!("SUCCESS: Simple save/load test passed");
                     },
                     Err(e) => panic!("Load failed: {:?}", e),
                 }
@@ -396,7 +396,7 @@ mod tests {
         pacmap_free_model_enhanced(load_handle);
         std::fs::remove_file("test_ffi_model.bin").ok();
 
-        println!("✅ Model save/load test passed");
+        println!("SUCCESS: Model save/load test passed");
     }
 
     #[test]
@@ -414,6 +414,6 @@ mod tests {
         assert!(version_str.contains("PacMAP Enhanced"), "Version should contain library name");
         assert!(version_str.contains("HNSW"), "Version should mention HNSW");
 
-        println!("✅ Version information test passed");
+        println!("SUCCESS: Version information test passed");
     }
 }

@@ -122,7 +122,7 @@ impl PaCMAP {
         progress("Complete", 100, 100, 100.0, &format!("Save completed - {} bytes", file_size));
 
         println!("💾 Model saved successfully to: {}", path);
-        println!("   📊 File size: {} bytes ({:.2} KB)", file_size, file_size as f64 / 1024.0);
+        println!("    File size: {} bytes ({:.2} KB)", file_size, file_size as f64 / 1024.0);
 
         Ok(())
     }
@@ -170,9 +170,9 @@ impl PaCMAP {
         progress("Complete", 100, 100, 100.0, &format!("Save completed - {} bytes", file_size));
 
         println!("💾 Model saved successfully to: {}", path);
-        println!("   📊 File size: {} bytes ({:.2} KB)", file_size, file_size as f64 / 1024.0);
+        println!("    File size: {} bytes ({:.2} KB)", file_size, file_size as f64 / 1024.0);
         if self.quantize_on_save {
-            println!("   🗜️  Quantization enabled - model size optimized");
+            println!("     Quantization enabled - model size optimized");
         }
 
         Ok(())
@@ -215,7 +215,7 @@ impl PaCMAP {
         progress("Complete", 100, 100, 100.0, "Model loading completed successfully");
 
         println!("📂 Model loaded successfully from: {}", path);
-        println!("   📊 File size: {} bytes ({:.2} KB)", file_size, file_size as f64 / 1024.0);
+        println!("    File size: {} bytes ({:.2} KB)", file_size, file_size as f64 / 1024.0);
 
         Ok(model)
     }
@@ -229,7 +229,7 @@ impl PaCMAP {
         println!();
 
         // Core PacMAP Configuration
-        println!("🎛️  Core PacMAP Configuration:");
+        println!("  Core PacMAP Configuration:");
         println!("   - Embedding dimensions: {}D", self.config.embedding_dim);
         println!("   - Number of neighbors: {}", self.config.n_neighbors);
         println!("   - Number of epochs: {}", self.config.n_epochs);
@@ -246,7 +246,7 @@ impl PaCMAP {
         println!();
 
         // HNSW Configuration
-        println!("🔍 HNSW Neighbor Search Configuration:");
+        println!(" HNSW Neighbor Search Configuration:");
         println!("   - M parameter: {}", self.config.hnsw_params.m);
         println!("   - ef_construction: {}", self.config.hnsw_params.ef_construction);
         println!("   - ef_search: {}", self.config.hnsw_params.ef_search);
@@ -256,7 +256,7 @@ impl PaCMAP {
         println!();
 
         // Normalization Configuration
-        println!("📊 Data Normalization Configuration:");
+        println!(" Data Normalization Configuration:");
         println!("   - Mode: {:?}", self.normalization.mode);
         println!("   - Features: {}", self.normalization.n_features);
         match self.normalization.mode {
@@ -308,7 +308,7 @@ impl PaCMAP {
         println!();
 
         // Embedding Information
-        println!("🎯 Embedding Information:");
+        println!(" Embedding Information:");
         println!("   - Shape: {:?}", self.embedding.shape());
         let non_zero_count = self.embedding.iter().filter(|&&x| x.abs() > 1e-10).count();
         println!("   - Non-zero values: {}/{} ({:.1}%)",
@@ -327,7 +327,7 @@ impl PaCMAP {
 
         // Quantization Information
         if self.quantize_on_save {
-            println!("🗜️  Quantization Configuration:");
+            println!("  Quantization Configuration:");
             println!("   - Quantize on save: Enabled");
             if let Some(ref quantized) = self.quantized_embedding {
                 println!("   - Quantized shape: {:?}", quantized.data.shape());
@@ -346,7 +346,7 @@ impl PaCMAP {
                 println!("   - Quantized embedding: Not yet computed");
             }
         } else {
-            println!("🗜️  Quantization: Disabled (full precision preserved)");
+            println!("  Quantization: Disabled (full precision preserved)");
         }
 
         println!();

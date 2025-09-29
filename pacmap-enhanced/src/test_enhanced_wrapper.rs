@@ -120,18 +120,18 @@ mod tests {
 
         if all_tests_passed {
             println!("🎉 ALL ENHANCED WRAPPER TESTS PASSED!");
-            println!("✅ Version information working");
-            println!("✅ Configuration system working");
-            println!("✅ HNSW auto-scaling working");
-            println!("✅ Enhanced fit/transform working");
-            println!("✅ Model information retrieval working");
-            println!("✅ Model persistence working");
-            println!("✅ Quantization functionality working");
-            println!("✅ Error handling working");
+            println!("SUCCESS: Version information working");
+            println!("SUCCESS: Configuration system working");
+            println!("SUCCESS: HNSW auto-scaling working");
+            println!("SUCCESS: Enhanced fit/transform working");
+            println!("SUCCESS: Model information retrieval working");
+            println!("SUCCESS: Model persistence working");
+            println!("SUCCESS: Quantization functionality working");
+            println!("SUCCESS: Error handling working");
             println!();
             println!("PacMAP Enhanced wrapper is fully functional!");
         } else {
-            println!("❌ SOME ENHANCED WRAPPER TESTS FAILED!");
+            println!("ERROR: SOME ENHANCED WRAPPER TESTS FAILED!");
             println!("Check individual test results above for details.");
         }
 

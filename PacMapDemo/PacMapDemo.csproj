@@ -14,9 +14,15 @@
 
   <ItemGroup>
     <PackageReference Include="NumSharp" Version="0.30.0" />
-    <PackageReference Include="ScottPlot" Version="4.1.71" />
+    <PackageReference Include="OxyPlot.Core" Version="2.2.0" />
+    <PackageReference Include="OxyPlot.WindowsForms" Version="2.2.0" />
     <PackageReference Include="System.Drawing.Common" Version="8.0.8" />
     <PackageReference Include="Microsoft.Data.Analysis" Version="0.21.1" />
+  </ItemGroup>
+
+  <!-- Reference to PacMAPSharp library -->
+  <ItemGroup>
+    <ProjectReference Include="../PacMAPSharp/PacMAPSharp.csproj" />
   </ItemGroup>
 
 

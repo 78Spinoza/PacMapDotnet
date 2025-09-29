@@ -43,29 +43,36 @@ impl HnswParams {
     /// Auto-scale HNSW parameters based on dataset characteristics
     /// Following UMAP Enhanced proven patterns
     pub fn auto_scale(n_samples: usize, n_features: usize, target_neighbors: usize) -> Self {
-        let (m, ef_construction, ef_search) = match n_samples {
-            // Small datasets: Prioritize accuracy over speed/memory
-            0..=50_000 => (16, 64, 32),
+        // Use logarithmic scaling for m parameter, capped at 32
+        let m = std::cmp::min(32, 8 + (n_samples as f32).log2() as usize);
 
-            // Medium datasets: Balanced performance
-            50_001..=1_000_000 => (32, 128, 64),
+        let (ef_construction, ef_search) = match n_samples {
+            // Small datasets: Prioritize accuracy over speed/memory (doubled base values)
+            0..=50_000 => (128, 64),
 
-            // Large datasets: Prioritize memory efficiency and speed
-            _ => (64, 128, 128),
+            // Medium datasets: Balanced performance (doubled base values)
+            50_001..=1_000_000 => (256, 128),
+
+            // Large datasets: Prioritize memory efficiency and speed (doubled base values)
+            _ => (256, 256),
         };
 
-        // Apply dimension-based scaling (from UMAP research)
+        // Apply improved dimension-based scaling for high-dimensional data
         let dim_scale = (n_features as f32).sqrt();
         let ef_search_scaled = std::cmp::max(
-            ef_search,
-            (dim_scale * 2.0) as usize
+            ef_search * 2, // Start with 2x base instead of 1x
+            (dim_scale * 4.0) as usize // Increase multiplier from 2.0 to 4.0
         );
 
-        // Apply neighbor-count scaling (UMAP pattern)
+        // Apply neighbor-count scaling with recall target considerations
         let log_scale = (n_samples as f32).log2();
+        let recall_target_multiplier = 3; // Ensure at least 3x n_neighbors for good recall
         let ef_search_final = std::cmp::max(
             ef_search_scaled,
-            (target_neighbors as f32 * log_scale) as usize
+            std::cmp::max(
+                (target_neighbors as f32 * log_scale) as usize,
+                target_neighbors * recall_target_multiplier
+            )
         );
 
         let max_m0 = m * 2;

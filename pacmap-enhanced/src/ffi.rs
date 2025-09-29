@@ -59,6 +59,7 @@ pub struct PacmapConfig {
     pub seed: c_int,              // -1 for random seed
     pub normalization_mode: c_int, // 0=Auto, 1=ZScore, 2=MinMax, 3=Robust, 4=None
     pub force_exact_knn: bool,    // If true, disable HNSW and use brute-force KNN
+    pub use_quantization: bool,   // If true, enable 16-bit quantization for memory reduction
     pub hnsw_config: PacmapHnswConfig,
 }
 
@@ -75,6 +76,7 @@ impl Default for PacmapConfig {
             seed: -1,
             normalization_mode: 0, // Auto
             force_exact_knn: false, // Use HNSW by default
+            use_quantization: false, // No quantization by default
             hnsw_config: PacmapHnswConfig::default(),
         }
     }
@@ -255,7 +257,7 @@ pub extern "C" fn pacmap_fit_transform_enhanced(
     };
 
     // DEBUG: Report FFI parameters via callback
-    let ffi_debug_msg = format!("🔍 FFI DEBUG: config.force_exact_knn={}", config.force_exact_knn);
+    let ffi_debug_msg = format!(" FFI DEBUG: force_exact_knn={}, use_quantization={}", config.force_exact_knn, config.use_quantization);
     progress_callback("FFI Debug", 3, 100, 3.0, &ffi_debug_msg);
 
     match fit_transform_normalized_with_progress_and_force_knn(
@@ -263,7 +265,8 @@ pub extern "C" fn pacmap_fit_transform_enhanced(
         pacmap_config,
         norm_mode,
         rust_progress_callback,
-        config.force_exact_knn
+        config.force_exact_knn,
+        config.use_quantization
     ) {
         Ok((result_embedding, model)) => {
             // Report progress: Copying results
@@ -437,7 +440,7 @@ pub extern "C" fn pacmap_save_model_enhanced(
     quantize: bool,
 ) -> c_int {
     if handle.is_null() || path.is_null() {
-        eprintln!("❌ Save model: null handle or path");
+        eprintln!("ERROR: Save model: null handle or path");
         return -1;
     }
 
@@ -446,7 +449,7 @@ pub extern "C" fn pacmap_save_model_enhanced(
         match CStr::from_ptr(path).to_str() {
             Ok(s) => s,
             Err(e) => {
-                eprintln!("❌ Save model: invalid UTF-8 in path: {:?}", e);
+                eprintln!("ERROR: Save model: invalid UTF-8 in path: {:?}", e);
                 return -2;
             }
         }

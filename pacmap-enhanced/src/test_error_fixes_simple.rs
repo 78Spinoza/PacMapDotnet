@@ -22,7 +22,7 @@ mod tests {
         let data = generate_test_data(N_OBS, N_DIM);
 
         // Test 1: Basic training with normalization (Fix 1: Proper normalization)
-        println!("\n🧪 Test 1: Basic training with normalization fix...");
+        println!("\nTEST: Test 1: Basic training with normalization fix...");
 
         let config = pacmap::Configuration {
             embedding_dimensions: EMBEDDING_DIM,
@@ -32,100 +32,100 @@ mod tests {
 
         match fit_transform_normalized(data.clone(), config, Some(NormalizationMode::ZScore)) {
             Ok((embedding, model)) => {
-                println!("✅ Basic training succeeded");
+                println!("SUCCESS: Basic training succeeded");
                 println!("   - Training completed successfully with all fixes applied");
                 println!("   - Embedding shape: {:?}", embedding.shape());
 
                 // Verify embedding quality
                 let non_zero_count = embedding.iter().filter(|&&x| x.abs() > 1e-10).count();
                 if non_zero_count == 0 {
-                    println!("❌ Embedding contains all zero values");
+                    println!("ERROR: Embedding contains all zero values");
                     panic!("Basic training failed - zero embedding");
                 }
 
                 // Test 2: Save and reload model (Fix 2: Persistence fixes)
-                println!("\n🧪 Test 2: Save/load validation...");
+                println!("\nTEST: Test 2: Save/load validation...");
 
                 match test_save_load(&model) {
                     Ok(()) => {
-                        println!("✅ Save/load succeeded");
+                        println!("SUCCESS: Save/load succeeded");
                         println!("   - Model persistence working correctly");
                     },
                     Err(e) => {
-                        println!("❌ Save/load failed: {}", e);
+                        println!("ERROR: Save/load failed: {}", e);
                         panic!("Save/load test failed");
                     }
                 }
 
                 // Test 3: Normalization consistency (Fix 3: Consistent normalization)
-                println!("\n🧪 Test 3: Normalization consistency...");
+                println!("\nTEST: Test 3: Normalization consistency...");
 
                 if test_normalization_consistency(&data) {
-                    println!("✅ Normalization consistency verified");
+                    println!("SUCCESS: Normalization consistency verified");
                     println!("   - Normalization parameters properly preserved");
                 } else {
-                    println!("❌ Normalization consistency failed");
+                    println!("ERROR: Normalization consistency failed");
                     panic!("Normalization consistency test failed");
                 }
 
                 // Test 4: HNSW parameter validation (Fix 4: HNSW scaling)
-                println!("\n🧪 Test 4: HNSW parameter validation...");
+                println!("\nTEST: Test 4: HNSW parameter validation...");
 
                 if test_hnsw_parameters(&model) {
-                    println!("✅ HNSW parameters validated");
+                    println!("SUCCESS: HNSW parameters validated");
                     println!("   - Auto-scaling working correctly");
                 } else {
-                    println!("❌ HNSW parameter validation failed");
+                    println!("ERROR: HNSW parameter validation failed");
                     panic!("HNSW parameter validation failed");
                 }
 
                 // Test 5: Quantization integrity (Fix 5: Quantization fixes)
-                println!("\n🧪 Test 5: Quantization integrity...");
+                println!("\nTEST: Test 5: Quantization integrity...");
 
                 if test_quantization_integrity(&model) {
-                    println!("✅ Quantization integrity verified");
+                    println!("SUCCESS: Quantization integrity verified");
                     println!("   - Quantization parameters properly saved");
                 } else {
-                    println!("❌ Quantization integrity failed");
+                    println!("ERROR: Quantization integrity failed");
                     panic!("Quantization integrity test failed");
                 }
 
                 // Test 6: Memory management (Fix 6: Proper cleanup)
-                println!("\n🧪 Test 6: Memory management...");
+                println!("\nTEST: Test 6: Memory management...");
 
                 if test_memory_management() {
-                    println!("✅ Memory management verified");
+                    println!("SUCCESS: Memory management verified");
                     println!("   - No memory leaks detected in basic operations");
                 } else {
-                    println!("❌ Memory management issues detected");
+                    println!("ERROR: Memory management issues detected");
                     panic!("Memory management test failed");
                 }
 
                 // Test 7: Edge case handling (Fix 7: Robust error handling)
-                println!("\n🧪 Test 7: Edge case handling...");
+                println!("\nTEST: Test 7: Edge case handling...");
 
                 if test_edge_cases() {
-                    println!("✅ Edge case handling verified");
+                    println!("SUCCESS: Edge case handling verified");
                     println!("   - Robust error handling for invalid inputs");
                 } else {
-                    println!("❌ Edge case handling failed");
+                    println!("ERROR: Edge case handling failed");
                     panic!("Edge case handling test failed");
                 }
 
                 println!("\n=== All Error Fix Tests Completed ===");
                 println!("🎉 All 7 error fix tests passed successfully!");
-                println!("✅ Basic training with normalization");
-                println!("✅ Save/load validation");
-                println!("✅ Normalization consistency");
-                println!("✅ HNSW parameter validation");
-                println!("✅ Quantization integrity");
-                println!("✅ Memory management");
-                println!("✅ Edge case handling");
+                println!("SUCCESS: Basic training with normalization");
+                println!("SUCCESS: Save/load validation");
+                println!("SUCCESS: Normalization consistency");
+                println!("SUCCESS: HNSW parameter validation");
+                println!("SUCCESS: Quantization integrity");
+                println!("SUCCESS: Memory management");
+                println!("SUCCESS: Edge case handling");
                 println!("\nPacMAP Enhanced error fixes fully validated!");
 
             },
             Err(e) => {
-                println!("❌ Basic training failed: {}", e);
+                println!("ERROR: Basic training failed: {}", e);
                 panic!("Basic training test failed");
             }
         }

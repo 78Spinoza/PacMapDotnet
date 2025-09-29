@@ -60,23 +60,17 @@ namespace PacMapDemo
         {
             try
             {
-                Console.WriteLine("Loading REAL mammoth dataset...");
-
                 if (!File.Exists(csvPath))
                     throw new FileNotFoundException($"Mammoth CSV file not found: {csvPath}");
 
                 var lines = File.ReadAllLines(csvPath);
                 var dataLines = new List<string>();
 
-                Console.WriteLine($"📁 Reading mammoth CSV: {csvPath}");
-                Console.WriteLine($"📄 Total lines in file: {lines.Length}");
-
                 // Skip header if present (first line might be "0,1,2" or similar)
                 int startIndex = 0;
                 if (lines.Length > 0 && (lines[0].Contains("0,1,2") || lines[0].Contains("x,y,z") || lines[0].Contains("X,Y,Z")))
                 {
                     startIndex = 1;
-                    Console.WriteLine($"📋 Skipping header line: {lines[0]}");
                 }
 
                 for (int i = startIndex; i < lines.Length; i++)
@@ -90,7 +84,6 @@ namespace PacMapDemo
                 int numSamples = maxSamples > 0 ? Math.Min(maxSamples, dataLines.Count) : dataLines.Count;
                 var mammothData = new double[numSamples, 3]; // x, y, z coordinates
 
-                Console.WriteLine($"📈 Processing {numSamples} mammoth points from {dataLines.Count} total data lines...");
 
                 for (int i = 0; i < numSamples; i++)
                 {
@@ -106,10 +99,6 @@ namespace PacMapDemo
                         throw new InvalidDataException($"Invalid CSV line at {i}: '{dataLines[i]}' - expected 3 coordinates");
                     }
 
-                    if (i % 1000 == 0 && i > 0)
-                    {
-                        Console.WriteLine($"Processed {i}/{numSamples} points...");
-                    }
                 }
 
                 // Print coordinate ranges
@@ -127,11 +116,6 @@ namespace PacMapDemo
                     maxZ = Math.Max(maxZ, mammothData[i, 2]);
                 }
 
-                Console.WriteLine($"✅ REAL mammoth data loaded: {numSamples} points, 3D coordinates");
-                Console.WriteLine($"📊 Real mammoth coordinate ranges:");
-                Console.WriteLine($"   X: [{minX:F3}, {maxX:F3}]");
-                Console.WriteLine($"   Y: [{minY:F3}, {maxY:F3}]");
-                Console.WriteLine($"   Z: [{minZ:F3}, {maxZ:F3}]");
 
                 return mammothData;
             }

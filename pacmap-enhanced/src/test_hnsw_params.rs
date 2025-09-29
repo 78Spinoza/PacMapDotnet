@@ -24,7 +24,7 @@ mod tests {
         // Memory should be reasonable
         assert!(params.estimated_memory_bytes < 10_000_000, "Memory usage should be under 10MB for small datasets");
 
-        println!("✅ Small dataset test passed");
+        println!("SUCCESS: Small dataset test passed");
     }
 
     #[test]
@@ -47,7 +47,7 @@ mod tests {
         let small_params = HnswParams::auto_scale(1_000, 100, 15);
         assert!(params.m > small_params.m, "Medium dataset should have higher M than small");
 
-        println!("✅ Medium dataset test passed");
+        println!("SUCCESS: Medium dataset test passed");
     }
 
     #[test]
@@ -70,7 +70,7 @@ mod tests {
         let medium_params = HnswParams::auto_scale(100_000, 200, 15);
         assert!(params.m > medium_params.m, "Large dataset should have higher M than medium");
 
-        println!("✅ Large dataset test passed");
+        println!("SUCCESS: Large dataset test passed");
     }
 
     #[test]
@@ -99,7 +99,7 @@ mod tests {
         assert!(high_dim.ef_search >= low_dim.ef_search,
                 "Higher dimensions should not decrease ef_search");
 
-        println!("✅ Dimension scaling test passed (formula verified)");
+        println!("SUCCESS: Dimension scaling test passed (formula verified)");
     }
 
     #[test]
@@ -128,7 +128,7 @@ mod tests {
         assert!(memory_opt.estimated_memory_bytes <= balanced.estimated_memory_bytes,
                 "Memory optimized should use less memory");
 
-        println!("✅ Use case optimization test passed");
+        println!("SUCCESS: Use case optimization test passed");
     }
 
     #[test]
@@ -169,7 +169,7 @@ mod tests {
         assert!(ok_params.ef_search >= ok_params.m, "ef_search should be >= M");
         assert!(ok_params.max_m0 >= ok_params.m, "max_m0 should be >= M");
 
-        println!("✅ Parameter validation test passed");
+        println!("SUCCESS: Parameter validation test passed");
     }
 
     #[test]
@@ -197,7 +197,7 @@ mod tests {
         assert!(small.estimated_memory_bytes < 100_000_000, "Small dataset memory should be reasonable");
         assert!(large.estimated_memory_bytes > 1_000_000, "Large dataset should require significant memory");
 
-        println!("✅ Memory estimation test passed");
+        println!("SUCCESS: Memory estimation test passed");
     }
 
     #[test]
@@ -222,6 +222,6 @@ mod tests {
         // Accurate should have high accuracy
         matches!(accurate_char.accuracy, crate::hnsw_params::PerformanceLevel::High);
 
-        println!("✅ Characteristics display test passed");
+        println!("SUCCESS: Characteristics display test passed");
     }
 }

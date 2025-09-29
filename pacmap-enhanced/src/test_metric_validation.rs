@@ -30,11 +30,11 @@ mod tests {
 
         println!("\n=== All Metric Validation Tests Completed ===");
         println!("🎉 All metric validation tests passed successfully!");
-        println!("✅ Euclidean metric validation");
-        println!("✅ Data normalization validation");
-        println!("✅ Constant data validation");
-        println!("✅ High dimensional data validation");
-        println!("✅ Sparse data validation");
+        println!("SUCCESS: Euclidean metric validation");
+        println!("SUCCESS: Data normalization validation");
+        println!("SUCCESS: Constant data validation");
+        println!("SUCCESS: High dimensional data validation");
+        println!("SUCCESS: Sparse data validation");
         println!("\nPacMAP Enhanced metric validation fully verified!");
     }
 
@@ -67,9 +67,9 @@ mod tests {
                 // Verify embedding quality
                 let non_zero_count = embedding.iter().filter(|&&x| x.abs() > 1e-10).count();
                 if non_zero_count > 0 {
-                    println!("✅ Euclidean metric validation passed");
+                    println!("SUCCESS: Euclidean metric validation passed");
                 } else {
-                    println!("❌ Euclidean metric validation failed - zero embedding");
+                    println!("ERROR: Euclidean metric validation failed - zero embedding");
                     panic!("Euclidean metric validation failed");
                 }
             },
@@ -115,7 +115,7 @@ mod tests {
                         NormalizationMode::ZScore => {
                             // Check that means are preserved in model
                             if model.normalization.means.len() != N_DIM {
-                                println!("   ❌ {} normalization failed - wrong means count", mode_name);
+                                println!("   ERROR: {} normalization failed - wrong means count", mode_name);
                                 panic!("{} normalization validation failed", mode_name);
                             }
                         },
@@ -123,7 +123,7 @@ mod tests {
                             // Check that min/max are preserved in model
                             if model.normalization.mins.len() != N_DIM ||
                                model.normalization.maxs.len() != N_DIM {
-                                println!("   ❌ {} normalization failed - wrong min/max count", mode_name);
+                                println!("   ERROR: {} normalization failed - wrong min/max count", mode_name);
                                 panic!("{} normalization validation failed", mode_name);
                             }
                         },
@@ -131,14 +131,14 @@ mod tests {
                             // Check that medians/IQRs are preserved in model
                             if model.normalization.medians.len() != N_DIM ||
                                model.normalization.iqrs.len() != N_DIM {
-                                println!("   ❌ {} normalization failed - wrong median/IQR count", mode_name);
+                                println!("   ERROR: {} normalization failed - wrong median/IQR count", mode_name);
                                 panic!("{} normalization validation failed", mode_name);
                             }
                         },
                         _ => {}
                     }
 
-                    println!("   ✅ {} normalization validation passed", mode_name);
+                    println!("   SUCCESS: {} normalization validation passed", mode_name);
                 },
                 Err(e) => {
                     println!("   {} normalization result: ERROR - {}", mode_name, e);
@@ -178,16 +178,16 @@ mod tests {
 
                 // Constant data might produce valid but not meaningful embeddings
                 if embedding.len() > 0 {
-                    println!("✅ Constant data validation passed");
+                    println!("SUCCESS: Constant data validation passed");
                 } else {
-                    println!("❌ Constant data validation failed - no embedding");
+                    println!("ERROR: Constant data validation failed - no embedding");
                     panic!("Constant data validation failed");
                 }
             },
             Err(e) => {
                 // It's acceptable for constant data to fail gracefully
                 println!("Constant data result: ERROR (acceptable) - {}", e);
-                println!("✅ Constant data validation passed (graceful failure)");
+                println!("SUCCESS: Constant data validation passed (graceful failure)");
             }
         }
     }
@@ -223,9 +223,9 @@ mod tests {
                 let has_variety = check_coordinate_variety(&embedding);
 
                 if non_zero_count > 0 && has_variety {
-                    println!("✅ High dimensional validation passed");
+                    println!("SUCCESS: High dimensional validation passed");
                 } else {
-                    println!("❌ High dimensional validation failed - poor embedding quality");
+                    println!("ERROR: High dimensional validation failed - poor embedding quality");
                     panic!("High dimensional validation failed");
                 }
             },
@@ -262,9 +262,9 @@ mod tests {
                 // Verify embedding for sparse data
                 let non_zero_count = embedding.iter().filter(|&&x| x.abs() > 1e-10).count();
                 if non_zero_count > 0 {
-                    println!("✅ Sparse data validation passed");
+                    println!("SUCCESS: Sparse data validation passed");
                 } else {
-                    println!("❌ Sparse data validation failed - zero embedding");
+                    println!("ERROR: Sparse data validation failed - zero embedding");
                     panic!("Sparse data validation failed");
                 }
             },

@@ -1,0 +1,13 @@
+C:\PacMAN\PacMAPSharp\bin\Debug\net8.0\pacmap_enhanced.dll
+C:\PacMAN\PacMAPSharp\bin\Debug\net8.0\libopenblas.dll
+C:\PacMAN\PacMAPSharp\bin\Debug\net8.0\PacMAPSharp.xml
+C:\PacMAN\PacMAPSharp\bin\Debug\net8.0\PacMAPSharp.deps.json
+C:\PacMAN\PacMAPSharp\bin\Debug\net8.0\PacMAPSharp.dll
+C:\PacMAN\PacMAPSharp\obj\Debug\net8.0\PacMAPSharp.GeneratedMSBuildEditorConfig.editorconfig
+C:\PacMAN\PacMAPSharp\obj\Debug\net8.0\PacMAPSharp.AssemblyInfoInputs.cache
+C:\PacMAN\PacMAPSharp\obj\Debug\net8.0\PacMAPSharp.AssemblyInfo.cs
+C:\PacMAN\PacMAPSharp\obj\Debug\net8.0\PacMAPSharp.csproj.CoreCompileInputs.cache
+C:\PacMAN\PacMAPSharp\obj\Debug\net8.0\PacMAPSharp.sourcelink.json
+C:\PacMAN\PacMAPSharp\obj\Debug\net8.0\PacMAPSharp.dll
+C:\PacMAN\PacMAPSharp\obj\Debug\net8.0\refint\PacMAPSharp.dll
+C:\PacMAN\PacMAPSharp\obj\Debug\net8.0\ref\PacMAPSharp.dll

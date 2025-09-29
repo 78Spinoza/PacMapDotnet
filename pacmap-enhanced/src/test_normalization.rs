@@ -45,7 +45,7 @@ mod tests {
             }
         }
 
-        println!("✅ Z-score normalization test passed");
+        println!("SUCCESS: Z-score normalization test passed");
     }
 
     #[test]
@@ -88,7 +88,7 @@ mod tests {
             }
         }
 
-        println!("✅ MinMax normalization test passed");
+        println!("SUCCESS: MinMax normalization test passed");
     }
 
     #[test]
@@ -103,7 +103,7 @@ mod tests {
         let result = norm.transform(&mut data2);
         assert!(result.is_err(), "Should fail with dimension mismatch");
 
-        println!("✅ Dimension mismatch error test passed");
+        println!("SUCCESS: Dimension mismatch error test passed");
     }
 
     #[test]
@@ -125,7 +125,7 @@ mod tests {
 
         // Create mock embedding
         let embedding = Array2::from_shape_vec((4, 2), vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]).unwrap();
-        let (mean, p95, max) = compute_distance_stats(&embedding, 2);
+        let (mean, p95, max) = compute_distance_stats(&embedding);
 
         // Create PaCMAP model with normalization
         let mut model = PaCMAP {
@@ -159,6 +159,6 @@ mod tests {
         // Clean up
         std::fs::remove_file(temp_file).ok();
 
-        println!("✅ Serialization consistency test passed");
+        println!("SUCCESS: Serialization consistency test passed");
     }
 }

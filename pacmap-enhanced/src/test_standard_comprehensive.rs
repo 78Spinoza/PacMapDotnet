@@ -154,7 +154,7 @@ mod tests {
         // Assert final result
         assert!(results.all_tests_passed, "Standard comprehensive test failed - see details above");
 
-        println!("\n✅ ALL STANDARD COMPREHENSIVE TESTS PASSED!");
+        println!("\nSUCCESS: ALL STANDARD COMPREHENSIVE TESTS PASSED!");
         println!("PacMAP Enhanced standard functionality fully validated!");
     }
 
@@ -412,7 +412,7 @@ mod tests {
                  results.save_load_mse_10d, MAX_ALLOWED_SAVE_LOAD_MSE);
 
         println!();
-        println!("Overall Result: {}", if results.all_tests_passed { "✅ PASS" } else { "❌ FAIL" });
+        println!("Overall Result: {}", if results.all_tests_passed { "SUCCESS: PASS" } else { "ERROR: FAIL" });
         println!("Total test time: {:.2}s", total_time.as_secs_f64());
 
         if results.all_tests_passed {

@@ -57,7 +57,7 @@ mod tests {
                 let duration = start_time.elapsed();
 
                 println!();
-                println!("✅ PacMAP fitting completed successfully!");
+                println!("SUCCESS: PacMAP fitting completed successfully!");
                 println!("   - Embedding shape: {:?}", embedding.shape());
                 println!("   - Total duration: {:.2}s", duration.as_secs_f64());
                 println!("   - Normalization: {:?}", model.normalization.mode);
@@ -69,7 +69,7 @@ mod tests {
                 // Analyze captured progress events
                 let events = progress_events.lock().unwrap();
                 println!();
-                println!("📊 Progress Event Analysis:");
+                println!(" Progress Event Analysis:");
                 println!("   - Total progress events: {}", events.len());
 
                 if !events.is_empty() {
@@ -90,9 +90,9 @@ mod tests {
                     println!("   - Expected phases found: {}/{}", found_phases.len(), expected_phases.len());
 
                     if found_phases.len() >= 7 {
-                        println!("   ✅ Progress callback working correctly - all major phases reported");
+                        println!("   SUCCESS: Progress callback working correctly - all major phases reported");
                     } else {
-                        println!("   ⚠️  Some expected phases missing: {:?}",
+                        println!("   WARNING:  Some expected phases missing: {:?}",
                                 expected_phases.iter().filter(|e| !found_phases.contains(e)).collect::<Vec<_>>());
                     }
                 }
@@ -100,9 +100,9 @@ mod tests {
                 // Verify embedding quality
                 let non_zero_count = embedding.iter().filter(|&&x| x.abs() > 1e-10).count();
                 if non_zero_count > 0 {
-                    println!("   ✅ Embedding quality verified - non-zero values present");
+                    println!("   SUCCESS: Embedding quality verified - non-zero values present");
                 } else {
-                    println!("   ❌ Embedding quality issue - all zero values");
+                    println!("   ERROR: Embedding quality issue - all zero values");
                     panic!("Embedding quality test failed");
                 }
 
@@ -112,7 +112,7 @@ mod tests {
 
             },
             Err(e) => {
-                println!("❌ PacMAP fitting failed: {}", e);
+                println!("ERROR: PacMAP fitting failed: {}", e);
                 panic!("Progress callback test failed");
             }
         }

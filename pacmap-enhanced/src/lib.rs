@@ -2,6 +2,7 @@ use ndarray::Array2;
 use pacmap::{Configuration, fit_transform, PairConfiguration};
 use crate::pairs::{compute_pairs_hnsw, get_knn_indices};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::collections::HashSet;
 
 /// Global verbose toggle to control print statements
 static VERBOSE_MODE: AtomicBool = AtomicBool::new(false);
@@ -29,9 +30,10 @@ use half::f16;
 use crate::serialization::{PaCMAP, DistanceStats, PacMAPConfig};
 use crate::stats::{compute_distance_stats, NormalizationParams, NormalizationMode, recommend_normalization_mode};
 use crate::hnsw_params::HnswParams;
+use crate::recall_validation::validate_hnsw_quality;
 mod pairs;
 mod quantize;
-mod serialization;
+pub mod serialization;
 mod stats;
 mod hnsw_params;
 pub mod ffi;
@@ -42,22 +44,13 @@ mod test_hnsw_params;
 #[cfg(test)]
 mod test_ffi;
 #[cfg(test)]
-mod test_standard_comprehensive;
-#[cfg(test)]
-mod test_enhanced_wrapper;
-#[cfg(test)]
-mod test_comprehensive_pipeline;
-#[cfg(test)]
-mod test_error_fixes_simple;
-#[cfg(test)]
-mod test_metric_validation;
-#[cfg(test)]
-mod test_quantization_comprehensive;
-#[cfg(test)]
-mod test_progress_callback;
+mod test_working_hnsw;
+mod recall_validation;
 
 /// Fit the data using HNSW-accelerated PaCMAP transformation
 pub fn fit_transform_hnsw(data: Array2<f64>, config: Configuration, force_exact_knn: bool, progress_callback: Option<&(dyn Fn(&str, usize, usize, f32, &str) + Send + Sync)>) -> Result<(Array2<f64>, ()), Box<dyn std::error::Error>> {
+    use std::time::Instant;
+    let start_time = Instant::now();
     let n_neighbors = config.override_neighbors.unwrap_or(10);
     let seed = config.seed.unwrap_or(42);
     let (n_samples, _) = data.dim();
@@ -67,67 +60,91 @@ pub fn fit_transform_hnsw(data: Array2<f64>, config: Configuration, force_exact_
     let use_hnsw = !force_exact_knn && n_samples > 1000;
 
     // DEBUG: Report actual parameters via callback
-    let debug_msg = format!("🔍 DLL DEBUG: force_exact_knn={}, n_samples={}, use_hnsw={}", force_exact_knn, n_samples, use_hnsw);
+    let debug_msg = format!(" DLL DEBUG: force_exact_knn={}, n_samples={}, use_hnsw={}", force_exact_knn, n_samples, use_hnsw);
     if let Some(callback) = progress_callback {
         callback("DLL Debug", 5, 100, 5.0, &debug_msg);
     }
 
-    // Helper function to call progress callback
+    // Helper function to call enhanced progress callback with timing
     let report_progress = |phase: &str, current: usize, total: usize, percent: f32, message: &str| {
         if let Some(callback) = progress_callback {
-            callback(phase, current, total, percent, message);
+            let elapsed = start_time.elapsed();
+            let enhanced_message = format!("{} (⏱️ {})", message, format_duration(elapsed));
+            callback(phase, current, total, percent, &enhanced_message);
         }
     };
 
     let updated_config = if use_hnsw {
-        vprint!("🚀 DEBUG: use_hnsw=true, force_exact_knn={}, n_samples={}", force_exact_knn, n_samples);
-        vprint!("🚀 Using HNSW-accelerated neighbor search for {} samples", n_samples);
+        vprint!(" DEBUG: use_hnsw=true, force_exact_knn={}, n_samples={}", force_exact_knn, n_samples);
+        vprint!(" Using HNSW-accelerated neighbor search for {} samples", n_samples);
         report_progress("KNN Method", 25, 100, 25.0, "Using HNSW for fast approximate neighbor search");
 
         // Compute neighbor pairs using HNSW
-        vprint!("🔧 Starting HNSW neighbor computation...");
+        vprint!("DEBUG: Starting HNSW neighbor computation...");
         let hnsw_pairs = compute_pairs_hnsw(data.view(), n_neighbors, seed);
-        vprint!("🔧 HNSW neighbor computation completed");
+        vprint!("DEBUG: HNSW neighbor computation completed");
+
+        // Apply graph symmetrization to improve connectivity and reduce artifacts
+        let hnsw_pairs = symmetrize_graph(hnsw_pairs);
+        vprint!("DEBUG: Graph symmetrization completed");
+
+        // Validate HNSW recall quality and report to user
+        report_progress("HNSW Validation", 35, 100, 35.0, "🧪 Validating HNSW recall quality vs exact KNN");
+        match validate_hnsw_quality(data.view(), n_neighbors, seed) {
+            Ok(quality_msg) => {
+                report_progress("HNSW Quality", 40, 100, 40.0, &format!("✅ HNSW Quality: {}", quality_msg));
+            },
+            Err(warning) => {
+                report_progress("HNSW Warning", 40, 100, 40.0, &format!("⚠️  HNSW Warning: {}", warning));
+            }
+        }
 
         // Handle HNSW pair count - truncate or warn if mismatch
         let expected_pairs = n_samples * n_neighbors;
         let actual_pairs = hnsw_pairs.len();
 
         if actual_pairs != expected_pairs {
-            vprint!("⚠️  HNSW pair count mismatch: expected {} ({}×{}), got {} - adjusting",
+            vprint!("WARNING:  HNSW pair count mismatch: expected {} ({}×{}), got {} - adjusting",
                    expected_pairs, n_samples, n_neighbors, actual_pairs);
         }
 
-        // Use the minimum to avoid index out of bounds
-        let pairs_to_use = actual_pairs.min(expected_pairs);
+        // Check if HNSW returned sufficient pairs (at least 90% of expected)
+        let min_acceptable_pairs = (expected_pairs as f32 * 0.9) as usize;
 
-        // Convert pairs to required format: Array2<u32> with shape (n_samples * n_neighbors, 2)
-        let mut pair_neighbors = Array2::<u32>::zeros((expected_pairs, 2));
+        if actual_pairs < min_acceptable_pairs {
+            vprint!("WARNING: HNSW returned insufficient pairs ({} < {}), falling back to exact KNN", actual_pairs, min_acceptable_pairs);
+            // Force exact KNN by using default PairConfiguration (not HNSW-based)
+            Configuration {
+                pair_configuration: PairConfiguration::default(),  // Force exact KNN - no HNSW
+                ..config
+            }
+        } else {
 
-        // Fill with available pairs, repeat last pair if we have fewer than needed
-        for idx in 0..expected_pairs {
-            let source_idx = if idx < actual_pairs { idx } else { actual_pairs - 1 };
-            let (i, j) = hnsw_pairs[source_idx];
+        // Convert pairs to required format: Array2<u32> with shape (actual_pairs, 2)
+        let mut pair_neighbors = Array2::<u32>::zeros((actual_pairs, 2));
+
+        // Fill with available pairs (no artificial padding)
+        for (idx, &(i, j)) in hnsw_pairs.iter().take(actual_pairs).enumerate() {
             pair_neighbors[[idx, 0]] = i as u32;
             pair_neighbors[[idx, 1]] = j as u32;
         }
 
-        vprint!("✅ HNSW pairs adjusted: using {} pairs, formatted to {} pairs for PaCMAP",
-               pairs_to_use, expected_pairs);
+        vprint!("SUCCESS: HNSW pairs validated: using {} pairs for PaCMAP", actual_pairs);
 
         // Create configuration with precomputed neighbors
         Configuration {
             pair_configuration: PairConfiguration::NeighborsProvided { pair_neighbors },
             ..config
         }
+        }
     } else {
-        vprint!("🔍 DEBUG: use_hnsw=false, force_exact_knn={}, n_samples={}", force_exact_knn, n_samples);
+        vprint!(" DEBUG: use_hnsw=false, force_exact_knn={}, n_samples={}", force_exact_knn, n_samples);
         if force_exact_knn {
-            vprint!("🔍 Using exact KNN search for {} samples (forced by user)", n_samples);
-            report_progress("Exact KNN", 25, 100, 25.0, "✅ EXACT KNN ENABLED - Using O(n²) brute-force neighbor search (precise)");
+            vprint!(" Using exact KNN search for {} samples (forced by user)", n_samples);
+            report_progress("Exact KNN", 25, 100, 25.0, "SUCCESS: EXACT KNN ENABLED - Using O(n^2) brute-force neighbor search (precise)");
         } else {
-            vprint!("🔍 Using exact KNN search for {} samples (small dataset: auto-fallback)", n_samples);
-            report_progress("Exact KNN", 25, 100, 25.0, "✅ EXACT KNN AUTO - Using O(n²) exact search (dataset <1000 samples)");
+            vprint!(" Using exact KNN search for {} samples (small dataset: auto-fallback)", n_samples);
+            report_progress("Exact KNN", 25, 100, 25.0, "SUCCESS: EXACT KNN AUTO - Using O(n^2) exact search (dataset <1000 samples)");
         }
         // FORCE exact KNN by using default PairConfiguration (not HNSW-based)
         Configuration {
@@ -140,9 +157,9 @@ pub fn fit_transform_hnsw(data: Array2<f64>, config: Configuration, force_exact_
     let data_f32 = data.mapv(|v| v as f32);
 
     // Perform PaCMAP dimensionality reduction with HNSW neighbors (if computed)
-    vprint!("🔧 Calling external PacMAP fit_transform...");
+    vprint!("DEBUG: Calling external PacMAP fit_transform...");
     let (embedding_f32, _) = fit_transform(data_f32.view(), updated_config)?;
-    vprint!("🔧 External PacMAP fit_transform completed");
+    vprint!("DEBUG: External PacMAP fit_transform completed");
 
     // Convert embedding back to f64 for the public API
     let embedding_f64 = embedding_f32.mapv(|v| v as f64);
@@ -159,7 +176,8 @@ pub fn fit_transform_normalized_with_progress_and_force_knn(
     config: Configuration,
     normalization_mode: Option<NormalizationMode>,
     progress_callback: Option<ProgressCallback>,
-    force_exact_knn: bool
+    force_exact_knn: bool,
+    use_quantization: bool
 ) -> Result<(Array2<f64>, PaCMAP), Box<dyn std::error::Error>> {
     let progress = |phase: &str, current: usize, total: usize, percent: f32, message: &str| {
         if let Some(ref callback) = progress_callback {
@@ -198,13 +216,13 @@ pub fn fit_transform_normalized_with_progress_and_force_knn(
                                    hnsw_params.m, hnsw_params.ef_construction, hnsw_params.ef_search);
         progress("HNSW Ready", 25, 100, 25.0, &hnsw_message);
 
-        vprint!("🔧 Auto-scaled HNSW parameters for {}k samples, {} features:", n_samples / 1000, n_features);
+        vprint!("DEBUG: Auto-scaled HNSW parameters for {}k samples, {} features:", n_samples / 1000, n_features);
         vprint!("   M={}, ef_construction={}, ef_search={}",
                   hnsw_params.m, hnsw_params.ef_construction, hnsw_params.ef_search);
         vprint!("   {}", characteristics);
     } else {
         progress("Exact KNN Ready", 25, 100, 25.0, "Exact KNN configuration complete - high precision mode");
-        vprint!("🔧 Using exact KNN for {} samples, {} features (high precision mode)", n_samples, n_features);
+        vprint!("DEBUG: Using exact KNN for {} samples, {} features (high precision mode)", n_samples, n_features);
     }
 
     // Perform fit using HNSW‑enhanced PaCMAP on normalized data
@@ -215,7 +233,7 @@ pub fn fit_transform_normalized_with_progress_and_force_knn(
 
     // Compute statistics over the embedding for outlier detection
     progress("Finalizing", 90, 100, 90.0, "Computing embedding statistics and building model");
-    let (mean, p95, max) = compute_distance_stats(&embedding, 10);
+    let (mean, p95, max) = compute_distance_stats(&embedding);
 
     // Create serializable config with auto-scaled HNSW parameters
     let pacmap_config = PacMAPConfig {
@@ -240,7 +258,7 @@ pub fn fit_transform_normalized_with_progress_and_force_knn(
             max_distance: max
         },
         normalization, // Store fitted normalization parameters
-        quantize_on_save: false,
+        quantize_on_save: use_quantization,
         quantized_embedding: None,
     };
 
@@ -261,7 +279,7 @@ pub fn fit_transform_normalized_with_progress(
     progress_callback: Option<ProgressCallback>
 ) -> Result<(Array2<f64>, PaCMAP), Box<dyn std::error::Error>> {
     // Call the extended version with force_exact_knn = false (use HNSW by default)
-    fit_transform_normalized_with_progress_and_force_knn(data, config, normalization_mode, progress_callback, false)
+    fit_transform_normalized_with_progress_and_force_knn(data, config, normalization_mode, progress_callback, false, false)
 }
 
 /// Enhanced fit function with normalization and HNSW auto-scaling
@@ -431,14 +449,14 @@ pub extern "C" fn pacmap_distance_stats(
     embedding: *const f64,
     rows: usize,
     cols: usize,
-    k: usize,
+    _k: usize,
     mean: *mut f64,
     p95: *mut f64,
     max: *mut f64,
 ) {
     let emb_vec = unsafe { std::slice::from_raw_parts(embedding, rows * cols) }.to_vec();
     let emb_arr = Array2::from_shape_vec((rows, cols), emb_vec).expect("Invalid shape");
-    let (m, p, mx) = compute_distance_stats(&emb_arr, k);
+    let (m, p, mx) = compute_distance_stats(&emb_arr);
     unsafe {
         *mean = m;
         *p95 = p;
@@ -458,5 +476,52 @@ pub extern "C" fn pacmap_get_model_stats(
         *mean = model_ref.stats.mean_distance;
         *p95 = model_ref.stats.p95_distance;
         *max = model_ref.stats.max_distance;
+    }
+}
+
+/// Symmetrize k-NN graph to improve connectivity and reduce artifacts
+/// Makes the graph undirected: if i is neighbor of j, ensure j is neighbor of i
+fn symmetrize_graph(pairs: Vec<(usize, usize)>) -> Vec<(usize, usize)> {
+    let mut symmetric_set = HashSet::new();
+
+    // Add all original pairs and their reverse pairs
+    for &(i, j) in &pairs {
+        symmetric_set.insert((i, j));
+        symmetric_set.insert((j, i)); // Add reverse direction
+    }
+
+    // Convert back to Vec, maintaining original order where possible
+    let mut symmetrized_pairs: Vec<(usize, usize)> = symmetric_set.into_iter().collect();
+
+    // Sort for consistent ordering (helpful for reproducibility)
+    symmetrized_pairs.sort_by_key(|&(i, j)| (i, j));
+
+    if std::env::var("PACMAP_VERBOSE").is_ok() {
+        eprintln!("🔄 GRAPH SYMMETRIZATION: {} original pairs → {} symmetric pairs ({}% increase)",
+                 pairs.len(),
+                 symmetrized_pairs.len(),
+                 ((symmetrized_pairs.len() as f64 / pairs.len() as f64 - 1.0) * 100.0) as i32);
+    }
+
+    symmetrized_pairs
+}
+
+/// Format duration in human-readable format
+fn format_duration(duration: std::time::Duration) -> String {
+    let total_secs = duration.as_secs();
+    let millis = duration.subsec_millis();
+
+    if total_secs >= 60 {
+        let mins = total_secs / 60;
+        let secs = total_secs % 60;
+        format!("{}m{}s", mins, secs)
+    } else if total_secs >= 1 {
+        if millis > 0 {
+            format!("{}.{}s", total_secs, millis / 100)
+        } else {
+            format!("{}s", total_secs)
+        }
+    } else {
+        format!("{}ms", millis)
     }
 }

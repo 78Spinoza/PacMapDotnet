@@ -1,4 +1,4 @@
-use ndarray::Array2;
+use ndarray::{Array2, Axis};
 use ordered_float::OrderedFloat;
 use serde::{Serialize, Deserialize};
 use std::error::Error;
@@ -193,23 +193,15 @@ impl NormalizationParams {
     fn compute_zscore_params(&mut self, data: &Array2<f64>) -> Result<(), NormalizationError> {
         let (n_samples, n_features) = data.dim();
 
-        for j in 0..n_features {
-            // Compute mean
-            let mut sum = 0.0;
-            for i in 0..n_samples {
-                sum += data[[i, j]];
-            }
-            self.means[j] = sum / n_samples as f64;
+        // Use ndarray built-in functions for better performance
+        let means = data.mean_axis(Axis(0)).unwrap();
+        let variances = data.var_axis(Axis(0), 1.0); // ddof=1 for sample variance
 
-            // Compute standard deviation
-            let mut sum_sq_diff = 0.0;
-            for i in 0..n_samples {
-                let diff = data[[i, j]] - self.means[j];
-                sum_sq_diff += diff * diff;
-            }
+        for j in 0..n_features {
+            self.means[j] = means[j];
 
             self.stds[j] = if n_samples > 1 {
-                (sum_sq_diff / (n_samples - 1) as f64).sqrt()
+                variances[j].sqrt()
             } else {
                 1.0
             };
@@ -224,20 +216,21 @@ impl NormalizationParams {
     }
 
     fn compute_minmax_params(&mut self, data: &Array2<f64>) -> Result<(), NormalizationError> {
-        let (n_samples, n_features) = data.dim();
+        let (_n_samples, n_features) = data.dim();
 
+        // Use ndarray built-in column operations
         for j in 0..n_features {
-            self.mins[j] = f64::INFINITY;
-            self.maxs[j] = f64::NEG_INFINITY;
+            let column = data.column(j);
 
-            for i in 0..n_samples {
-                let val = data[[i, j]];
-                if val < self.mins[j] {
-                    self.mins[j] = val;
-                }
-                if val > self.maxs[j] {
-                    self.maxs[j] = val;
-                }
+            if let (Some(min_val), Some(max_val)) = (
+                column.iter().min_by(|a, b| a.partial_cmp(b).unwrap()),
+                column.iter().max_by(|a, b| a.partial_cmp(b).unwrap())
+            ) {
+                self.mins[j] = *min_val;
+                self.maxs[j] = *max_val;
+            } else {
+                self.mins[j] = 0.0;
+                self.maxs[j] = 1.0;
             }
 
             // Avoid division by zero
@@ -376,7 +369,7 @@ impl NormalizationParams {
 
 /// Compute distance statistics for outlier detection with smart approximation
 /// Uses sampling for large datasets to avoid O(n²) performance issues
-pub fn compute_distance_stats(embedding: &Array2<f64>, _k: usize) -> (f64, f64, f64) {
+pub fn compute_distance_stats(embedding: &Array2<f64>) -> (f64, f64, f64) {
     let n = embedding.shape()[0];
     if n < 2 {
         return (0.0, 0.0, 0.0);
@@ -404,7 +397,7 @@ pub fn compute_distance_stats(embedding: &Array2<f64>, _k: usize) -> (f64, f64, 
     } else {
         // Approximation using random sampling for large datasets
         if std::env::var("PACMAP_VERBOSE").is_ok() {
-            eprintln!("🔧 Using distance stats approximation for {} samples (n>{}) to avoid O(n²) bottleneck", n, EXACT_THRESHOLD);
+            eprintln!("DEBUG: Using distance stats approximation for {} samples (n>{}) to avoid O(n²) bottleneck", n, EXACT_THRESHOLD);
         }
 
         use std::collections::HashSet;
@@ -436,7 +429,7 @@ pub fn compute_distance_stats(embedding: &Array2<f64>, _k: usize) -> (f64, f64, 
         }
 
         if std::env::var("PACMAP_VERBOSE").is_ok() {
-            eprintln!("✅ Sampled {} distance pairs ({}% of total)", distances.len(),
+            eprintln!("SUCCESS: Sampled {} distance pairs ({}% of total)", distances.len(),
                      (distances.len() * 100) / total_possible_pairs);
         }
     }

@@ -32,24 +32,17 @@ pub fn quantize_embedding_linear(embedding: &Array2<f64>) -> QuantizedEmbedding 
     let min_val = flat.iter().copied().fold(f64::INFINITY, f64::min);
     let max_val = flat.iter().copied().fold(f64::NEG_INFINITY, f64::max);
 
-    // Calculate scale and zero point for quantization
-    let range = max_val - min_val;
-    let scale = if range > 0.0 { range / 65535.0 } else { 1.0 }; // f16 has ~65k values
-    let zero_point = min_val;
-
-    // Quantize using scale and zero point
-    let quantized = embedding.mapv(|x| {
-        let normalized = (x - zero_point) / scale;
-        f16::from_f64(normalized.clamp(-32768.0, 32767.0))
-    });
+    // Simple f16 conversion without artificial scaling/clamping
+    // f16 can handle range ±65504 with good precision around 0
+    let quantized = embedding.mapv(|x| f16::from_f64(x));
 
     QuantizedEmbedding {
         data: quantized,
         params: QuantizationParams {
             min_value: min_val,
             max_value: max_val,
-            scale,
-            zero_point,
+            scale: 1.0,      // No scaling applied
+            zero_point: 0.0, // No zero point offset
             use_centroids: false,
             centroids: None,
         },
@@ -119,11 +112,8 @@ pub fn dequantize_embedding(quantized: &QuantizedEmbedding) -> Array2<f64> {
             quantized.data.mapv(|x| x.to_f64())
         }
     } else {
-        // Linear dequantization
-        quantized.data.mapv(|x| {
-            let normalized = x.to_f64();
-            normalized * quantized.params.scale + quantized.params.zero_point
-        })
+        // Simple f16 to f64 conversion (no scaling needed for new approach)
+        quantized.data.mapv(|x| x.to_f64())
     }
 }
 

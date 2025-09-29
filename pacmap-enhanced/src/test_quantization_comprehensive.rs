@@ -81,7 +81,7 @@ mod tests {
         // Assert final result
         assert!(result.all_tests_passed, "Quantization comprehensive test failed - see details above");
 
-        println!("\n✅ ALL QUANTIZATION COMPREHENSIVE TESTS PASSED!");
+        println!("\nSUCCESS: ALL QUANTIZATION COMPREHENSIVE TESTS PASSED!");
         println!("PacMAP Enhanced quantization functionality fully validated!");
     }
 
@@ -308,7 +308,7 @@ mod tests {
         println!("===========================================");
         println!();
 
-        println!("📊 File Size Metrics:");
+        println!(" File Size Metrics:");
         println!("   Non-quantized file size: {} bytes", result.non_quantized_file_size);
         println!("   Quantized file size: {} bytes", result.quantized_file_size);
         println!("   Compression ratio: {:.2}%", result.compression_ratio * 100.0);
@@ -340,19 +340,19 @@ mod tests {
         println!("   Total test time: {:.2}s", total_time.as_secs_f64());
 
         println!();
-        println!("✅ Test Results:");
+        println!("SUCCESS: Test Results:");
 
         let mse_pass = result.non_quantized_vs_quantized_mse <= MAX_QUANTIZATION_MSE;
         let save_load_pass = result.quantized_save_load_consistency_mse <= MAX_SAVE_LOAD_MSE;
         let error_rate_pass = result.error_rate_1_percent <= MAX_ALLOWED_ERROR_RATE;
 
-        println!("   Quantization MSE: {}", if mse_pass { "✅ PASS" } else { "❌ FAIL" });
-        println!("   Save/load consistency: {}", if save_load_pass { "✅ PASS" } else { "❌ FAIL" });
-        println!("   Error rate: {}", if error_rate_pass { "✅ PASS" } else { "❌ FAIL" });
-        println!("   Compression: {}", if result.compression_ratio <= MIN_COMPRESSION_RATIO { "✅ PASS" } else { "⚠️ INFO" });
+        println!("   Quantization MSE: {}", if mse_pass { "SUCCESS: PASS" } else { "ERROR: FAIL" });
+        println!("   Save/load consistency: {}", if save_load_pass { "SUCCESS: PASS" } else { "ERROR: FAIL" });
+        println!("   Error rate: {}", if error_rate_pass { "SUCCESS: PASS" } else { "ERROR: FAIL" });
+        println!("   Compression: {}", if result.compression_ratio <= MIN_COMPRESSION_RATIO { "SUCCESS: PASS" } else { "WARNING: INFO" });
 
         println!();
-        println!("🎯 Overall Result: {}", if result.all_tests_passed { "✅ PASS" } else { "❌ FAIL" });
+        println!(" Overall Result: {}", if result.all_tests_passed { "SUCCESS: PASS" } else { "ERROR: FAIL" });
 
         if result.all_tests_passed {
             println!();
@@ -363,7 +363,7 @@ mod tests {
             println!("   - Performance metrics acceptable");
         } else {
             println!();
-            println!("❌ Some quantization tests failed - see details above");
+            println!("ERROR: Some quantization tests failed - see details above");
             if !mse_pass {
                 println!("   - Quantization MSE too high: {:.6} > {:.6}",
                          result.non_quantized_vs_quantized_mse, MAX_QUANTIZATION_MSE);
