@@ -458,7 +458,7 @@ namespace PacMAPSharp
             {
                 IntPtr versionPtr = IsWindows
                     ? CallGetVersionWindows()
-                    : throw new PlatformNotSupportedException("Linux support coming soon");
+                    : CallGetVersionLinux();
 
                 if (versionPtr == IntPtr.Zero)
                     throw new InvalidOperationException("Failed to get version from native library");
@@ -512,7 +512,7 @@ namespace PacMAPSharp
                 {
                     model._nativeModel = IsWindows
                         ? CallLoadModelWindows((IntPtr)pathPtr)
-                        : throw new PlatformNotSupportedException("Linux support coming soon");
+                        : CallLoadModelLinux((IntPtr)pathPtr);
 
                     if (model._nativeModel == IntPtr.Zero)
                         throw new InvalidDataException($"Failed to load model from: {filename}");
@@ -589,7 +589,7 @@ namespace PacMAPSharp
 
                     _nativeModel = IsWindows
                         ? CallFitTransformWindows((IntPtr)dataPtr, rows, cols, config, (IntPtr)embeddingPtr, nativeCallback)
-                        : throw new PlatformNotSupportedException("Linux support coming soon");
+                        : CallFitTransformLinux((IntPtr)dataPtr, rows, cols, config, (IntPtr)embeddingPtr, nativeCallback);
 
                     if (_nativeModel == IntPtr.Zero)
                         throw new InvalidOperationException("Failed to fit PacMAP model");
@@ -621,7 +621,25 @@ namespace PacMAPSharp
                     }
                     else
                     {
-                        throw new PlatformNotSupportedException("Linux support coming soon");
+                        CallGetDistanceStatsLinux(_nativeModel, out double mean, out double p95, out double max);
+                        var distanceStats = (mean, p95, max);
+
+                        // Store model info
+                        _modelInfo = new PacMAPModelInfo(rows, cols, embeddingDimensions, neighbors,
+                                                       metric, normalization, !forceExactKnn && rows > 1000, 100.0f);
+
+                        // Convert double array to float array for API consistency
+                        var floatEmbedding = new float[embedding.Length];
+                        for (int i = 0; i < embedding.Length; i++)
+                        {
+                            floatEmbedding[i] = (float)embedding[i];
+                        }
+
+                        // Create result with quality assessment
+                        var confidence = AssessConfidence(distanceStats);
+                        var severity = AssessSeverity(confidence);
+
+                        return new EmbeddingResult(floatEmbedding, confidence, severity, distanceStats);
                     }
                 }
             }
@@ -648,7 +666,7 @@ namespace PacMAPSharp
                 {
                     var result = IsWindows
                         ? CallSaveModelWindows(_nativeModel, (IntPtr)pathPtr, false) // No quantization
-                        : throw new PlatformNotSupportedException("Linux support coming soon");
+                        : CallSaveModelLinux(_nativeModel, (IntPtr)pathPtr, false); // No quantization
 
                     if (result != 0)
                         throw new IOException($"Failed to save model to: {filename}");
@@ -721,7 +739,8 @@ namespace PacMAPSharp
                 {
                     if (IsWindows)
                         CallFreeModelWindows(_nativeModel);
-                    // Linux version would go here
+                    else
+                        CallFreeModelLinux(_nativeModel);
 
                     _nativeModel = IntPtr.Zero;
                 }

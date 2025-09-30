@@ -63,6 +63,12 @@ Created **PacMAPSharp** - a professional NuGet library equivalent to UMAPuwotSha
 - **Build Scripts**: `build_nuget.bat`, `publish_nuget.bat`, `validate_package.bat`, `verify_binaries.bat`
 - **Size**: 14.4MB NuGet package with all native dependencies included
 
+#### 🔗 **Self-Contained OpenBLAS Deployment**
+- **Windows**: Includes `libopenblas.dll` (50MB) - no separate installation required
+- **Linux**: Includes `libopenblas.so.0` (38MB) - no `apt-get install` needed
+- **Deployment**: Both platforms are completely self-contained with optimized BLAS operations
+- **Performance**: Native OpenBLAS performance on both Windows and Linux without dependencies
+
 #### 🎯 **Clean C# API**
 ```csharp
 using PacMAPSharp;
@@ -84,6 +90,13 @@ Console.WriteLine($"Confidence: {result.ConfidenceScore:F3}");
 - **Progress Callbacks**: Detailed phase-by-phase progress reporting
 - **Model Persistence**: Save/load functionality for trained models
 - **Cross-Platform**: Windows/Linux support with proper DLL loading
+
+#### 🛠️ **Cross-Platform Build Automation**
+- **BuildDockerLinuxWindows.bat**: Automated cross-platform compilation
+- **Windows Build**: Native Rust compilation with OpenBLAS integration
+- **Linux Build**: Docker-based compilation with Ubuntu 22.04 + OpenBLAS
+- **Self-Contained**: Automatically extracts and packages OpenBLAS for both platforms
+- **Deployment Ready**: Complete libraries copied to PacMAPSharp project for NuGet packaging
 
 ## 🚀 All Previous Issues RESOLVED
 
@@ -126,6 +139,10 @@ PacMAN/
 ├── PacMAPSharp/                # ✅ NEW: Professional C# NuGet library
 │   ├── PacMAPModel.cs          # 🎯 Clean API equivalent to UMAPuwotSharp
 │   ├── PacMAPSharp.csproj      # 📦 NuGet-ready project with native binaries
+│   ├── pacmap_enhanced.dll     # 🔗 Windows PacMAP library (1.8MB)
+│   ├── libopenblas.dll         # 🔗 Windows OpenBLAS library (50MB)
+│   ├── libpacmap_enhanced.so   # 🔗 Linux PacMAP library (2.8MB)
+│   ├── libopenblas.so.0        # 🔗 Linux OpenBLAS library (38MB)
 │   ├── build_nuget.bat         # 🛠️ Build automation
 │   ├── publish_nuget.bat       # 🚀 Publishing automation
 │   ├── validate_package.bat    # ✅ Package validation
@@ -218,9 +235,24 @@ let ef_search = std::cmp::max(64 * 2, neighbors * 4); // Doubled base values
 
 ## 🚀 Getting Started
 
+### **Cross-Platform Build**
+```bash
+# Build Windows + Linux libraries with self-contained OpenBLAS
+cd pacmap-enhanced
+./BuildDockerLinuxWindows.bat
+
+# Build the C# NuGet package
+cd ../PacMAPSharp
+./build_nuget.bat
+
+# Run the demo
+cd ../PacMapDemo
+dotnet run
+```
+
 ### **Quick Start with PacMAPSharp**
 ```bash
-# Build the library
+# Build the library (Windows only)
 cd PacMAPSharp
 ./build_nuget.bat
 

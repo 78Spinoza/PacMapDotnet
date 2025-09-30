@@ -36,19 +36,39 @@
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
   </PropertyGroup>
 
-  <!-- Native DLL Packaging -->
+  <!-- Native DLL Packaging - Force Copy with None Item Type -->
   <ItemGroup>
-    <Content Include="../pacmap-enhanced/target/debug/pacmap_enhanced.dll">
-      <PackagePath>runtimes/win-x64/native/pacmap_enhanced.dll</PackagePath>
+    <!-- Windows Native Libraries -->
+    <None Include="pacmap_enhanced.dll" Condition="Exists('pacmap_enhanced.dll')">
+      <PackagePath>lib/net8.0/pacmap_enhanced.dll</PackagePath>
       <Pack>true</Pack>
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Content>
-    <Content Include="../lapack-binaries/bin/libopenblas.dll">
-      <PackagePath>runtimes/win-x64/native/libopenblas.dll</PackagePath>
+      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
+    </None>
+    <None Include="libopenblas.dll" Condition="Exists('libopenblas.dll')">
+      <PackagePath>lib/net8.0/libopenblas.dll</PackagePath>
       <Pack>true</Pack>
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Content>
+      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
+    </None>
+
+    <!-- Linux Native Libraries -->
+    <None Include="libpacmap_enhanced.so" Condition="Exists('libpacmap_enhanced.so')">
+      <PackagePath>lib/net8.0/libpacmap_enhanced.so</PackagePath>
+      <Pack>true</Pack>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
+    </None>
   </ItemGroup>
+
+  <!-- Additional Copy Target to Force Binary Copying -->
+  <Target Name="CopyNativeBinaries" BeforeTargets="Build">
+    <ItemGroup>
+      <NativeDlls Include="*.dll;*.so" />
+    </ItemGroup>
+    <Copy SourceFiles="@(NativeDlls)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" Condition="Exists('%(Identity)')" />
+    <Message Text="Copied native binaries: @(NativeDlls)" Importance="high" />
+  </Target>
 
   <!-- Package Dependencies -->
   <ItemGroup>
