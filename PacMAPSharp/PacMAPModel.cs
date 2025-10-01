@@ -42,9 +42,9 @@ namespace PacMAPSharp
     public enum NormalizationMode
     {
         /// <summary>
-        /// No normalization applied - use raw data values
+        /// Auto-detect best normalization based on data characteristics
         /// </summary>
-        None = 0,
+        Auto = 0,
 
         /// <summary>
         /// Z-score normalization: (x - μ) / σ - assumes normal distribution
@@ -59,7 +59,12 @@ namespace PacMAPSharp
         /// <summary>
         /// Robust scaling: (x - median) / IQR - less sensitive to outliers
         /// </summary>
-        Robust = 3
+        Robust = 3,
+
+        /// <summary>
+        /// No normalization applied - use raw data values
+        /// </summary>
+        None = 4
     }
 
     /// <summary>
@@ -583,7 +588,7 @@ namespace PacMAPSharp
                     config.NNeighbors = neighbors;
                     config.EmbeddingDimensions = embeddingDimensions;
                     config.Seed = (int)seed;
-                    config.NormalizationMode = (int)normalization + 1; // Convert enum to FFI values
+                    config.NormalizationMode = (int)normalization; // C# enum matches FFI values directly
                     config.ForceExactKnn = forceExactKnn;
                     config.HnswConfig.UseCase = (int)hnswUseCase;
 
