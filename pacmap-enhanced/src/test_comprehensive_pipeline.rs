@@ -103,7 +103,7 @@ mod tests {
         println!();
 
         if all_tests_passed {
-            println!("🎉 ALL PIPELINE TESTS PASSED!");
+            println!("ALL PIPELINE TESTS PASSED!");
             println!("SUCCESS: Normalization pipeline working");
             println!("SUCCESS: k-NN selection pipeline working");
             println!("SUCCESS: Full embedding pipeline working");

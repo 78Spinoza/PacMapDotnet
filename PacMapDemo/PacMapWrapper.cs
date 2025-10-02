@@ -1,6 +1,7 @@
 // Real PacMAP Wrapper using actual Rust FFI
 using System;
 using System.Runtime.InteropServices;
+using PacMAPSharp;
 
 namespace PacMapDemo
 {
@@ -61,10 +62,10 @@ namespace PacMapDemo
             }
 
             // Try to create real PacMAP model, fall back to simulation if it fails
-            PacMapModel? realModel = null;
+            PacMAPModel? realModel = null;
             try
             {
-                realModel = new PacMapModel();
+                realModel = new PacMAPModel();
                 Console.WriteLine("✅ Real PacMAP model created successfully");
             }
             catch (Exception ex)
@@ -75,7 +76,7 @@ namespace PacMapDemo
             }
 
             // Create progress callback that forwards to our event
-            ProgressCallback progressCallback = (phase, current, total, percent, message) =>
+            PacMAPSharp.ProgressCallback progressCallback = (phase, current, total, percent, message) =>
             {
                 ReportProgress(phase, current, total, percent, message ?? "");
             };
@@ -88,16 +89,35 @@ namespace PacMapDemo
                 // Call the real PacMAP implementation
                 using (realModel)
                 {
-                    floatResult = realModel.FitWithProgress(
-                        data: floatData,
-                        progressCallback: progressCallback,
-                        embeddingDimension: 2,
-                        nNeighbors: neighbors,
-                        nEpochs: 450,
+                    // Convert float[,] to double[,] for PacMAPSharp
+                    var doubleData = new double[rows, cols];
+                    for (int i = 0; i < rows; i++)
+                    {
+                        for (int j = 0; j < cols; j++)
+                        {
+                            doubleData[i, j] = data[i, j];
+                        }
+                    }
+
+                    var embeddingResult = realModel.Fit(
+                        data: doubleData,
+                        embeddingDimensions: 2,
+                        neighbors: neighbors,
+                        normalization: NormalizationMode.ZScore,
                         metric: DistanceMetric.Euclidean,
+                        hnswUseCase: HnswUseCase.Balanced,
                         forceExactKnn: forceExactKnn,
-                        useQuantization: useQuantization
+                        seed: (ulong)seed,
+                        progressCallback: progressCallback
                     );
+
+                    // Convert result back to float[,]
+                    floatResult = new float[rows, 2];
+                    for (int i = 0; i < rows; i++)
+                    {
+                        floatResult[i, 0] = embeddingResult.EmbeddingCoordinates[i * 2];
+                        floatResult[i, 1] = embeddingResult.EmbeddingCoordinates[i * 2 + 1];
+                    }
                 }
             }
             else

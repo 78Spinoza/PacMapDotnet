@@ -279,10 +279,10 @@ impl std::fmt::Display for HnswCharacteristics {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f,
             "HNSW Characteristics:\n\
-             • Construction Speed: {}\n\
-             • Search Speed: {}\n\
-             • Memory Usage: {} (~{}MB)\n\
-             • Expected Accuracy: {}",
+             - Construction Speed: {}\n\
+             - Search Speed: {}\n\
+             - Memory Usage: {} (~{}MB)\n\
+             - Expected Accuracy: {}",
             self.construction_speed,
             self.search_speed,
             self.memory_usage,
@@ -379,6 +379,7 @@ mod tests {
             ef_search: 4, // Too small relative to M
             max_m0: 8, // Too small relative to M
             estimated_memory_bytes: 0,
+            density_scaling: false,
         };
 
         assert!(params.validate().is_err());

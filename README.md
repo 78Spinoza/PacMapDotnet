@@ -64,10 +64,10 @@ Created **PacMAPSharp** - a professional NuGet library equivalent to UMAPuwotSha
 - **Size**: 14.4MB NuGet package with all native dependencies included
 
 #### 🔗 **Self-Contained OpenBLAS Deployment** ⚠️ **REQUIRES TESTING**
-- **Windows**: Includes `libopenblas.dll` (50MB) - no separate installation required ✅ **VERIFIED**
+- **Windows**: Includes `libopenblas.dll` (50MB) - no separate installation required ⚠️ **UNTESTED**
 - **Linux**: Includes `libopenblas.so.0` (38MB) - no `apt-get install` needed ⚠️ **UNTESTED**
-- **Status**: Cross-platform libraries built successfully but Linux functionality **not yet verified**
-- **Next Steps**: Comprehensive testing required to validate Linux deployment
+- **Status**: Cross-platform libraries built successfully but **both platforms need comprehensive testing**
+- **Next Steps**: Full functional testing required to validate self-contained deployment on both platforms
 
 #### 🎯 **Clean C# API**
 ```csharp
@@ -91,12 +91,34 @@ Console.WriteLine($"Confidence: {result.ConfidenceScore:F3}");
 - **Model Persistence**: Save/load functionality for trained models
 - **Cross-Platform**: Windows/Linux support with proper DLL loading
 
+#### 🎛️ **PacMAP Hyperparameters vs UMAP**
+
+**Important: PacMAP does NOT have a `min_dist` parameter** - this is UMAP-specific.
+
+Instead, PacMAP uses **`mid_near_ratio`** and **`far_pair_ratio`** which are **far more forgiving and stable hyperparameters**. This is actually **one of PacMAP's key strengths**:
+
+- **`mid_near_ratio`** (default: 0.5): Controls the balance of mid-range pairs in the embedding
+  - **More stable** than UMAP's `min_dist` across different datasets
+  - Typical range: 0.05 to 2.0
+  - Higher values preserve more global structure
+
+- **`far_pair_ratio`** (default: 2.0): Controls the influence of far pairs (pushes dissimilar points apart)
+  - **More forgiving** than UMAP's spread parameter
+  - Typical range: 0.5 to 5.0
+  - Higher values create more separation between clusters
+
+- **`learning_rate`** (default: 1.0): Controls optimization step size
+  - Typical range: 0.1 to 3.0
+  - Affects convergence speed and final quality
+
+**Why This Matters**: PacMAP's hyperparameters are designed to be **more robust** and **less sensitive** to exact values than UMAP's `min_dist`, making PacMAP easier to use in practice without extensive hyperparameter tuning.
+
 #### 🛠️ **Cross-Platform Build Automation** ✅ **BUILD COMPLETE**
 - **BuildDockerLinuxWindows.bat**: Automated cross-platform compilation ✅ **WORKING**
-- **Windows Build**: Native Rust compilation with OpenBLAS integration ✅ **VERIFIED**
+- **Windows Build**: Native Rust compilation with OpenBLAS integration ✅ **COMPILED**
 - **Linux Build**: Docker-based compilation with Ubuntu 22.04 + OpenBLAS ✅ **COMPILED**
 - **Self-Contained**: Automatically extracts and packages OpenBLAS for both platforms ✅ **COMPLETE**
-- **Status**: Libraries built but **Linux functionality requires testing before production use**
+- **Status**: Libraries built successfully but **both platforms require comprehensive testing**
 
 ## 🚀 All Previous Issues RESOLVED
 
@@ -344,21 +366,20 @@ The implementation is **production-ready** with all critical issues resolved. Fu
 
 ## 📊 Current Status & Metrics
 
-### ✅ **Completed & Verified**
-- ✅ **Windows Implementation**: All critical bugs fixed and tested
-- ✅ **Professional Architecture**: NuGet library created and validated
-- ✅ **Quality Achievement**: HNSW results match exact KNN on Windows
-- ✅ **Performance Validation**: 8000-point mammoth dataset processes successfully
+### ✅ **Build & Development Completed**
+- ✅ **Cross-Platform Build**: Both Windows and Linux libraries compiled successfully
+- ✅ **Professional Architecture**: NuGet library structure created
 - ✅ **Code Quality**: Comprehensive error handling and progress reporting
-- ✅ **Test Coverage**: 31/31 Rust tests passing with comprehensive validation
+- ✅ **Test Coverage**: 31/31 Rust unit tests passing
 - ✅ **Build Quality**: Clean compilation with no warnings
-- ✅ **Cross-Platform Build**: Linux libraries compiled successfully
+- ✅ **Self-Contained Libraries**: OpenBLAS automatically extracted for both platforms
 
-### ⚠️ **Requires Testing Before Production**
+### ⚠️ **Requires Complete Testing Before Production**
+- ⚠️ **Windows Functionality**: Self-contained deployment needs verification
 - ⚠️ **Linux Functionality**: Libraries built but not tested on actual Linux system
-- ⚠️ **Cross-Platform NuGet**: Package includes Linux binaries but deployment untested
-- ⚠️ **Linux OpenBLAS**: Self-contained deployment needs verification
-- ⚠️ **Performance Validation**: Linux performance benchmarks required
+- ⚠️ **Cross-Platform NuGet**: Package deployment untested on both platforms
+- ⚠️ **Performance Validation**: Benchmarks required for both Windows and Linux
+- ⚠️ **Integration Testing**: End-to-end functionality testing needed
 
 ---
 
@@ -366,8 +387,8 @@ The implementation is **production-ready** with all critical issues resolved. Fu
 
 This implementation represents significant advances in HNSW-based manifold learning:
 
-### **Algorithmic Breakthrough (Windows Verified)**
-> **Solved the fundamental issue of HNSW producing "completely off" results in PacMAP by implementing proper local distance scaling with σᵢ density adaptation. This makes HNSW-accelerated PacMAP both fast AND accurate on Windows systems.**
+### **Algorithmic Breakthrough (Rust Unit Tests Passing)**
+> **Solved the fundamental issue of HNSW producing "completely off" results in PacMAP by implementing proper local distance scaling with σᵢ density adaptation. Rust implementation verified through comprehensive unit tests.**
 
 **Technical Impact**: The local distance scaling fix has potential applications beyond PacMAP to other manifold learning algorithms using HNSW acceleration.
 
@@ -376,12 +397,14 @@ This implementation represents significant advances in HNSW-based manifold learn
 
 **Build Impact**: Eliminates dependency installation requirements and enables seamless cross-platform deployment.
 
-## 🚧 **NEXT STEPS FOR PRODUCTION**
+## 🚧 **CRITICAL NEXT STEPS FOR PRODUCTION**
 
-1. **Linux Testing Required**: Test all functionality on actual Linux systems
-2. **Performance Benchmarking**: Validate Linux performance matches Windows quality
-3. **Integration Testing**: Test NuGet package deployment across platforms
-4. **Documentation Update**: Add Linux-specific deployment instructions after validation
+1. **Windows Self-Contained Testing**: Verify self-contained OpenBLAS deployment works on Windows
+2. **Linux Full Testing**: Test all functionality on actual Linux systems
+3. **Performance Benchmarking**: Validate performance on both platforms
+4. **Integration Testing**: Test complete NuGet package deployment workflow
+5. **End-to-End Validation**: Confirm C# wrapper correctly loads platform-specific libraries
+6. **Documentation Update**: Add platform-specific deployment instructions after validation
 
 ---
 

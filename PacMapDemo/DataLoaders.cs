@@ -6,6 +6,29 @@ using System.Linq;
 using NumSharp;
 using Microsoft.Data.Analysis;
 
+// Extension method for NextGaussian (Box-Muller transform)
+public static class RandomExtensions
+{
+    private static bool hasSpare = false;
+    private static double spare;
+
+    public static double NextGaussian(this Random random, double mean = 0.0, double stdDev = 1.0)
+    {
+        if (hasSpare)
+        {
+            hasSpare = false;
+            return spare * stdDev + mean;
+        }
+
+        hasSpare = true;
+        double u = random.NextDouble();
+        double v = random.NextDouble();
+        double mag = stdDev * Math.Sqrt(-2.0 * Math.Log(u));
+        spare = mag * Math.Cos(2.0 * Math.PI * v);
+        return mag * Math.Sin(2.0 * Math.PI * v) + mean;
+    }
+}
+
 namespace PacMapDemo
 {
     /// <summary>
@@ -123,6 +146,36 @@ namespace PacMapDemo
             {
                 throw new InvalidOperationException($"Failed to load REAL mammoth data: {ex.Message}", ex);
             }
+        }
+
+        /// <summary>
+        /// Sample random points from dataset with fixed seed for reproducibility
+        /// </summary>
+        public static double[,] SampleRandomPoints(double[,] data, int sampleSize, int seed = 42)
+        {
+            int totalPoints = data.GetLength(0);
+            int dimensions = data.GetLength(1);
+
+            if (sampleSize >= totalPoints)
+                return data;
+
+            var random = new Random(seed);
+            var indices = Enumerable.Range(0, totalPoints)
+                .OrderBy(x => random.Next())
+                .Take(sampleSize)
+                .ToArray();
+
+            var sampled = new double[sampleSize, dimensions];
+            for (int i = 0; i < sampleSize; i++)
+            {
+                for (int j = 0; j < dimensions; j++)
+                {
+                    sampled[i, j] = data[indices[i], j];
+                }
+            }
+
+            Console.WriteLine($"📊 Sampled {sampleSize:N0} points from {totalPoints:N0} (seed={seed})");
+            return sampled;
         }
 
         /// <summary>
@@ -290,6 +343,61 @@ namespace PacMapDemo
             }
 
             return (subsetData, (int[])(object)subsetLabels);
+        }
+
+        /// <summary>
+        /// Load mammoth 3D point cloud data with synthetic labels for testing
+        /// </summary>
+        /// <param name="csvPath">Path to mammoth_data.csv file</param>
+        /// <param name="maxSamples">Maximum number of samples to load (0 = all)</param>
+        /// <returns>Tuple of (3D point cloud as double[,] array, synthetic labels)</returns>
+        public static (double[,] data, int[] labels) LoadMammothWithLabels(string csvPath, int maxSamples = 0)
+        {
+            try
+            {
+                // Load the mammoth data
+                var data = LoadMammothData(csvPath, maxSamples);
+                int numSamples = data.GetLength(0);
+
+                // Create synthetic labels based on spatial regions for testing
+                // This helps validate that transforms preserve spatial relationships
+                var labels = new int[numSamples];
+
+                for (int i = 0; i < numSamples; i++)
+                {
+                    double x = data[i, 0];
+                    double y = data[i, 1];
+                    double z = data[i, 2];
+
+                    // Create regions based on 3D position
+                    // Front/Back classification (x-axis)
+                    bool front = x > 0;
+
+                    // Left/Right classification (y-axis)
+                    bool left = y > 0;
+
+                    // Top/Bottom classification (z-axis)
+                    bool top = z > 0;
+
+                    // Create 8 region labels (2^3 combinations)
+                    int label = 0;
+                    if (front) label |= 1;      // bit 0: front/back
+                    if (left) label |= 2;       // bit 1: left/right
+                    if (top) label |= 4;        // bit 2: top/bottom
+
+                    labels[i] = label;
+                }
+
+                Console.WriteLine($"📍 Created synthetic labels for mammoth data:");
+                Console.WriteLine($"   Total samples: {numSamples:N0}");
+                Console.WriteLine($"   Label distribution: {string.Join(", ", Enumerable.Range(0, 8).Select(l => $"{l}:{labels.Count(x => x == l)}"))}");
+
+                return (data, labels);
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"Failed to load mammoth data with labels: {ex.Message}", ex);
+            }
         }
 
         /// <summary>

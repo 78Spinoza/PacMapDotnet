@@ -51,7 +51,7 @@ pub struct PacmapHnswConfig {
     pub ef_construction: c_int, // Manual ef_construction (ignored if auto_scale=true)
     pub ef_search: c_int,       // Manual ef_search (ignored if auto_scale=true)
     pub memory_limit_mb: c_int, // Memory limit in MB (0 = no limit)
-    pub density_scaling: bool,  // Apply dimension-based density scaling (O(√d) behavior)
+    pub density_scaling: bool,  // Apply dimension-based density scaling (O(sqrt(d)) behavior)
     pub autodetect_hnsw_params: bool, // If true, do recall validation and auto-optimize; if false, use params as-is
 }
 
@@ -504,6 +504,7 @@ pub extern "C" fn pacmap_get_model_info(
     n_epochs: *mut c_int,
     mid_near_ratio: *mut f64,
     far_pair_ratio: *mut f64,
+    seed: *mut c_int,
     quantize_on_save: *mut bool,
     hnsw_index_crc32: *mut u32,
     embedding_hnsw_index_crc32: *mut u32,
@@ -565,6 +566,9 @@ pub extern "C" fn pacmap_get_model_info(
     if !far_pair_ratio.is_null() {
         unsafe { *far_pair_ratio = model.config.far_pair_ratio; }
     }
+    if !seed.is_null() {
+        unsafe { *seed = model.config.seed.unwrap_or(42) as c_int; }
+    }
 
     // Quantization setting
     if !quantize_on_save.is_null() {
@@ -580,11 +584,8 @@ pub extern "C" fn pacmap_get_model_info(
         }
     }
     if !embedding_hnsw_index_crc32.is_null() {
-        if let Some(crc) = model.embedding_hnsw_index_crc32 {
-            unsafe { *embedding_hnsw_index_crc32 = crc; }
-        } else {
-            unsafe { *embedding_hnsw_index_crc32 = 0; } // 0 indicates no CRC available
-        }
+        // REMOVED: embedding_hnsw_index_crc32 field no longer exists - always return 0
+        unsafe { *embedding_hnsw_index_crc32 = 0; } // 0 indicates no CRC available (field removed)
     }
 
     0 // Success

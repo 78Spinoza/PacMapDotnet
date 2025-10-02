@@ -69,7 +69,7 @@ fn validate_quantization_mse(quantized: &QuantizedEmbedding, original: &Array2<f
     let dequantized = dequantize_embedding(quantized);
 
     if dequantized.shape() != original.shape() {
-        eprintln!("⚠️ Quantization validation: Shape mismatch - original: {:?}, dequantized: {:?}",
+        eprintln!("WARNING: Quantization validation: Shape mismatch - original: {:?}, dequantized: {:?}",
                   original.shape(), dequantized.shape());
         return;
     }
@@ -85,7 +85,7 @@ fn validate_quantization_mse(quantized: &QuantizedEmbedding, original: &Array2<f
     let data_range = max_val - min_val;
     let relative_rmse = rmse / data_range * 100.0;
 
-    println!("📊 Quantization Quality Assessment:");
+    println!("Quantization Quality Assessment:");
     println!("   - MSE: {:.6}", mse);
     println!("   - RMSE: {:.6}", rmse);
     println!("   - Relative RMSE: {:.2}%", relative_rmse);
@@ -93,13 +93,13 @@ fn validate_quantization_mse(quantized: &QuantizedEmbedding, original: &Array2<f
 
     // Quality thresholds
     if relative_rmse < 0.1 {
-        println!("   ✅ Excellent quantization quality");
+        println!("   EXCELLENT: Excellent quantization quality");
     } else if relative_rmse < 0.5 {
-        println!("   ✅ Good quantization quality");
+        println!("   GOOD: Good quantization quality");
     } else if relative_rmse < 1.0 {
-        println!("   ⚠️ Acceptable quantization quality");
+        println!("   ACCEPTABLE: Acceptable quantization quality");
     } else {
-        println!("   ❌ Poor quantization quality - consider alternative approach");
+        println!("   POOR: Poor quantization quality - consider alternative approach");
     }
 }
 

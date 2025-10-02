@@ -10,7 +10,7 @@ use rand::SeedableRng;
 /// Following UMAP's approach to feature scaling with saved parameters
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
 pub enum NormalizationMode {
-    /// Z-score normalization: (x - μ) / σ
+    /// Z-score normalization: (x - mean) / std_dev
     /// Most common, assumes normal distribution
     ZScore,
     /// Min-max scaling: (x - min) / (max - min)

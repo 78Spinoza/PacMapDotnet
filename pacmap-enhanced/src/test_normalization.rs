@@ -140,7 +140,15 @@ mod tests {
             quantize_on_save: false,
             quantized_embedding: None,
             original_data: None,
-            fitted_projections: None,
+            fitted_projections: embedding.clone(),
+            embedding_centroid: None,
+            #[cfg(feature = "use_hnsw")]
+            hnsw_index: None,
+            #[cfg(feature = "use_hnsw")]
+            embedding_hnsw_index: None,
+            serialized_hnsw_index: None,
+            hnsw_index_crc32: None,
+            fitted_projections_crc32: None,
         };
 
         // Test serialization/deserialization

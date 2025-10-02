@@ -66,7 +66,7 @@ pub fn compute_pairs_bruteforce(data: ArrayView2<f64>, n_neighbors: usize, _seed
     }
 
     if std::env::var("PACMAP_VERBOSE").is_ok() {
-        eprintln!("✅ LOCAL SCALING: Applied density adaptation in brute-force with sigma values (min: {:.6}, max: {:.6})",
+        eprintln!("LOCAL SCALING: Applied density adaptation in brute-force with sigma values (min: {:.6}, max: {:.6})",
                  sigmas.iter().min_by(|a, b| a.partial_cmp(b).unwrap()).unwrap_or(&0.0),
                  sigmas.iter().max_by(|a, b| a.partial_cmp(b).unwrap()).unwrap_or(&0.0));
     }
@@ -289,7 +289,7 @@ fn try_hnsw_search_with_params(data: ArrayView2<f64>, n_neighbors: usize, n_samp
     }
 
     if std::env::var("PACMAP_VERBOSE").is_ok() {
-        eprintln!("✅ LOCAL SCALING: Applied density adaptation with sigma values (min: {:.6}, max: {:.6})",
+        eprintln!("LOCAL SCALING: Applied density adaptation with sigma values (min: {:.6}, max: {:.6})",
                  sigmas.iter().min_by(|a, b| a.partial_cmp(b).unwrap()).unwrap_or(&0.0),
                  sigmas.iter().max_by(|a, b| a.partial_cmp(b).unwrap()).unwrap_or(&0.0));
     }

@@ -48,7 +48,7 @@ mod tests {
     fn test_fit_transform_basic() {
         println!("\n--- Test: Basic Fit Transform ---");
 
-        // Create test data (10 samples, 3 features)
+        // Create test data (15 samples, 3 features) - more samples than neighbors
         let data: Vec<f64> = vec![
             1.0, 2.0, 3.0,
             4.0, 5.0, 6.0,
@@ -60,9 +60,14 @@ mod tests {
             6.0, 7.0, 8.0,
             9.0, 1.0, 2.0,
             4.0, 5.0, 6.0,
+            1.5, 2.5, 3.5,
+            4.5, 5.5, 6.5,
+            7.5, 8.5, 9.5,
+            2.5, 3.5, 4.5,
+            5.5, 6.5, 7.5,
         ];
 
-        let rows = 10;
+        let rows = 15;
         let cols = 3;
         let config = pacmap_config_default();
         let mut embedding = vec![0.0; rows * config.embedding_dimensions as usize];
@@ -105,6 +110,7 @@ mod tests {
             cols as std::os::raw::c_int,
             config,
             embedding.as_mut_ptr(),
+            (rows * config.embedding_dimensions as usize) as std::os::raw::c_int, // buffer length
             Some(test_callback),
         );
 
@@ -122,7 +128,17 @@ mod tests {
         let mut hnsw_m = 0;
         let mut hnsw_ef_construction = 0;
         let mut hnsw_ef_search = 0;
-        let mut memory_usage_mb = 0;
+        let memory_usage_mb = 0;
+
+        let mut used_hnsw = false;
+        let mut learning_rate = 0.0;
+        let mut n_epochs = 0;
+        let mut mid_near_ratio = 0.0;
+        let mut far_pair_ratio = 0.0;
+        let mut seed = 0;
+        let mut quantize_on_save = false;
+        let mut hnsw_index_crc32 = 0;
+        let mut embedding_hnsw_index_crc32 = 0;
 
         let info_result = pacmap_get_model_info(
             handle,
@@ -133,7 +149,15 @@ mod tests {
             &mut hnsw_m,
             &mut hnsw_ef_construction,
             &mut hnsw_ef_search,
-            &mut memory_usage_mb,
+            &mut used_hnsw,
+            &mut learning_rate,
+            &mut n_epochs,
+            &mut mid_near_ratio,
+            &mut far_pair_ratio,
+            &mut seed,
+            &mut quantize_on_save,
+            &mut hnsw_index_crc32,
+            &mut embedding_hnsw_index_crc32,
         );
 
         assert_eq!(info_result, 0, "Model info retrieval should succeed");
@@ -177,6 +201,7 @@ mod tests {
             cols as std::os::raw::c_int,
             config,
             embedding.as_mut_ptr(),
+            (rows * config.embedding_dimensions as usize) as std::os::raw::c_int, // buffer length
             None,
         );
         assert!(!handle.is_null(), "Model fitting should succeed");
@@ -267,8 +292,9 @@ mod tests {
         println!("\n--- Test: Simple Save/Load (no FFI) ---");
 
         // Create a simple model directly without FFI
-        let data = ndarray::Array2::from_shape_vec((10, 3), (0..30).map(|i| i as f64).collect()).unwrap();
-        let config = pacmap::Configuration::default();
+        let data = ndarray::Array2::from_shape_vec((15, 3), (0..45).map(|i| i as f64).collect()).unwrap();
+        let mut config = pacmap::Configuration::default();
+        config.override_neighbors = Some(5); // Ensure neighbors < samples
         let norm_mode = None;
 
         // Create model using internal function
@@ -325,6 +351,7 @@ mod tests {
             cols as std::os::raw::c_int,
             config,
             embedding.as_mut_ptr(),
+            (rows * config.embedding_dimensions as usize) as std::os::raw::c_int, // buffer length
             None, // No callback for this test
         );
 
@@ -348,6 +375,14 @@ mod tests {
             std::ptr::null_mut(),
             std::ptr::null_mut(),
             &mut orig_hnsw_m,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
             std::ptr::null_mut(),
             std::ptr::null_mut(),
             std::ptr::null_mut(),
@@ -375,6 +410,14 @@ mod tests {
             std::ptr::null_mut(),
             std::ptr::null_mut(),
             &mut loaded_hnsw_m,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
             std::ptr::null_mut(),
             std::ptr::null_mut(),
             std::ptr::null_mut(),

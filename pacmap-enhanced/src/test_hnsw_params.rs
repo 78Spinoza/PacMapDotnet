@@ -141,6 +141,7 @@ mod tests {
             ef_search: 2, // Too small relative to M
             max_m0: 1, // Too small relative to M
             estimated_memory_bytes: 0,
+            density_scaling: false,
         };
 
         println!("Before validation: M={}, ef_construction={}, ef_search={}, max_m0={}",
@@ -156,6 +157,7 @@ mod tests {
             ef_search: 2, // Will be adjusted
             max_m0: 2, // Will be adjusted
             estimated_memory_bytes: 0,
+            density_scaling: true,
         };
 
         let result = ok_params.validate();

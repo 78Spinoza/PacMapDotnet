@@ -343,6 +343,109 @@ namespace PacMapDemo
         }
 
         /// <summary>
+        /// Plot PacMAP embedding with color labels
+        /// </summary>
+        public static void PlotPacMAPWithLabels(float[,] embedding, int[] labels, string title, string outputPath, string? parameterInfo = null)
+        {
+            try
+            {
+                Console.WriteLine($"Creating colored PacMAP plot: {title}");
+
+                int numPoints = embedding.GetLength(0);
+                if (labels.Length != numPoints)
+                {
+                    throw new ArgumentException($"Number of points ({numPoints}) doesn't match number of labels ({labels.Length})");
+                }
+
+                // Enhanced title with parameter information
+                string enhancedTitle = title;
+                if (!string.IsNullOrEmpty(parameterInfo))
+                {
+                    enhancedTitle = $"{title}\n{parameterInfo}";
+                }
+
+                var plotModel = new PlotModel
+                {
+                    Title = enhancedTitle,
+                    Background = OxyColors.White,
+                    PlotAreaBorderColor = OxyColors.Black
+                };
+
+                // Add X-Y axes for 2D embedding
+                plotModel.Axes.Add(new LinearAxis { Position = AxisPosition.Bottom, Title = "X Coordinate (PacMAP Dimension 1)" });
+                plotModel.Axes.Add(new LinearAxis { Position = AxisPosition.Left, Title = "Y Coordinate (PacMAP Dimension 2)" });
+
+                // Define colors for different labels
+                var colors = new OxyColor[]
+                {
+                    OxyColors.Blue, OxyColors.Red, OxyColors.Green, OxyColors.Orange,
+                    OxyColors.Purple, OxyColors.Yellow, OxyColors.Cyan, OxyColors.Magenta,
+                    OxyColors.Brown, OxyColors.Pink, OxyColors.Lime, OxyColors.Indigo,
+                    OxyColors.Teal, OxyColors.Gold, OxyColors.Silver, OxyColors.Maroon
+                };
+
+                // Get unique labels and group points by label
+                var uniqueLabels = labels.Distinct().OrderBy(l => l).ToArray();
+                var labelGroups = new Dictionary<int, List<ScatterPoint>>();
+
+                for (int i = 0; i < numPoints; i++)
+                {
+                    int label = labels[i];
+                    if (!labelGroups.ContainsKey(label))
+                    {
+                        labelGroups[label] = new List<ScatterPoint>();
+                    }
+                    labelGroups[label].Add(new ScatterPoint(embedding[i, 0], embedding[i, 1]));
+                }
+
+                // Create scatter series for each label
+                foreach (int label in uniqueLabels)
+                {
+                    var color = colors[label % colors.Length];
+                    var points = labelGroups[label];
+
+                    var scatterSeries = new ScatterSeries
+                    {
+                        Title = $"Label {label} ({points.Count} points)",
+                        MarkerType = MarkerType.Circle,
+                        MarkerFill = color,
+                        MarkerStroke = color,
+                        MarkerSize = 2
+                    };
+
+                    foreach (var point in points)
+                    {
+                        scatterSeries.Points.Add(point);
+                    }
+
+                    plotModel.Series.Add(scatterSeries);
+                }
+
+                // Add legend
+                plotModel.IsLegendVisible = true;
+
+                // Export to high-resolution PNG with transparent background
+                var pngExporter = new PngExporter
+                {
+                    Width = 1600,
+                    Height = 1200
+                };
+
+                using (var stream = File.Create(outputPath))
+                {
+                    pngExporter.Export(plotModel, stream);
+                }
+
+                Console.WriteLine($"SUCCESS: Colored PacMAP plot saved to: {outputPath}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"ERROR: Failed to create colored PacMAP plot: {ex.Message}");
+                throw;
+            }
+        }
+
+        /// <summary>
         /// Plot PacMAP embedding without labels (single color for unlabeled data)
         /// </summary>
         public static void PlotSimplePacMAP(float[,] embedding, string title, string outputPath, string? parameterInfo = null)

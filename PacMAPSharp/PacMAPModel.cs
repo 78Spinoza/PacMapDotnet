@@ -288,6 +288,11 @@ namespace PacMAPSharp
         public double FarPairRatio { get; }
 
         /// <summary>
+        /// Gets the random seed used for deterministic results
+        /// </summary>
+        public int Seed { get; }
+
+        /// <summary>
         /// Gets whether the model uses quantization on save
         /// </summary>
         public bool QuantizeOnSave { get; }
@@ -311,7 +316,7 @@ namespace PacMAPSharp
                                 int neighbors, DistanceMetric metric, NormalizationMode normalization,
                                 bool usedHnsw, float hnswRecall, int? discoveredHnswM, int? discoveredHnswEfConstruction, int? discoveredHnswEfSearch,
                                 double learningRate, int nEpochs, double midNearRatio,
-                                double farPairRatio, bool quantizeOnSave, uint? hnswIndexCrc32 = null, uint? embeddingHnswIndexCrc32 = null, string? filePath = null)
+                                double farPairRatio, int seed, bool quantizeOnSave, uint? hnswIndexCrc32 = null, uint? embeddingHnswIndexCrc32 = null, string? filePath = null)
         {
             TrainingSamples = trainingSamples;
             InputDimension = inputDimension;
@@ -328,6 +333,7 @@ namespace PacMAPSharp
             NEpochs = nEpochs;
             MidNearRatio = midNearRatio;
             FarPairRatio = farPairRatio;
+            Seed = seed;
             QuantizeOnSave = quantizeOnSave;
             HnswIndexCrc32 = hnswIndexCrc32;
             EmbeddingHnswIndexCrc32 = embeddingHnswIndexCrc32;
@@ -543,13 +549,16 @@ namespace PacMAPSharp
         [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_get_model_info")]
         private static extern int CallGetModelInfoWindows(IntPtr model, out int nSamples, out int nFeatures, out int embeddingDim, out int normalizationMode,
             out int hnswM, out int hnswEfConstruction, out int hnswEfSearch, out bool usedHnsw, out double learningRate,
-            out int nEpochs, out double midNearRatio, out double farPairRatio, out bool quantizeOnSave, out uint hnswIndexCrc32, out uint embeddingHnswIndexCrc32);
+            out int nEpochs, out double midNearRatio, out double farPairRatio, out int seed, out bool quantizeOnSave, out uint hnswIndexCrc32, out uint embeddingHnswIndexCrc32);
 
         [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_get_model_stats")]
         private static extern void CallGetDistanceStatsWindows(IntPtr model, out double mean, out double p95, out double max);
 
         [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_save_model_enhanced")]
         private static extern int CallSaveModelWindows(IntPtr model, IntPtr path, bool quantize);
+
+        [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_transform")]
+        private static extern int CallTransformWindows(IntPtr model, IntPtr data, int rows, int cols, IntPtr embedding, int embeddingBufferLen, NativeProgressCallback? callback);
 
         [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_load_model_enhanced")]
         private static extern IntPtr CallLoadModelWindows(IntPtr path);
@@ -568,13 +577,16 @@ namespace PacMAPSharp
         [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_get_model_info")]
         private static extern int CallGetModelInfoLinux(IntPtr model, out int nSamples, out int nFeatures, out int embeddingDim, out int normalizationMode,
             out int hnswM, out int hnswEfConstruction, out int hnswEfSearch, out bool usedHnsw, out double learningRate,
-            out int nEpochs, out double midNearRatio, out double farPairRatio, out bool quantizeOnSave, out uint hnswIndexCrc32, out uint embeddingHnswIndexCrc32);
+            out int nEpochs, out double midNearRatio, out double farPairRatio, out int seed, out bool quantizeOnSave, out uint hnswIndexCrc32, out uint embeddingHnswIndexCrc32);
 
         [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_get_model_stats")]
         private static extern void CallGetDistanceStatsLinux(IntPtr model, out double mean, out double p95, out double max);
 
         [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_save_model_enhanced")]
         private static extern int CallSaveModelLinux(IntPtr model, IntPtr path, bool quantize);
+
+        [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_transform")]
+        private static extern int CallTransformLinux(IntPtr model, IntPtr data, int rows, int cols, IntPtr embedding, int embeddingBufferLen, NativeProgressCallback? callback);
 
         [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_load_model_enhanced")]
         private static extern IntPtr CallLoadModelLinux(IntPtr path);
@@ -594,7 +606,7 @@ namespace PacMAPSharp
         private ProgressCallback? _managedCallback = null;
 
         // Expected DLL version - must match Rust pacmap_enhanced version
-        private const string EXPECTED_DLL_VERSION = "0.3.1";
+        private const string EXPECTED_DLL_VERSION = "0.3.3";
 
         #endregion
 
@@ -772,11 +784,71 @@ namespace PacMAPSharp
 
                     model._isFitted = true;
                     model._filePath = Path.GetFullPath(filename);
-                    // TODO: Extract model info from loaded model
+
+                    // Extract model info from loaded model
+                    model.ExtractModelInfoFromLoadedModel();
                 }
             }
 
             return model;
+        }
+
+        /// <summary>
+        /// Extracts model information from a loaded native model
+        /// </summary>
+        private void ExtractModelInfoFromLoadedModel()
+        {
+            if (_nativeModel == IntPtr.Zero)
+                throw new InvalidOperationException("Native model is null");
+
+            unsafe
+            {
+                int nSamples, nFeatures, embeddingDim, normalizationMode;
+                int hnswM, hnswEfConstruction, hnswEfSearch;
+                bool usedHnsw, quantizeOnSave;
+                double learningRate;
+                int nEpochs, seed;
+                double midNearRatio, farPairRatio;
+                uint hnswIndexCrc32, embeddingHnswIndexCrc32;
+
+                // Extract model info from native model
+                if (IsWindows)
+                {
+                    CallGetModelInfoWindows(_nativeModel, out nSamples, out nFeatures, out embeddingDim, out normalizationMode,
+                        out hnswM, out hnswEfConstruction, out hnswEfSearch, out usedHnsw, out learningRate,
+                        out nEpochs, out midNearRatio, out farPairRatio, out seed, out quantizeOnSave, out hnswIndexCrc32, out embeddingHnswIndexCrc32);
+                }
+                else
+                {
+                    CallGetModelInfoLinux(_nativeModel, out nSamples, out nFeatures, out embeddingDim, out normalizationMode,
+                        out hnswM, out hnswEfConstruction, out hnswEfSearch, out usedHnsw, out learningRate,
+                        out nEpochs, out midNearRatio, out farPairRatio, out seed, out quantizeOnSave, out hnswIndexCrc32, out embeddingHnswIndexCrc32);
+                }
+
+                // Create model info object
+                _modelInfo = new PacMAPModelInfo(
+                    trainingSamples: nSamples,
+                    inputDimension: nFeatures,
+                    outputDimension: embeddingDim,
+                    neighbors: 15, // Default value - not stored in native model
+                    metric: DistanceMetric.Euclidean, // Default value - not stored in native model
+                    normalization: (NormalizationMode)normalizationMode,
+                    usedHnsw: usedHnsw,
+                    hnswRecall: 100.0f, // Default value for loaded models
+                    discoveredHnswM: usedHnsw ? hnswM : null,
+                    discoveredHnswEfConstruction: usedHnsw ? hnswEfConstruction : null,
+                    discoveredHnswEfSearch: usedHnsw ? hnswEfSearch : null,
+                    learningRate: learningRate,
+                    nEpochs: nEpochs,
+                    midNearRatio: midNearRatio,
+                    farPairRatio: farPairRatio,
+                    seed: seed,
+                    quantizeOnSave: quantizeOnSave,
+                    hnswIndexCrc32: hnswIndexCrc32 != 0 ? hnswIndexCrc32 : null,
+                    embeddingHnswIndexCrc32: embeddingHnswIndexCrc32 != 0 ? embeddingHnswIndexCrc32 : null,
+                    filePath: _filePath
+                );
+            }
         }
 
         #endregion
@@ -880,7 +952,7 @@ namespace PacMAPSharp
                         int infoResult = CallGetModelInfoWindows(_nativeModel, out int actualSamples, out int actualFeatures, out int actualEmbedDim, out int actualNormMode,
                                                                out int hnswM, out int hnswEfConstruction, out int hnswEfSearch, out bool actualUsedHnsw,
                                                                out double actualLearningRate, out int actualNEpochs,
-                                                               out double actualMidNearRatio, out double actualFarPairRatio, out bool actualQuantizeOnSave,
+                                                               out double actualMidNearRatio, out double actualFarPairRatio, out int actualSeed, out bool actualQuantizeOnSave,
                                                                out uint hnswIndexCrc32, out uint embeddingHnswIndexCrc32);
 
                         if (infoResult != 0)
@@ -898,7 +970,7 @@ namespace PacMAPSharp
                                                        metric, (NormalizationMode)actualNormMode, actualUsedHnsw, 100.0f,
                                                        discoveredM, discoveredEfConstruction, discoveredEfSearch,
                                                        actualLearningRate, actualNEpochs, actualMidNearRatio,
-                                                       actualFarPairRatio, actualQuantizeOnSave, crc1, crc2, _filePath);
+                                                       actualFarPairRatio, actualSeed, actualQuantizeOnSave, crc1, crc2, _filePath);
 
                         // Convert double array to float array for API consistency
                         var floatEmbedding = new float[embedding.Length];
@@ -922,7 +994,7 @@ namespace PacMAPSharp
                         int infoResult = CallGetModelInfoLinux(_nativeModel, out int actualSamples, out int actualFeatures, out int actualEmbedDim, out int actualNormMode,
                                                              out int hnswM, out int hnswEfConstruction, out int hnswEfSearch, out bool actualUsedHnsw,
                                                              out double actualLearningRate, out int actualNEpochs,
-                                                             out double actualMidNearRatio, out double actualFarPairRatio, out bool actualQuantizeOnSave,
+                                                             out double actualMidNearRatio, out double actualFarPairRatio, out int actualSeed, out bool actualQuantizeOnSave,
                                                              out uint hnswIndexCrc32, out uint embeddingHnswIndexCrc32);
 
                         if (infoResult != 0)
@@ -940,7 +1012,7 @@ namespace PacMAPSharp
                                                        metric, (NormalizationMode)actualNormMode, actualUsedHnsw, 100.0f,
                                                        discoveredM, discoveredEfConstruction, discoveredEfSearch,
                                                        actualLearningRate, actualNEpochs, actualMidNearRatio,
-                                                       actualFarPairRatio, actualQuantizeOnSave, crc1, crc2, _filePath);
+                                                       actualFarPairRatio, actualSeed, actualQuantizeOnSave, crc1, crc2, _filePath);
 
                         // Convert double array to float array for API consistency
                         var floatEmbedding = new float[embedding.Length];
@@ -955,6 +1027,88 @@ namespace PacMAPSharp
 
                         return new EmbeddingResult(floatEmbedding, confidence, severity, distanceStats);
                     }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Transforms new data using an already fitted PacMAP model
+        /// </summary>
+        /// <param name="data">Input data matrix</param>
+        /// <param name="progressCallback">Optional progress callback</param>
+        /// <returns>Embedding result for the transformed data</returns>
+        /// <exception cref="InvalidOperationException">Thrown when model is not fitted</exception>
+        /// <exception cref="ArgumentException">Thrown for invalid parameters</exception>
+        public EmbeddingResult Transform(double[,] data, ProgressCallback? progressCallback = null)
+        {
+            // CRITICAL: Verify DLL version before any native calls to prevent binary mismatches
+            VerifyVersion();
+
+            if (!IsFitted)
+                throw new InvalidOperationException("Model must be fitted before transforming data");
+
+            if (data == null)
+                throw new ArgumentNullException(nameof(data));
+
+            int rows = data.GetLength(0);
+            int cols = data.GetLength(1);
+
+            if (rows < 1)
+                throw new ArgumentException("Need at least 1 data point", nameof(data));
+            if (cols < 1)
+                throw new ArgumentException("Need at least 1 feature", nameof(data));
+
+            // Check if data dimensions match training dimensions
+            if (_modelInfo.HasValue && cols != _modelInfo.Value.InputDimension)
+                throw new ArgumentException($"Data has {cols} features but model was trained on {_modelInfo.Value.InputDimension} features", nameof(data));
+
+            _managedCallback = progressCallback;
+
+            // Use output dimension from model info or default to 2
+            int outputDim = _modelInfo.HasValue ? _modelInfo.Value.OutputDimension : 2;
+
+            unsafe
+            {
+                var embedding = new double[rows * outputDim];
+                fixed (double* dataPtr = data)
+                fixed (double* embeddingPtr = embedding)
+                {
+                    _managedCallback = progressCallback; // Store callback for native handler
+                    var nativeCallback = progressCallback != null ? new NativeProgressCallback(NativeProgressHandler) : null;
+
+                    // Transform data using existing model
+                    var resultCode = IsWindows
+                        ? CallTransformWindows(_nativeModel, (IntPtr)dataPtr, rows, cols, (IntPtr)embeddingPtr, embedding.Length, nativeCallback)
+                        : CallTransformLinux(_nativeModel, (IntPtr)dataPtr, rows, cols, (IntPtr)embeddingPtr, embedding.Length, nativeCallback);
+
+                    if (resultCode != 0)
+                        throw new InvalidOperationException($"Failed to transform data with PacMAP model. Error code: {resultCode}");
+
+                    // Convert double[] to float[] for consistency with Fit method
+                    var floatEmbedding = new float[embedding.Length];
+                    for (int i = 0; i < embedding.Length; i++)
+                    {
+                        floatEmbedding[i] = (float)embedding[i];
+                    }
+
+                    // Calculate distance stats for the transformed data
+                    (double mean, double p95, double max) distanceStats;
+                    if (IsWindows)
+                    {
+                        CallGetDistanceStatsWindows(_nativeModel, out double mean, out double p95, out double max);
+                        distanceStats = (mean, p95, max);
+                    }
+                    else
+                    {
+                        CallGetDistanceStatsLinux(_nativeModel, out double mean, out double p95, out double max);
+                        distanceStats = (mean, p95, max);
+                    }
+
+                    // Create result with existing confidence assessment
+                    var confidence = AssessConfidence(distanceStats);
+                    var severity = AssessSeverity(confidence);
+
+                    return new EmbeddingResult(floatEmbedding, confidence, severity, distanceStats);
                 }
             }
         }
@@ -995,7 +1149,7 @@ namespace PacMAPSharp
                                                        info.UsedHNSW, info.HnswRecall,
                                                        info.DiscoveredHnswM, info.DiscoveredHnswEfConstruction, info.DiscoveredHnswEfSearch,
                                                        info.LearningRate, info.NEpochs,
-                                                       info.MidNearRatio, info.FarPairRatio, info.QuantizeOnSave,
+                                                       info.MidNearRatio, info.FarPairRatio, info.Seed, info.QuantizeOnSave,
                                                        info.HnswIndexCrc32, info.EmbeddingHnswIndexCrc32, _filePath);
                     }
                 }
