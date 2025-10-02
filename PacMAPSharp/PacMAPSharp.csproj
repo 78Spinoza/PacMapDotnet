@@ -9,7 +9,7 @@
     <!-- Package Information -->
     <PackageId>PacMAPSharp</PackageId>
     <Title>PacMAP Sharp - Fast Dimensionality Reduction</Title>
-    <Version>1.0.0</Version>
+    <Version>1.0.1</Version>
     <Authors>PacMAP Team</Authors>
     <Company>Open Source</Company>
     <Description>Enhanced C# wrapper for PacMAP (Pairwise Controlled Manifold Approximation) dimensionality reduction with HNSW acceleration, density-adaptive scaling, and comprehensive quality validation.</Description>
@@ -61,13 +61,13 @@
     </None>
   </ItemGroup>
 
-  <!-- Additional Copy Target to Force Binary Copying -->
+  <!-- Copy Native Binaries to Output -->
   <Target Name="CopyNativeBinaries" BeforeTargets="Build">
     <ItemGroup>
       <NativeDlls Include="*.dll;*.so" />
     </ItemGroup>
     <Copy SourceFiles="@(NativeDlls)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" Condition="Exists('%(Identity)')" />
-    <Message Text="Copied native binaries: @(NativeDlls)" Importance="high" />
+    <Message Text="Copied native binaries to output: @(NativeDlls)" Importance="high" />
   </Target>
 
   <!-- Package Dependencies -->

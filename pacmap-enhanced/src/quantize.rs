@@ -9,24 +9,30 @@ pub struct QuantizationParams {
     pub min_value: f64,
     /// Maximum value in the original embedding
     pub max_value: f64,
-    /// Scale factor for quantization
+    /// Scale factor for quantization (currently always 1.0 for direct f16 conversion)
     pub scale: f64,
-    /// Zero point for quantization
+    /// Zero point for quantization (currently always 0.0 for direct f16 conversion)
     pub zero_point: f64,
-    /// Whether centroids were used for clustering-based quantization
+    /// Whether centroids are used for k-means quantization
+    #[serde(default)]
     pub use_centroids: bool,
-    /// Cluster centroids for k-means based quantization (optional)
+    /// Cluster centroids for k-means quantization (None for linear quantization)
+    #[serde(default)]
     pub centroids: Option<Vec<f64>>,
 }
 
 /// Quantized embedding with its parameters
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct QuantizedEmbedding {
+    /// Quantized data - f16 for linear quantization, u8/u16 indices for k-means
     pub data: Array2<f16>,
+    /// K-means indices stored separately for better compression (when use_centroids=true)
+    #[serde(default)]
+    pub indices: Option<Array2<u8>>,
     pub params: QuantizationParams,
 }
 
-/// Simple linear quantization with proper parameter tracking
+/// Simple linear quantization with MSE validation
 pub fn quantize_embedding_linear(embedding: &Array2<f64>) -> QuantizedEmbedding {
     let flat = embedding.as_slice().unwrap();
     let min_val = flat.iter().copied().fold(f64::INFINITY, f64::min);
@@ -36,8 +42,9 @@ pub fn quantize_embedding_linear(embedding: &Array2<f64>) -> QuantizedEmbedding 
     // f16 can handle range ±65504 with good precision around 0
     let quantized = embedding.mapv(|x| f16::from_f64(x));
 
-    QuantizedEmbedding {
+    let result = QuantizedEmbedding {
         data: quantized,
+        indices: None, // Linear quantization doesn't use indices
         params: QuantizationParams {
             min_value: min_val,
             max_value: max_val,
@@ -46,73 +53,76 @@ pub fn quantize_embedding_linear(embedding: &Array2<f64>) -> QuantizedEmbedding 
             use_centroids: false,
             centroids: None,
         },
-    }
+    };
+
+    // Validate quantization quality with MSE check
+    validate_quantization_mse(&result, embedding);
+
+    result
 }
 
-/// K-means based quantization with centroids
-#[allow(dead_code)]
-pub fn quantize_embedding_kmeans(embedding: &Array2<f64>, k: usize) -> QuantizedEmbedding {
-    let flat = embedding.as_slice().unwrap();
+/// K-means based quantization with adaptive centroids for optimal compression
 
-    // Simple k-means clustering for demonstration
-    let mut centroids = Vec::new();
-    let min_val = flat.iter().copied().fold(f64::INFINITY, f64::min);
-    let max_val = flat.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+/// Validate quantization quality using Mean Squared Error
+fn validate_quantization_mse(quantized: &QuantizedEmbedding, original: &Array2<f64>) {
+    // Dequantize and calculate MSE
+    let dequantized = dequantize_embedding(quantized);
 
-    // Initialize centroids evenly across the range
-    for i in 0..k {
-        let centroid = min_val + (max_val - min_val) * (i as f64) / ((k - 1) as f64);
-        centroids.push(centroid);
+    if dequantized.shape() != original.shape() {
+        eprintln!("⚠️ Quantization validation: Shape mismatch - original: {:?}, dequantized: {:?}",
+                  original.shape(), dequantized.shape());
+        return;
     }
 
-    // Assign each value to nearest centroid and quantize
-    let quantized = embedding.mapv(|x| {
-        let mut best_idx = 0;
-        let mut best_dist = (x - centroids[0]).abs();
+    let mse = original.iter()
+        .zip(dequantized.iter())
+        .map(|(&orig, &deq)| (orig - deq).powi(2))
+        .sum::<f64>() / original.len() as f64;
 
-        for (i, &centroid) in centroids.iter().enumerate().skip(1) {
-            let dist = (x - centroid).abs();
-            if dist < best_dist {
-                best_dist = dist;
-                best_idx = i;
-            }
-        }
+    let rmse = mse.sqrt();
+    let max_val = original.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    let min_val = original.iter().copied().fold(f64::INFINITY, f64::min);
+    let data_range = max_val - min_val;
+    let relative_rmse = rmse / data_range * 100.0;
 
-        f16::from_f64(best_idx as f64)
-    });
+    println!("📊 Quantization Quality Assessment:");
+    println!("   - MSE: {:.6}", mse);
+    println!("   - RMSE: {:.6}", rmse);
+    println!("   - Relative RMSE: {:.2}%", relative_rmse);
+    println!("   - Data range: [{:.6}, {:.6}]", min_val, max_val);
 
-    QuantizedEmbedding {
-        data: quantized,
-        params: QuantizationParams {
-            min_value: min_val,
-            max_value: max_val,
-            scale: 1.0,
-            zero_point: 0.0,
-            use_centroids: true,
-            centroids: Some(centroids),
-        },
+    // Quality thresholds
+    if relative_rmse < 0.1 {
+        println!("   ✅ Excellent quantization quality");
+    } else if relative_rmse < 0.5 {
+        println!("   ✅ Good quantization quality");
+    } else if relative_rmse < 1.0 {
+        println!("   ⚠️ Acceptable quantization quality");
+    } else {
+        println!("   ❌ Poor quantization quality - consider alternative approach");
     }
 }
 
 /// Dequantize embedding using stored parameters
 pub fn dequantize_embedding(quantized: &QuantizedEmbedding) -> Array2<f64> {
     if quantized.params.use_centroids {
-        // Centroid-based dequantization
-        if let Some(ref centroids) = quantized.params.centroids {
-            quantized.data.mapv(|x| {
-                let idx = x.to_f64() as usize;
+        // K-means centroid-based dequantization using u8 indices
+        if let (Some(ref centroids), Some(ref indices)) = (&quantized.params.centroids, &quantized.indices) {
+            indices.mapv(|idx| {
+                let idx = idx as usize;
                 if idx < centroids.len() {
                     centroids[idx]
                 } else {
-                    0.0
+                    panic!("Quantization error: centroid index {} out of bounds ({} centroids available). This indicates data corruption or invalid quantization parameters.",
+                           idx, centroids.len());
                 }
             })
         } else {
-            // Fallback to linear if centroids missing
+            // Fallback to linear if centroids or indices missing
             quantized.data.mapv(|x| x.to_f64())
         }
     } else {
-        // Simple f16 to f64 conversion (no scaling needed for new approach)
+        // Simple f16 to f64 conversion for linear quantization
         quantized.data.mapv(|x| x.to_f64())
     }
 }

@@ -1,6 +1,6 @@
 use ndarray::Array2;
 use pacmap::{Configuration, fit_transform, PairConfiguration};
-use crate::pairs::{compute_pairs_hnsw, get_knn_indices};
+use crate::pairs::{get_knn_indices};
 #[cfg(feature = "use_hnsw")]
 use hnsw_rs::{hnsw::Hnsw, dist::DistL2};
 use ndarray::Array1;
@@ -30,16 +30,18 @@ macro_rules! vprint {
 }
 use crate::quantize::{quantize_embedding};
 use half::f16;
-use crate::serialization::{PaCMAP, DistanceStats, PacMAPConfig};
+use crate::serialization::{PaCMAP, DistanceStats, PacMAPConfig, TransformStats, load_hnsw_from_serialized, custom_serialize_hnsw, serialize_hnsw_to_bytes, deserialize_hnsw_from_bytes};
+use crc32fast::Hasher;
 use crate::stats::{compute_distance_stats, NormalizationParams, NormalizationMode, recommend_normalization_mode};
 use crate::hnsw_params::HnswParams;
-use crate::recall_validation::validate_hnsw_quality_with_retry;
+// use crate::recall_validation::validate_hnsw_quality_with_retry;
 mod pairs;
 mod quantize;
 pub mod serialization;
 mod stats;
 mod hnsw_params;
 pub mod ffi;
+pub mod error;
 #[cfg(test)]
 mod test_normalization;
 #[cfg(test)]
@@ -52,6 +54,12 @@ mod recall_validation;
 
 /// Fit the data using HNSW-accelerated PaCMAP transformation
 pub fn fit_transform_hnsw(data: Array2<f64>, config: Configuration, force_exact_knn: bool, progress_callback: Option<&(dyn Fn(&str, usize, usize, f32, &str) + Send + Sync)>) -> Result<(Array2<f64>, Option<HnswParams>), Box<dyn std::error::Error>> {
+    // Call the extended version with auto-scale HNSW parameters
+    fit_transform_hnsw_with_params(data, config, force_exact_knn, progress_callback, None, true)
+}
+
+/// Fit the data using HNSW-accelerated PaCMAP transformation with custom HNSW parameters
+pub fn fit_transform_hnsw_with_params(data: Array2<f64>, config: Configuration, force_exact_knn: bool, progress_callback: Option<&(dyn Fn(&str, usize, usize, f32, &str) + Send + Sync)>, custom_hnsw_params: Option<HnswParams>, autodetect_hnsw_params: bool) -> Result<(Array2<f64>, Option<HnswParams>), Box<dyn std::error::Error>> {
     use std::time::Instant;
     let start_time = Instant::now();
     let n_neighbors = config.override_neighbors.unwrap_or(10);
@@ -85,36 +93,44 @@ pub fn fit_transform_hnsw(data: Array2<f64>, config: Configuration, force_exact_
         vprint!(" Using HNSW-accelerated neighbor search for {} samples", n_samples);
         report_progress("KNN Method", 25, 100, 25.0, "Using HNSW for fast approximate neighbor search");
 
-        // Compute HNSW parameters for validation and optimization
+        // Use custom HNSW parameters or auto-scale for validation and optimization
         let (_, n_features) = data.dim();
-        let mut hnsw_params = HnswParams::auto_scale(n_samples, n_features, n_neighbors);
+        let mut hnsw_params = if let Some(custom_params) = custom_hnsw_params {
+            vprint!("DEBUG: Using custom HNSW parameters: M={}, ef_construction={}, ef_search={}",
+                    custom_params.m, custom_params.ef_construction, custom_params.ef_search);
+            custom_params
+        } else {
+            vprint!("DEBUG: Auto-scaling HNSW parameters for {} samples, {} features", n_samples, n_features);
+            HnswParams::auto_scale(n_samples, n_features, n_neighbors)
+        };
 
-        // Validate HNSW recall quality with auto-retry and ef_search optimization
-        match validate_hnsw_quality_with_retry(data.view(), n_neighbors, seed, hnsw_params.ef_search, Some(&report_progress)) {
-            Ok((quality_msg, optimized_ef_search)) => {
-                // Update ef_search with optimized value from retry mechanism
-                if optimized_ef_search != hnsw_params.ef_search {
-                    vprint!("HNSW ef_search optimized: {} -> {} (auto-retry tuning)", hnsw_params.ef_search, optimized_ef_search);
-                    hnsw_params.ef_search = optimized_ef_search;
+        // Conditionally validate HNSW recall quality with auto-retry and ef_search optimization
+        if autodetect_hnsw_params {
+            vprint!("DEBUG: HNSW autodetection enabled - performing recall validation and parameter optimization");
+            match crate::recall_validation::validate_hnsw_quality_with_retry_and_params(data.view(), n_neighbors, seed, hnsw_params.ef_search, Some(&report_progress), Some(hnsw_params.clone())) {
+                Ok((quality_msg, optimized_ef_search)) => {
+                    // Update ef_search with optimized value from retry mechanism
+                    if optimized_ef_search != hnsw_params.ef_search {
+                        vprint!("HNSW ef_search optimized: {} -> {} (auto-retry tuning)", hnsw_params.ef_search, optimized_ef_search);
+                        hnsw_params.ef_search = optimized_ef_search;
+                    }
+                    vprint!("HNSW validation result: {}", quality_msg);
+                },
+                Err(error) => {
+                    return Err(format!("HNSW validation failed: {}", error).into());
                 }
-                vprint!("HNSW validation result: {}", quality_msg);
-            },
-            Err(error) => {
-                return Err(format!("HNSW validation failed: {}", error).into());
             }
+        } else {
+            vprint!("DEBUG: HNSW autodetection disabled - using provided parameters as-is");
+            report_progress("HNSW Skip", 35, 100, 35.0, "Skipping recall validation - using provided HNSW parameters");
         }
 
         // Store optimized parameters for model storage
         optimized_hnsw_params = Some(hnsw_params.clone());
 
-        // Compute neighbor pairs using HNSW with optimized parameters
-        vprint!("DEBUG: Starting HNSW neighbor computation with ef_search={}...", hnsw_params.ef_search);
-        let original_hnsw_pairs = compute_pairs_hnsw(data.view(), n_neighbors, seed);
-        vprint!("DEBUG: HNSW neighbor computation completed");
-
-        // FIXED: Use per-point symmetrization with proper distance handling
-        vprint!("DEBUG: Converting to per-point neighbors with distances...");
-        let hnsw_pairs = match crate::pairs::compute_pairs_hnsw_to_per_point(data.view(), n_neighbors, seed) {
+        // FIXED: Single HNSW neighbor computation with per-point symmetrization (eliminates redundancy)
+        vprint!("DEBUG: Starting optimized HNSW neighbor computation with ef_search={}...", hnsw_params.ef_search);
+        let hnsw_pairs = match crate::pairs::compute_pairs_hnsw_to_per_point_with_params(data.view(), n_neighbors, seed, Some(hnsw_params.clone())) {
             Ok(mut nn_per_point) => {
                 vprint!("DEBUG: Applying symmetric per-point merging...");
                 symmetrize_per_point(&mut nn_per_point, n_neighbors);
@@ -126,13 +142,13 @@ pub fn fit_transform_hnsw(data: Array2<f64>, config: Configuration, force_exact_
                         pairs.push((i, j));
                     }
                 }
-                vprint!("DEBUG: Per-point symmetrization completed: {} pairs", pairs.len());
+                vprint!("DEBUG: Single-pass HNSW computation completed: {} pairs", pairs.len());
                 pairs
             },
             Err(e) => {
-                vprint!("ERROR: Failed to compute per-point neighbors: {}, using original pairs without symmetrization", e);
-                // Fallback to original pairs without symmetrization
-                original_hnsw_pairs
+                vprint!("WARNING: Per-point HNSW failed ({}), falling back to basic pairs computation", e);
+                // Fallback: compute basic pairs without per-point distances (still only one HNSW call)
+                crate::pairs::compute_pairs_hnsw_with_params(data.view(), n_neighbors, seed, Some(hnsw_params.clone()))
             }
         };
 
@@ -195,9 +211,15 @@ pub fn fit_transform_hnsw(data: Array2<f64>, config: Configuration, force_exact_
     let data_f32 = data.mapv(|v| v as f32);
 
     // Perform PaCMAP dimensionality reduction with HNSW neighbors (if computed)
+    // Enhanced with epoch-level progress reporting
     vprint!("DEBUG: Calling external PacMAP fit_transform...");
+    report_progress("PacMAP Start", 40, 100, 40.0, "Starting PacMAP optimization");
+
+    // Run fit_transform (no epoch-level progress available from external pacmap crate)
     let (embedding_f32, _) = fit_transform(data_f32.view(), updated_config)?;
+
     vprint!("DEBUG: External PacMAP fit_transform completed");
+    report_progress("PacMAP Done", 75, 100, 75.0, "PacMAP optimization completed");
 
     // Convert embedding back to f64 for the public API
     let embedding_f64 = embedding_f32.mapv(|v| v as f64);
@@ -210,12 +232,31 @@ pub type ProgressCallback = Box<dyn Fn(&str, usize, usize, f32, &str) + Send + S
 /// Enhanced fit function with normalization, HNSW auto-scaling, and progress reporting with force_exact_knn control
 /// This version properly normalizes data and auto-scales HNSW parameters for optimal performance
 pub fn fit_transform_normalized_with_progress_and_force_knn(
-    mut data: Array2<f64>,
+    data: Array2<f64>,
     config: Configuration,
     normalization_mode: Option<NormalizationMode>,
     progress_callback: Option<ProgressCallback>,
     force_exact_knn: bool,
     use_quantization: bool
+) -> Result<(Array2<f64>, PaCMAP), Box<dyn std::error::Error>> {
+    // Call the extended version with auto-scale HNSW parameters
+    fit_transform_normalized_with_progress_and_force_knn_with_hnsw(
+        data, config, normalization_mode, progress_callback,
+        force_exact_knn, use_quantization, None, true // Enable autodetect by default
+    )
+}
+
+/// Enhanced fit function with normalization, HNSW configuration, and progress reporting
+/// This version accepts FFI HNSW parameters or falls back to auto-scaling
+pub fn fit_transform_normalized_with_progress_and_force_knn_with_hnsw(
+    mut data: Array2<f64>,
+    config: Configuration,
+    normalization_mode: Option<NormalizationMode>,
+    progress_callback: Option<ProgressCallback>,
+    force_exact_knn: bool,
+    use_quantization: bool,
+    ffi_hnsw_params: Option<HnswParams>,
+    autodetect_hnsw_params: bool
 ) -> Result<(Array2<f64>, PaCMAP), Box<dyn std::error::Error>> {
     let progress = |phase: &str, current: usize, total: usize, percent: f32, message: &str| {
         if let Some(ref callback) = progress_callback {
@@ -225,6 +266,12 @@ pub fn fit_transform_normalized_with_progress_and_force_knn(
 
     progress("Initializing", 0, 100, 0.0, "Preparing dataset for PacMAP fitting");
     let (n_samples, n_features) = data.dim();
+    let seed = config.seed.unwrap_or(42);
+
+    // Validate input data
+    progress("Validating", 1, 100, 1.0, "Validating input data");
+    crate::error::validate_data_shape(&data.view(), 2, 1)?;
+    crate::error::validate_neighbors(n_samples, config.override_neighbors.unwrap_or(10))?;
 
     // Determine normalization mode (auto-detect if not specified)
     progress("Analyzing", 5, 100, 5.0, "Analyzing data characteristics for normalization");
@@ -237,11 +284,18 @@ pub fn fit_transform_normalized_with_progress_and_force_knn(
         normalization.fit_transform(&mut data)?;
     }
 
-    // Auto-scale HNSW parameters based on dataset characteristics (only if not forcing exact KNN)
+    // Use FFI HNSW parameters or auto-scale based on dataset characteristics (only if not forcing exact KNN)
     let n_neighbors = config.override_neighbors.unwrap_or(10);
-    let mut hnsw_params = if !force_exact_knn {
-        progress("HNSW Config", 20, 100, 20.0, "Auto-scaling HNSW parameters for dataset");
-        HnswParams::auto_scale(n_samples, n_features, n_neighbors)
+    let hnsw_params = if !force_exact_knn {
+        if let Some(ffi_params) = ffi_hnsw_params {
+            progress("HNSW Config", 20, 100, 20.0, "Using FFI-provided HNSW parameters");
+            vprint!("DEBUG: Using FFI HNSW parameters: M={}, ef_construction={}, ef_search={}",
+                    ffi_params.m, ffi_params.ef_construction, ffi_params.ef_search);
+            ffi_params
+        } else {
+            progress("HNSW Config", 20, 100, 20.0, "Auto-scaling HNSW parameters for dataset");
+            HnswParams::auto_scale(n_samples, n_features, n_neighbors)
+        }
     } else {
         progress("Exact KNN", 20, 100, 20.0, "Skipping HNSW configuration - using exact KNN");
         HnswParams::default() // Not used, but needed for struct
@@ -266,26 +320,34 @@ pub fn fit_transform_normalized_with_progress_and_force_knn(
     // Perform fit using HNSW‑enhanced PaCMAP on normalized data
     progress("Embedding", 30, 100, 30.0, "Computing PacMAP embedding (this may take time for large datasets)");
     let callback_ref = progress_callback.as_ref().map(|cb| cb.as_ref());
-    let (embedding, optimized_hnsw_params) = fit_transform_hnsw(data.clone(), config.clone(), force_exact_knn, callback_ref)?;
+    let (embedding, optimized_hnsw_params) = fit_transform_hnsw_with_params(data.clone(), config.clone(), force_exact_knn, callback_ref, Some(hnsw_params.clone()), autodetect_hnsw_params)?;
     progress("Embedding Done", 80, 100, 80.0, "PacMAP embedding computation completed");
 
     // Compute statistics over the embedding for outlier detection
     progress("Finalizing", 90, 100, 90.0, "Computing embedding statistics and building model");
-    let (mean, p95, max) = compute_distance_stats(&embedding);
+    let (mean, p95, max) = compute_distance_stats(&embedding, seed);
+
+    // Compute the centroid of the embedding for "No Man's Land" detection
+    let embedding_centroid = if embedding.len() > 0 {
+        Some(embedding.mean_axis(ndarray::Axis(0)).unwrap())
+    } else {
+        None
+    };
 
     // Create serializable config with optimized HNSW parameters (if available)
     let final_hnsw_params = optimized_hnsw_params.unwrap_or(hnsw_params);
+    let total_epochs = config.num_iters.0 + config.num_iters.1 + config.num_iters.2;
     let pacmap_config = PacMAPConfig {
         n_neighbors,
         embedding_dim: config.embedding_dimensions,
-        n_epochs: 450, // Default for now - could be extracted from config
-        learning_rate: 1.0,
-        min_dist: 0.1,
-        mid_near_ratio: 0.5,
-        far_pair_ratio: 0.5,
+        n_epochs: total_epochs,
+        learning_rate: config.learning_rate as f64,
+        mid_near_ratio: config.mid_near_ratio as f64,
+        far_pair_ratio: config.far_pair_ratio as f64,
         seed: config.seed,
         hnsw_params: final_hnsw_params,
         used_hnsw: !force_exact_knn, // Track whether HNSW was used
+        force_knn: force_exact_knn, // Track whether KNN was forced
     };
 
     // Build complete model struct with normalization parameters
@@ -302,13 +364,158 @@ pub fn fit_transform_normalized_with_progress_and_force_knn(
         quantized_embedding: None,
         original_data: None,
         fitted_projections: None,
+        embedding_centroid, // Store centroid for "No Man's Land" detection
+        #[cfg(feature = "use_hnsw")]
+        hnsw_index: None, // Will be populated during index building
+        #[cfg(feature = "use_hnsw")]
+        embedding_hnsw_index: None, // Will be populated during index building
+        serialized_hnsw_index: None, // Will be populated for massive datasets
+        serialized_embedding_hnsw_index: None, // Will be populated for massive datasets
+        hnsw_index_crc32: None, // Will be populated when HNSW indexes are serialized
+        embedding_hnsw_index_crc32: None, // Will be populated when HNSW indexes are serialized
     };
 
     // Store transform data: original input and fitted projections
     // This enables proper 2-stage neighbor search for new points
     model.store_transform_data(&data, &embedding);
 
-    progress("Complete", 100, 100, 100.0, "PacMAP fitting completed successfully");
+    // Build and store HNSW indices for fast transform operations
+    if !force_exact_knn && n_samples >= 1000 {
+        #[cfg(feature = "use_hnsw")]
+        {
+            vprint!("🏗️ Building HNSW indices for fast transform operations...");
+            progress("Building Indices", 95, 100, 95.0, "Building HNSW indices for fast transforms");
+
+            const MASSIVE_DATASET_THRESHOLD: usize = 500_000; // 500k points
+
+            // Build original data HNSW index
+            let original_data = model.get_original_data().unwrap();
+            let (n_orig_samples, _) = original_data.dim();
+            let hnsw_params = &model.config.hnsw_params;
+
+            if n_orig_samples > MASSIVE_DATASET_THRESHOLD {
+                // For massive datasets, serialize the index for fast loading
+                vprint!("📦 Massive dataset detected: serializing HNSW indices for fast loading");
+                let max_layer = ((n_orig_samples as f32).ln() / (hnsw_params.m as f32).ln()).ceil() as usize + 1;
+                let max_layer = max_layer.min(32).max(4);
+
+                let original_index = custom_serialize_hnsw(&original_data, hnsw_params, max_layer)?;
+                let embedding_index = custom_serialize_hnsw(&embedding, hnsw_params, max_layer)?;
+
+                let original_bytes = serialize_hnsw_to_bytes(&original_index)?;
+                let embedding_bytes = serialize_hnsw_to_bytes(&embedding_index)?;
+
+                // Calculate CRC32 checksums
+                let mut hasher = Hasher::new();
+                hasher.update(&original_bytes);
+                let original_crc = hasher.finalize();
+
+                let mut hasher = Hasher::new();
+                hasher.update(&embedding_bytes);
+                let embedding_crc = hasher.finalize();
+
+                model.serialized_hnsw_index = Some(original_bytes);
+                model.serialized_embedding_hnsw_index = Some(embedding_bytes);
+                model.hnsw_index_crc32 = Some(original_crc);
+                model.embedding_hnsw_index_crc32 = Some(embedding_crc);
+
+                // For massive datasets, don't store the raw quantized data to save space
+                model.original_data = None;
+                vprint!("✅ HNSW indices serialized for massive dataset ({} points) with CRC checksums", n_orig_samples);
+            } else {
+                // For normal datasets, build indices in memory AND serialize them for persistence
+                vprint!("🔧 Building HNSW indices in memory for normal dataset");
+
+                // Build original data index
+                use hnsw_rs::hnsw::Hnsw;
+                use hnsw_rs::dist::DistL2;
+
+                let points: Vec<Vec<f32>> = (0..n_orig_samples)
+                    .map(|i| original_data.row(i).iter().map(|&x| x as f32).collect())
+                    .collect();
+
+                let max_layer = ((n_orig_samples as f32).ln() / (hnsw_params.m as f32).ln()).ceil() as usize + 1;
+                let max_layer = max_layer.min(32).max(4);
+
+                let hnsw = Hnsw::<f32, DistL2>::new(
+                    hnsw_params.m,
+                    n_orig_samples,
+                    max_layer,
+                    hnsw_params.ef_construction,
+                    DistL2{}
+                );
+
+                let data_with_id: Vec<(&[f32], usize)> = points.iter().enumerate().map(|(i, p)| (p.as_slice(), i)).collect();
+
+                #[cfg(feature = "parallel")]
+                {
+                    hnsw.parallel_insert(&data_with_id);
+                }
+                #[cfg(not(feature = "parallel"))]
+                {
+                    for (point, i) in data_with_id {
+                        hnsw.insert((&point.to_vec(), i));
+                    }
+                }
+
+                model.hnsw_index = Some(hnsw);
+
+                // Build embedding index
+                let embedding_points: Vec<Vec<f32>> = (0..n_samples)
+                    .map(|i| embedding.row(i).iter().map(|&x| x as f32).collect())
+                    .collect();
+
+                let embedding_hnsw = Hnsw::<f32, DistL2>::new(
+                    hnsw_params.m,
+                    n_samples,
+                    max_layer,
+                    hnsw_params.ef_construction,
+                    DistL2{}
+                );
+
+                let embedding_data_with_id: Vec<(&[f32], usize)> = embedding_points.iter().enumerate().map(|(i, p)| (p.as_slice(), i)).collect();
+
+                #[cfg(feature = "parallel")]
+                {
+                    embedding_hnsw.parallel_insert(&embedding_data_with_id);
+                }
+                #[cfg(not(feature = "parallel"))]
+                {
+                    for (point, i) in embedding_data_with_id {
+                        embedding_hnsw.insert((&point.to_vec(), i));
+                    }
+                }
+
+                model.embedding_hnsw_index = Some(embedding_hnsw);
+
+                // CRITICAL FIX: Also serialize normal datasets for persistence across saves/loads
+                vprint!("💾 Serializing HNSW indices for persistence (normal dataset)");
+                let original_index = custom_serialize_hnsw(&original_data, hnsw_params, max_layer)?;
+                let embedding_index = custom_serialize_hnsw(&embedding, hnsw_params, max_layer)?;
+
+                let original_bytes = serialize_hnsw_to_bytes(&original_index)?;
+                let embedding_bytes = serialize_hnsw_to_bytes(&embedding_index)?;
+
+                // Calculate CRC32 checksums
+                let mut hasher = Hasher::new();
+                hasher.update(&original_bytes);
+                let original_crc = hasher.finalize();
+
+                let mut hasher = Hasher::new();
+                hasher.update(&embedding_bytes);
+                let embedding_crc = hasher.finalize();
+
+                model.serialized_hnsw_index = Some(original_bytes);
+                model.serialized_embedding_hnsw_index = Some(embedding_bytes);
+                model.hnsw_index_crc32 = Some(original_crc);
+                model.embedding_hnsw_index_crc32 = Some(embedding_crc);
+
+                vprint!("✅ HNSW indices built in memory AND serialized for persistence ({} points) with CRC checksums", n_orig_samples);
+            }
+        }
+    }
+
+    progress("Complete", 100, 100, 100.0, "PacMAP fitting completed successfully with HNSW indices");
 
     // Display final model settings
     model.print_model_settings("Fitted Model");
@@ -350,7 +557,129 @@ pub fn fit_transform_quantized(data: Array2<f64>, config: Configuration) -> Resu
 
 /// Transform new data using a fitted model with consistent normalization
 /// This is critical - must use the same normalization as training data
-pub fn transform_with_model(model: &PaCMAP, mut new_data: Array2<f64>) -> Result<Array2<f64>, Box<dyn std::error::Error>> {
+/// Optimize transform positions using gradient descent with PacMAP forces
+/// This implements the missing optimization loop for proper transform quality
+fn optimize_transform_positions(
+    initial_positions: &mut Array2<f64>,
+    new_data: &Array2<f64>,
+    original_data: &Array2<f64>,
+    fitted_projections: &Array2<f64>,
+    config: &PacMAPConfig,
+    initial_neighbors: &[Vec<usize>]
+) -> Result<Array2<f64>, Box<dyn std::error::Error>> {
+    let (n_new_points, embedding_dim) = initial_positions.dim();
+    let n_fitted_points = fitted_projections.shape()[0];
+
+    // Optimization parameters (reduced from full training for efficiency)
+    let n_optimization_epochs = 50; // Much less than full training (450)
+    let initial_learning_rate = 0.1;  // Smaller learning rate for fine-tuning
+    let min_learning_rate = 0.01;
+
+    vprint!("DEBUG: Starting transform optimization: {} epochs, {} new points, {} fitted points",
+           n_optimization_epochs, n_new_points, n_fitted_points);
+
+    // Create a combined embedding with both fitted points and new points
+    let total_points = n_fitted_points + n_new_points;
+    let mut combined_embedding = Array2::<f64>::zeros((total_points, embedding_dim));
+
+    // Copy fitted projections (these are fixed during optimization)
+    for i in 0..n_fitted_points {
+        for j in 0..embedding_dim {
+            combined_embedding[[i, j]] = fitted_projections[[i, j]];
+        }
+    }
+
+    // Copy initial new point positions (these will be optimized)
+    for i in 0..n_new_points {
+        for j in 0..embedding_dim {
+            combined_embedding[[n_fitted_points + i, j]] = initial_positions[[i, j]];
+        }
+    }
+
+    // Optimization loop using gradient descent with attractive/repulsive forces
+    for epoch in 0..n_optimization_epochs {
+        // Decay learning rate over time
+        let progress = epoch as f64 / n_optimization_epochs as f64;
+        let learning_rate = initial_learning_rate * (1.0 - progress) + min_learning_rate * progress;
+
+        // Compute forces for each new point
+        for i in 0..n_new_points {
+            let point_idx = n_fitted_points + i;
+            let mut force = Array1::<f64>::zeros(embedding_dim);
+
+            // Attractive forces to neighbors in original space
+            for &neighbor_idx in initial_neighbors[i].iter().take(config.n_neighbors) {
+                if neighbor_idx < n_fitted_points {
+                    // Compute original space distance
+                    let orig_dist = euclidean_distance(new_data.row(i), original_data.row(neighbor_idx));
+
+                    // Compute embedding space distance
+                    let mut emb_dist_sq = 0.0;
+                    for d in 0..embedding_dim {
+                        let diff = combined_embedding[[point_idx, d]] - combined_embedding[[neighbor_idx, d]];
+                        emb_dist_sq += diff * diff;
+                    }
+                    let emb_dist = emb_dist_sq.sqrt().max(1e-8);
+
+                    // Attractive force proportional to original distance mismatch
+                    let target_dist = orig_dist * 0.1; // Scale down for 2D space
+                    let force_magnitude = (target_dist - emb_dist) / emb_dist;
+
+                    for d in 0..embedding_dim {
+                        let direction = (combined_embedding[[neighbor_idx, d]] - combined_embedding[[point_idx, d]]) / emb_dist;
+                        force[d] += force_magnitude * direction * 2.0; // Attractive force
+                    }
+                }
+            }
+
+            // Repulsive forces from randomly sampled points (prevent crowding)
+            let n_repulsive_samples = 5; // Small number for efficiency
+            for _ in 0..n_repulsive_samples {
+                let random_idx = (epoch * n_new_points + i * 7) % n_fitted_points; // Deterministic "random"
+
+                let mut emb_dist_sq = 0.0;
+                for d in 0..embedding_dim {
+                    let diff = combined_embedding[[point_idx, d]] - combined_embedding[[random_idx, d]];
+                    emb_dist_sq += diff * diff;
+                }
+                let emb_dist = emb_dist_sq.sqrt().max(1e-8);
+
+                // Repulsive force inversely proportional to distance
+                let force_magnitude = 0.1 / (emb_dist * emb_dist + 1e-8);
+
+                for d in 0..embedding_dim {
+                    let direction = (combined_embedding[[point_idx, d]] - combined_embedding[[random_idx, d]]) / emb_dist;
+                    force[d] += force_magnitude * direction; // Repulsive force
+                }
+            }
+
+            // Apply force with learning rate (update new point position)
+            for d in 0..embedding_dim {
+                combined_embedding[[point_idx, d]] += learning_rate * force[d];
+            }
+        }
+
+        // Progress reporting every 10 epochs
+        if epoch % 10 == 0 {
+            vprint!("DEBUG: Transform optimization epoch {}/{}, learning_rate: {:.4}", epoch, n_optimization_epochs, learning_rate);
+        }
+    }
+
+    // Extract optimized positions for new points
+    let mut optimized_positions = Array2::<f64>::zeros((n_new_points, embedding_dim));
+    for i in 0..n_new_points {
+        for j in 0..embedding_dim {
+            optimized_positions[[i, j]] = combined_embedding[[n_fitted_points + i, j]];
+        }
+    }
+
+    vprint!("✅ Transform optimization completed: {} epochs, refined {} new point positions",
+           n_optimization_epochs, n_new_points);
+
+    Ok(optimized_positions)
+}
+
+pub fn transform_with_model(model: &mut PaCMAP, mut new_data: Array2<f64>) -> Result<Array2<f64>, Box<dyn std::error::Error>> {
     let (n_samples, n_features) = new_data.dim();
 
     // Validate feature dimensions match training data
@@ -368,12 +697,50 @@ pub fn transform_with_model(model: &PaCMAP, mut new_data: Array2<f64>) -> Result
 
     // Check if we have transform data available
     let original_data = model.get_original_data().ok_or("No original training data stored for transforms")?;
+    // STAGE 1: Find initial neighbors in original high-dimensional space using stored HNSW index
+    let k_initial = (model.config.n_neighbors * 3).max(50); // More candidates for better coverage
+
+    // Ensure HNSW index is available BEFORE borrowing other data
+    // Check both training flag and available serialized data for loaded models
+    let needs_hnsw = model.config.used_hnsw || model.serialized_hnsw_index.is_some();
+    if needs_hnsw {
+        #[cfg(feature = "use_hnsw")]
+        {
+            model.ensure_hnsw_index()?;
+        }
+        #[cfg(not(feature = "use_hnsw"))]
+        {
+            return Err("HNSW index required but HNSW feature not enabled".into());
+        }
+    }
+
     let fitted_projections = model.fitted_projections.as_ref().ok_or("No fitted projections stored for transforms")?;
 
-    // STAGE 1: Find initial neighbors in original high-dimensional space
-    // Use the same method (HNSW/exact KNN) as during fitting
-    let k_initial = (model.config.n_neighbors * 3).max(50); // More candidates for better coverage
-    let initial_neighbors = find_neighbors_in_original_space(&new_data, &original_data, k_initial, model)?;
+    let initial_neighbors: Vec<Vec<usize>> = if needs_hnsw {
+        #[cfg(feature = "use_hnsw")]
+        {
+
+            if let Some(ref hnsw_index) = model.hnsw_index {
+                // FAST PATH: Use stored HNSW index for original space neighbor search
+                vprint!("🚀 Using stored original data HNSW index for fast neighbor search");
+
+                (0..n_samples).map(|i| {
+                    let query: Vec<f32> = new_data.row(i).iter().map(|&x| x as f32).collect();
+                    let neighbors = hnsw_index.search(&query, k_initial, model.config.hnsw_params.ef_search);
+                    neighbors.into_iter().map(|n| n.d_id).collect::<Vec<usize>>()
+                }).collect()
+            } else {
+                return Err("HNSW index required but not available after ensure_hnsw_index()".into());
+            }
+        }
+        #[cfg(not(feature = "use_hnsw"))]
+        {
+            return Err("HNSW index required but HNSW feature not enabled".into());
+        }
+    } else {
+        // Graceful error for models not trained with HNSW
+        return Err("Model was not trained with HNSW indices and no serialized HNSW data available. Cannot perform fast transforms. Please retrain the model with HNSW enabled.".into());
+    };
 
     // STAGE 2: Project new points to 2D space using initial 3D neighbors
     let embedding_dim = fitted_projections.shape()[1];
@@ -406,15 +773,28 @@ pub fn transform_with_model(model: &PaCMAP, mut new_data: Array2<f64>) -> Result
         }
     }
 
-    // STAGE 3: Find final neighbors in the 2D embedding space
+    // STAGE 3: Optimization loop to refine the initial projections
+    // This was missing in the previous implementation!
+    vprint!("🔍 Transform STAGE 3: Optimizing projected positions with gradient descent");
+
+    let optimized_transformed = optimize_transform_positions(
+        &mut transformed,
+        &new_data,
+        &original_data,
+        fitted_projections,
+        &model.config,
+        &initial_neighbors
+    )?;
+
+    // STAGE 4: Find final neighbors in the 2D embedding space
     // This is what the user actually wants - neighbors in the compressed space!
-    vprint!("🔍 Transform STAGE 3: Finding neighbors in 2D embedding space");
+    vprint!("🔍 Transform STAGE 4: Finding neighbors in 2D embedding space");
 
-    let _final_neighbors = find_neighbors_in_embedding_space(&transformed, fitted_projections, model.config.n_neighbors, model)?;
+    let _final_neighbors = find_neighbors_in_embedding_space(&optimized_transformed, fitted_projections, model.config.n_neighbors, model)?;
 
-    vprint!("✅ Transform completed: 2D projection with neighbors in embedding space");
+    vprint!("✅ Transform completed: 2D projection with optimization and neighbors in embedding space");
 
-    Ok(transformed)
+    Ok(optimized_transformed)
 }
 
 /// Enhanced transform function that returns both coordinates AND neighbors in 2D space
@@ -471,12 +851,24 @@ pub fn transform_with_neighbors(model: &PaCMAP, new_data: Array2<f64>) -> Result
         }
     }
 
-    // STAGE 3: Find final neighbors in the 2D embedding space
-    let final_neighbors = find_neighbors_in_embedding_space(&transformed, fitted_projections, model.config.n_neighbors, model)?;
+    // STAGE 3: Optimization loop to refine the initial projections
+    vprint!("🔍 Transform STAGE 3: Optimizing projected positions with gradient descent");
 
-    vprint!("✅ Transform with neighbors completed: {} points projected with 2D neighbors", n_samples);
+    let optimized_transformed = optimize_transform_positions(
+        &mut transformed,
+        &normalized_data,
+        &original_data,
+        fitted_projections,
+        &model.config,
+        &_initial_neighbors
+    )?;
 
-    Ok((transformed, final_neighbors))
+    // STAGE 4: Find final neighbors in the 2D embedding space
+    let final_neighbors = find_neighbors_in_embedding_space(&optimized_transformed, fitted_projections, model.config.n_neighbors, model)?;
+
+    vprint!("✅ Transform with neighbors completed: {} points projected with optimization and 2D neighbors", n_samples);
+
+    Ok((optimized_transformed, final_neighbors))
 }
 
 #[no_mangle]
@@ -599,7 +991,7 @@ pub extern "C" fn pacmap_distance_stats(
 ) {
     let emb_vec = unsafe { std::slice::from_raw_parts(embedding, rows * cols) }.to_vec();
     let emb_arr = Array2::from_shape_vec((rows, cols), emb_vec).expect("Invalid shape");
-    let (m, p, mx) = compute_distance_stats(&emb_arr);
+    let (m, p, mx) = compute_distance_stats(&emb_arr, 42); // Use default seed for FFI consistency
     unsafe {
         *mean = m;
         *p95 = p;
@@ -629,6 +1021,9 @@ pub extern "C" fn pacmap_get_model_stats(
 fn symmetrize_per_point(nn_per_point: &mut Vec<Vec<(usize, f64)>>, n_neighbors: usize) {
     let n_samples = nn_per_point.len();
 
+    // Store original neighbors before symmetrization (for isolated point fallback)
+    let original_neighbors = nn_per_point.clone();
+
     // Collect all bidirectional connections with minimum distance
     let mut bidirectional: std::collections::HashMap<(usize, usize), f64> = std::collections::HashMap::new();
 
@@ -641,7 +1036,7 @@ fn symmetrize_per_point(nn_per_point: &mut Vec<Vec<(usize, f64)>>, n_neighbors: 
         }
     }
 
-    // Rebuild neighbor lists ensuring symmetry and fixed size
+    // Rebuild neighbor lists ensuring symmetry and minimum neighbor count for isolated points
     for i in 0..n_samples {
         let mut all_candidates: Vec<(usize, f64)> = Vec::new();
 
@@ -655,8 +1050,32 @@ fn symmetrize_per_point(nn_per_point: &mut Vec<Vec<(usize, f64)>>, n_neighbors: 
             }
         }
 
-        // Sort by distance and take exactly n_neighbors
-        all_candidates.sort_by(|x, y| x.1.partial_cmp(&y.1).unwrap());
+        // Sort by distance and take exactly n_neighbors (or all available if less)
+        all_candidates.sort_by(|x, y| x.1.partial_cmp(&y.1).unwrap_or(std::cmp::Ordering::Equal));
+
+        // FIXED: Handle isolated points by maintaining minimum neighbor count
+        if all_candidates.len() < n_neighbors {
+            // Point is isolated - add closest asymmetric neighbors to reach n_neighbors
+            vprint!("WARNING: Point {} has only {} symmetric neighbors, adding {} asymmetric neighbors",
+                   i, all_candidates.len(), n_neighbors - all_candidates.len());
+
+            // Get original neighbors for this point (before symmetrization)
+            let point_original_neighbors = &original_neighbors[i];
+            let mut asymmetric_candidates: Vec<(usize, f64)> = Vec::new();
+
+            // Find neighbors that aren't already in symmetric list
+            let symmetric_indices: std::collections::HashSet<usize> = all_candidates.iter().map(|(idx, _)| *idx).collect();
+            for &(j, dist) in point_original_neighbors {
+                if !symmetric_indices.contains(&j) {
+                    asymmetric_candidates.push((j, dist));
+                }
+            }
+
+            // Sort and add the closest asymmetric neighbors
+            asymmetric_candidates.sort_by(|x, y| x.1.partial_cmp(&y.1).unwrap_or(std::cmp::Ordering::Equal));
+            all_candidates.extend(asymmetric_candidates.into_iter().take(n_neighbors - all_candidates.len()));
+        }
+
         nn_per_point[i] = all_candidates.into_iter().take(n_neighbors).collect();
     }
 
@@ -668,7 +1087,7 @@ fn symmetrize_per_point(nn_per_point: &mut Vec<Vec<(usize, f64)>>, n_neighbors: 
 }
 
 /// Find neighbors for new points in the original high-dimensional space
-/// Uses the same method and parameters as during fitting
+/// Uses direct KNN only for <1k samples or when forced, otherwise uses HNSW with NO fallback
 /// Returns Vec<Vec<usize>> where each inner Vec contains neighbor indices
 fn find_neighbors_in_original_space(
     new_data: &Array2<f64>,
@@ -681,75 +1100,108 @@ fn find_neighbors_in_original_space(
 
     let mut all_neighbors = Vec::with_capacity(n_new);
 
-    // Use the same neighbor search method that was used during fitting
-    if model.config.used_hnsw {
-        #[cfg(feature = "use_hnsw")]
-        {
-            vprint!("🔍 Transform: Using HNSW for neighbor search in original space ({} points)", n_orig);
+    // CRITICAL: Use direct KNN only for <1k samples OR when forced, otherwise HNSW with NO fallback
+    let should_use_direct_knn = n_orig < 1000 || model.config.force_knn;
 
-            // Use the exact same HNSW parameters as during fitting
-            let hnsw_params = &model.config.hnsw_params;
-            let max_layer = ((n_orig as f32).log2() * 0.8) as usize;
-            let max_layer = max_layer.min(32).max(4);
+    if should_use_direct_knn {
+        vprint!("🔍 Transform: Using direct KNN for neighbor search ({} points < 1k or forced)", n_orig);
 
-            let mut hnsw = Hnsw::<f32, DistL2>::new(
-                hnsw_params.m,
-                n_orig,
-                max_layer,
-                hnsw_params.ef_construction,
-                DistL2{}
-            );
+        for i in 0..n_new {
+            let mut distances: Vec<(usize, f64)> = Vec::with_capacity(n_orig);
 
-            // Insert original data points (convert to f32)
-            for (i, row) in original_data.axis_iter(ndarray::Axis(0)).enumerate() {
-                let point: Vec<f32> = row.iter().map(|&x| x as f32).collect();
-                hnsw.insert((&point, i));
+            // Calculate distances to all original points
+            for j in 0..n_orig {
+                let dist = euclidean_distance(new_data.row(i), original_data.row(j));
+                distances.push((j, dist));
             }
+
+            // Sort by distance and take top k
+            distances.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+            let neighbors: Vec<usize> = distances.into_iter()
+                .take(k.min(n_orig))
+                .map(|(idx, _)| idx)
+                .collect();
+
+            all_neighbors.push(neighbors);
+        }
+
+        return Ok(all_neighbors);
+    }
+
+    // For >=1k samples and not forced: MUST use HNSW - NO fallback allowed
+    #[cfg(feature = "use_hnsw")]
+    {
+        // Try to use stored serialized index first (preferred for performance)
+        if let Some(ref serialized_index) = model.serialized_hnsw_index {
+            vprint!("🔍 Transform: Using stored HNSW index for neighbor search in original space ({} points)", n_orig);
+
+            // Validate CRC32 checksum if available
+            if let Some(expected_crc) = model.hnsw_index_crc32 {
+                let mut hasher = Hasher::new();
+                hasher.update(serialized_index);
+                let actual_crc = hasher.finalize();
+                if actual_crc != expected_crc {
+                    return Err(format!("CRC checksum mismatch for original HNSW index: expected {}, got {}", expected_crc, actual_crc).into());
+                }
+                vprint!("✅ Original HNSW index CRC validation passed");
+            }
+
+            let deserialized = deserialize_hnsw_from_bytes(serialized_index)?;
+            let hnsw = load_hnsw_from_serialized(&deserialized)?;
 
             // Search for neighbors of each new point
             for i in 0..n_new {
                 let query: Vec<f32> = new_data.row(i).iter().map(|&x| x as f32).collect();
-                let neighbors = hnsw.search(&query, k, hnsw_params.ef_search);
+                let neighbors = hnsw.search(&query, k, model.config.hnsw_params.ef_search);
                 let neighbor_indices: Vec<usize> = neighbors.into_iter().map(|n| n.d_id).collect();
                 all_neighbors.push(neighbor_indices);
             }
 
-            vprint!("✅ Transform: HNSW neighbor search completed");
+            vprint!("✅ Transform: Stored HNSW neighbor search completed");
             return Ok(all_neighbors);
         }
-        #[cfg(not(feature = "use_hnsw"))]
-        {
-            return Err("Transform failed: Model was trained with HNSW but HNSW feature is not enabled".into());
+
+        // If no stored index, rebuild HNSW (should not happen in production)
+        vprint!("⚠️ Transform: No stored HNSW index, rebuilding for neighbor search in original space ({} points)", n_orig);
+
+        let hnsw_params = &model.config.hnsw_params;
+        let max_layer = ((n_orig as f32).log2() * 0.8) as usize;
+        let max_layer = max_layer.min(32).max(4);
+
+        let hnsw = Hnsw::<f32, DistL2>::new(
+            hnsw_params.m,
+            n_orig,
+            max_layer,
+            hnsw_params.ef_construction,
+            DistL2{}
+        );
+
+        // Insert original data points (convert to f32)
+        for (i, row) in original_data.axis_iter(ndarray::Axis(0)).enumerate() {
+            let point: Vec<f32> = row.iter().map(|&x| x as f32).collect();
+            hnsw.insert((&point, i));
         }
+
+        // Search for neighbors of each new point
+        for i in 0..n_new {
+            let query: Vec<f32> = new_data.row(i).iter().map(|&x| x as f32).collect();
+            let neighbors = hnsw.search(&query, k, hnsw_params.ef_search);
+            let neighbor_indices: Vec<usize> = neighbors.into_iter().map(|n| n.d_id).collect();
+            all_neighbors.push(neighbor_indices);
+        }
+
+        vprint!("✅ Transform: Rebuilt HNSW neighbor search completed");
+        return Ok(all_neighbors);
     }
 
-    // Fallback to exact KNN search
-    vprint!("🔍 Transform: Using exact KNN for neighbor search ({} points)", n_orig);
-
-    for i in 0..n_new {
-        let mut distances: Vec<(usize, f64)> = Vec::with_capacity(n_orig);
-
-        // Calculate distances to all original points
-        for j in 0..n_orig {
-            let dist = euclidean_distance(new_data.row(i), original_data.row(j));
-            distances.push((j, dist));
-        }
-
-        // Sort by distance and take top k
-        distances.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
-        let neighbors: Vec<usize> = distances.into_iter()
-            .take(k.min(n_orig))
-            .map(|(idx, _)| idx)
-            .collect();
-
-        all_neighbors.push(neighbors);
+    #[cfg(not(feature = "use_hnsw"))]
+    {
+        return Err("Transform failed: Dataset has >=1k samples and requires HNSW, but HNSW feature is not enabled. Use direct KNN for smaller datasets.".into());
     }
-
-    Ok(all_neighbors)
 }
 
 /// Find neighbors for new points in the 2D embedding space using HNSW
-/// Always uses HNSW for consistency with the training process
+/// Uses stored embedding index when available, otherwise rebuilds HNSW
 fn find_neighbors_in_embedding_space(
     new_projections: &Array2<f64>,
     fitted_projections: &Array2<f64>,
@@ -768,12 +1220,44 @@ fn find_neighbors_in_embedding_space(
     // ALWAYS use HNSW in 2D embedding space for consistency
     #[cfg(feature = "use_hnsw")]
     {
-        // Use the same HNSW parameters as the original model
+        // Try to use stored embedding index first (preferred for performance)
+        if let Some(ref serialized_embedding_index) = model.serialized_embedding_hnsw_index {
+            vprint!("🔍 Transform: Using stored embedding HNSW index for neighbor search in 2D space ({} points)", n_fitted);
+
+            // Validate CRC32 checksum if available
+            if let Some(expected_crc) = model.embedding_hnsw_index_crc32 {
+                let mut hasher = Hasher::new();
+                hasher.update(serialized_embedding_index);
+                let actual_crc = hasher.finalize();
+                if actual_crc != expected_crc {
+                    return Err(format!("CRC checksum mismatch for embedding HNSW index: expected {}, got {}", expected_crc, actual_crc).into());
+                }
+                vprint!("✅ Embedding HNSW index CRC validation passed");
+            }
+
+            let deserialized = deserialize_hnsw_from_bytes(serialized_embedding_index)?;
+            let hnsw = load_hnsw_from_serialized(&deserialized)?;
+
+            // Search for neighbors of each new projection
+            for i in 0..n_new {
+                let query: Vec<f32> = new_projections.row(i).iter().map(|&x| x as f32).collect();
+                let neighbors = hnsw.search(&query, k, model.config.hnsw_params.ef_search);
+                let neighbor_indices: Vec<usize> = neighbors.into_iter().map(|n| n.d_id).collect();
+                all_neighbors.push(neighbor_indices);
+            }
+
+            vprint!("✅ Transform: Stored embedding HNSW neighbor search completed");
+            return Ok(all_neighbors);
+        }
+
+        // If no stored embedding index, rebuild HNSW (should not happen in production)
+        vprint!("⚠️ Transform: No stored embedding HNSW index, rebuilding for neighbor search in 2D space ({} points)", n_fitted);
+
         let hnsw_params = &model.config.hnsw_params;
         let max_layer = ((n_fitted as f32).log2() * 0.8) as usize;
         let max_layer = max_layer.min(32).max(4);
 
-        let mut hnsw = Hnsw::<f32, DistL2>::new(
+        let hnsw = Hnsw::<f32, DistL2>::new(
             hnsw_params.m,
             n_fitted,
             max_layer,
@@ -795,7 +1279,7 @@ fn find_neighbors_in_embedding_space(
             all_neighbors.push(neighbor_indices);
         }
 
-        vprint!("✅ Found {} neighbors using HNSW in 2D space - indices point to original fitted data", k);
+        vprint!("✅ Rebuilt embedding HNSW neighbor search completed");
         return Ok(all_neighbors);
     }
 
@@ -813,6 +1297,108 @@ fn euclidean_distance(a: ndarray::ArrayView1<f64>, b: ndarray::ArrayView1<f64>) 
         .sum::<f64>()
         .sqrt()
 }
+
+/// Transforms new data and returns detailed statistics for each point.
+/// This is the primary function for AI applications to detect out-of-distribution data.
+/// Implements "No Man's Land" detection for identifying outliers, adversarial inputs, or data drift.
+pub fn transform_with_stats(model: &mut PaCMAP, new_data: Array2<f64>) -> Result<Vec<TransformStats>, Box<dyn std::error::Error>> {
+    let (n_samples, _n_features) = new_data.dim();
+
+    // Step 1: Get the optimized coordinates using the existing, correct transform function
+    vprint!("🔍 Computing optimized transform for {} new points", n_samples);
+    let optimized_embedding = transform_with_model(model, new_data)?;
+
+    // Step 2: Use stored HNSW indices for fast outlier statistics computation
+    vprint!("📊 Calculating No Man's Land statistics using stored HNSW indices");
+
+    // Ensure the embedding HNSW index is available BEFORE borrowing other data
+    if model.config.used_hnsw {
+        #[cfg(feature = "use_hnsw")]
+        {
+            model.ensure_embedding_hnsw_index()?;
+        }
+    }
+
+    // Now get the immutable references
+    let centroid = model.embedding_centroid.as_ref().ok_or("Model does not have an embedding centroid. Was it fitted correctly?")?;
+    let _fitted_projections = model.fitted_projections.as_ref().ok_or("No fitted projections stored for transforms")?;
+
+    let stats_results: Vec<TransformStats> = if model.config.used_hnsw {
+        #[cfg(feature = "use_hnsw")]
+        {
+
+            if let Some(ref embedding_hnsw) = model.embedding_hnsw_index {
+                // FAST PATH: Use stored HNSW index for embedding space neighbor search
+                vprint!("🚀 Using stored embedding HNSW index for fast neighbor statistics");
+
+                (0..n_samples).map(|i| {
+                    let point_coords = optimized_embedding.row(i);
+                    let query: Vec<f32> = point_coords.iter().map(|&x| x as f32).collect();
+
+                    // Find the single closest neighbor using HNSW
+                    let closest_neighbors = embedding_hnsw.search(&query, 1, model.config.hnsw_params.ef_search);
+                    let distance_to_closest_neighbor = if let Some(closest) = closest_neighbors.first() {
+                        (closest.distance as f64).sqrt() // Convert from squared distance
+                    } else {
+                        f64::INFINITY
+                    };
+
+                    // Find k neighbors for mean distance using HNSW
+                    let k_neighbors = embedding_hnsw.search(&query, model.config.n_neighbors, model.config.hnsw_params.ef_search);
+                    let mean_distance_to_k_neighbors = if !k_neighbors.is_empty() {
+                        k_neighbors.iter().map(|n| (n.distance as f64).sqrt()).sum::<f64>() / k_neighbors.len() as f64
+                    } else {
+                        f64::INFINITY
+                    };
+
+                    // Calculate distance to training centroid
+                    let distance_to_training_centroid = point_coords.iter().zip(centroid.iter())
+                        .map(|(p, c)| (p - c).powi(2))
+                        .sum::<f64>()
+                        .sqrt();
+
+                    TransformStats {
+                        coordinates: point_coords.to_owned(),
+                        distance_to_closest_neighbor,
+                        mean_distance_to_k_neighbors,
+                        distance_to_training_centroid,
+                    }
+                }).collect()
+            } else {
+                return Err("Model was trained with HNSW but embedding index is missing".into());
+            }
+        }
+        #[cfg(not(feature = "use_hnsw"))]
+        {
+            return Err("HNSW feature not enabled, cannot use stored indices for stats".into());
+        }
+    } else {
+        // Graceful error for models not trained with HNSW
+        return Err("Model was not trained with HNSW indices. Cannot compute fast outlier statistics. Please retrain the model with HNSW enabled.".into());
+    };
+
+    vprint!("✅ No Man's Land analysis completed for {} points", n_samples);
+
+    // Report summary statistics for outlier detection
+    if is_verbose() {
+        let closest_distances: Vec<f64> = stats_results.iter().map(|s| s.distance_to_closest_neighbor).collect();
+        let centroid_distances: Vec<f64> = stats_results.iter().map(|s| s.distance_to_training_centroid).collect();
+
+        let min_closest = closest_distances.iter().copied().fold(f64::INFINITY, f64::min);
+        let max_closest = closest_distances.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+        let min_centroid = centroid_distances.iter().copied().fold(f64::INFINITY, f64::min);
+        let max_centroid = centroid_distances.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+
+        eprintln!("📊 OUTLIER DETECTION SUMMARY:");
+        eprintln!("   Distance to closest neighbor: min={:.3}, max={:.3}", min_closest, max_closest);
+        eprintln!("   Distance to training centroid: min={:.3}, max={:.3}", min_centroid, max_centroid);
+        eprintln!("   Points with distance_to_closest > 2.0 (potential outliers): {}",
+                 closest_distances.iter().filter(|&&d| d > 2.0).count());
+    }
+
+    Ok(stats_results)
+}
+
 
 /// Format duration in human-readable format
 fn format_duration(duration: std::time::Duration) -> String {

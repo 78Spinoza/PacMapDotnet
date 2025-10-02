@@ -2,15 +2,15 @@ use ndarray::ArrayView2;
 use crate::pairs::compute_pairs_hnsw;
 use std::collections::HashSet;
 use rand::Rng;
+use rand::SeedableRng;
 
-/// Compute HNSW recall vs exact KNN using efficient subset validation
-/// Returns recall percentage (0-100)
-/// OPTIMIZED: Uses candidate subset instead of full dataset for validation
-pub fn compute_hnsw_recall(
+/// Compute HNSW recall with specific HNSW parameters (used for validation consistency)
+pub fn compute_hnsw_recall_with_params(
     data: ArrayView2<f64>,
     n_neighbors: usize,
     seed: u64,
-    sample_points: usize
+    sample_points: usize,
+    hnsw_params: Option<crate::hnsw_params::HnswParams>
 ) -> f64 {
     let (n_samples, _n_features) = data.dim();
 
@@ -33,7 +33,7 @@ pub fn compute_hnsw_recall(
         .max(n_neighbors * 10) // At least 10x the k value (reduced from 20x)
         .min(n_samples); // Never exceed dataset size
 
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
 
     // Unique sampling to avoid duplicates as per review
     let mut unique_indices = HashSet::new();
@@ -48,8 +48,12 @@ pub fn compute_hnsw_recall(
                  (candidate_subset_size * 100 / n_samples), n_samples);
     }
 
-    // Build HNSW index on FULL data (this is what we actually use in production)
-    let hnsw_pairs = compute_pairs_hnsw(data, n_neighbors, seed);
+    // Build HNSW index on FULL data using the same parameters as production
+    let hnsw_pairs = if let Some(params) = &hnsw_params {
+        crate::pairs::compute_pairs_hnsw_with_params(data, n_neighbors, seed, Some(params.clone()))
+    } else {
+        compute_pairs_hnsw(data, n_neighbors, seed)
+    };
     let hnsw_map: std::collections::HashMap<usize, Vec<usize>> = {
         let mut map = std::collections::HashMap::new();
         for (i, j) in hnsw_pairs {
@@ -58,18 +62,34 @@ pub fn compute_hnsw_recall(
         map
     };
 
-    // Build ground truth index ONCE and reuse for all queries (major optimization)
+    // Calculate high ef for ground truth once (used in multiple places)
+    let high_ef = if let Some(params) = &hnsw_params {
+        (params.ef_search * 4).max(512)
+    } else {
+        (n_neighbors * 20).max(512)
+    };
+
+    // Build ground truth index ONCE with consistent parameters (major optimization)
     #[cfg(feature = "use_hnsw")]
     let (gt_hnsw, points) = {
         use hnsw_rs::hnsw::Hnsw;
         use hnsw_rs::dist::DistL2;
 
-        let high_ef = (n_neighbors * 20).max(512);
         let points: Vec<Vec<f32>> = (0..n_samples)
             .map(|i| data.row(i).iter().map(|&x| x as f32).collect())
             .collect();
 
-        let gt_hnsw = Hnsw::<f32, DistL2>::new(16, n_samples, 16, high_ef, DistL2{});
+        // Use consistent HNSW parameters or defaults
+        let (m, ef_construction) = if let Some(params) = &hnsw_params {
+            (params.m, params.ef_construction)
+        } else {
+            (16, 128)
+        };
+
+        let max_layer = ((n_samples as f32).ln() / (m as f32).ln()).ceil() as usize + 1;
+        let max_layer = max_layer.min(32).max(4);
+
+        let gt_hnsw = Hnsw::<f32, DistL2>::new(m, n_samples, max_layer, ef_construction, DistL2{});
         let data_with_id: Vec<(&[f32], usize)> = points.iter().enumerate()
             .map(|(i, p)| (p.as_slice(), i)).collect();
 
@@ -90,8 +110,8 @@ pub fn compute_hnsw_recall(
         // OPTIMIZATION: Use pre-built high-ef HNSW as "ground truth" (much faster)
         #[cfg(feature = "use_hnsw")]
         let exact_neighbors_subset: HashSet<usize> = {
-            // Query with very high ef for near-exact results
-            let gt_results = gt_hnsw.search(&points[query_idx], n_neighbors + 1, (n_neighbors * 20).max(512));
+            // Query with very high ef for near-exact results (use high_ef calculated above)
+            let gt_results = gt_hnsw.search(&points[query_idx], n_neighbors + 1, high_ef);
             gt_results.into_iter()
                 .map(|neighbor| neighbor.d_id as usize)
                 .filter(|&j| j != query_idx)
@@ -155,14 +175,14 @@ pub fn compute_hnsw_recall(
     recall
 }
 
-/// HNSW quality validation with auto-retry on low recall
-/// Automatically boosts ef_search if recall < 90% and retries
-pub fn validate_hnsw_quality_with_retry(
+/// HNSW quality validation with auto-retry and specific HNSW parameters
+pub fn validate_hnsw_quality_with_retry_and_params(
     data: ArrayView2<f64>,
     n_neighbors: usize,
     seed: u64,
     initial_ef_search: usize,
-    progress_callback: Option<&dyn Fn(&str, usize, usize, f32, &str)>
+    progress_callback: Option<&dyn Fn(&str, usize, usize, f32, &str)>,
+    base_hnsw_params: Option<crate::hnsw_params::HnswParams>
 ) -> Result<(String, usize), String> {
     let (n_samples, _) = data.dim();
 
@@ -180,7 +200,18 @@ pub fn validate_hnsw_quality_with_retry(
                     &format!("Testing HNSW recall (ef_search={}, attempt {})", current_ef_search, retry + 1));
         }
 
-        let recall = compute_hnsw_recall(data, n_neighbors, seed, 50);
+        // Create HNSW parameters with current ef_search being tested
+        let test_hnsw_params = if let Some(mut params) = base_hnsw_params.clone() {
+            params.ef_search = current_ef_search; // Use the ef_search being tested
+            Some(params)
+        } else {
+            // Create auto-scaled params but with specific ef_search
+            let mut auto_params = crate::hnsw_params::HnswParams::auto_scale(n_samples, data.ncols(), n_neighbors);
+            auto_params.ef_search = current_ef_search; // Override with tested value
+            Some(auto_params)
+        };
+
+        let recall = compute_hnsw_recall_with_params(data, n_neighbors, seed, 50, test_hnsw_params);
 
         if std::env::var("PACMAP_VERBOSE").is_ok() {
             eprintln!("RECALL TEST: ef_search={}, recall={:.1}% (attempt {})",
@@ -224,29 +255,3 @@ pub fn validate_hnsw_quality_with_retry(
     unreachable!()
 }
 
-/// Quick validation that HNSW produces reasonable recall (legacy function)
-pub fn validate_hnsw_quality(
-    data: ArrayView2<f64>,
-    n_neighbors: usize,
-    seed: u64
-) -> Result<String, String> {
-    // Skip expensive validation for production performance - assume HNSW quality is good
-    if std::env::var("PACMAP_SKIP_VALIDATION").is_ok() {
-        return Ok("Validation skipped for performance".to_string());
-    }
-
-    // Always validate HNSW quality - large datasets need it most!
-    let (n_samples, _) = data.dim();
-
-    let recall = compute_hnsw_recall(data, n_neighbors, seed, 50); // Proper sample size for validation
-
-    if recall >= 95.0 {
-        Ok(format!("Excellent recall: {:.1}%", recall))
-    } else if recall >= 90.0 {
-        Ok(format!("Good recall: {:.1}%", recall))
-    } else if recall >= 80.0 {
-        Ok(format!("Acceptable recall: {:.1}% (may affect quality)", recall))
-    } else {
-        Err(format!("Poor recall: {:.1}% (will likely produce bad embeddings)", recall))
-    }
-}

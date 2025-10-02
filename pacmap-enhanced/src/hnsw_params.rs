@@ -22,6 +22,11 @@ pub struct HnswParams {
     /// Usually 2 * M
     pub max_m0: usize,
 
+    /// Whether to apply dimension-based density scaling (O(√d) behavior)
+    /// When true (default), applies sqrt(dimension) scaling for high-dimensional data
+    /// When false, matches original Python PaCMAP behavior without density scaling
+    pub density_scaling: bool,
+
     /// Memory usage estimate in bytes
     pub estimated_memory_bytes: usize,
 }
@@ -34,6 +39,7 @@ impl Default for HnswParams {
             ef_construction: 128,
             ef_search: 64,
             max_m0: 32,
+            density_scaling: true, // Maintain current behavior by default
             estimated_memory_bytes: 0,
         }
     }
@@ -43,6 +49,12 @@ impl HnswParams {
     /// Auto-scale HNSW parameters based on dataset characteristics
     /// Following UMAP Enhanced proven patterns
     pub fn auto_scale(n_samples: usize, n_features: usize, target_neighbors: usize) -> Self {
+        Self::auto_scale_with_density(n_samples, n_features, target_neighbors, true)
+    }
+
+    /// Auto-scale HNSW parameters with configurable density scaling
+    /// When density_scaling=false, matches original Python PaCMAP behavior (no O(√d) scaling)
+    pub fn auto_scale_with_density(n_samples: usize, n_features: usize, target_neighbors: usize, density_scaling: bool) -> Self {
         // Use logarithmic scaling for m parameter, capped at 32
         let m = std::cmp::min(32, 8 + (n_samples as f32).log2() as usize);
 
@@ -57,12 +69,16 @@ impl HnswParams {
             _ => (256, 256),
         };
 
-        // Apply improved dimension-based scaling for high-dimensional data
-        let dim_scale = (n_features as f32).sqrt();
-        let ef_search_scaled = std::cmp::max(
-            ef_search * 2, // Start with 2x base instead of 1x
-            (dim_scale * 4.0) as usize // Increase multiplier from 2.0 to 4.0
-        );
+        // Apply dimension-based scaling for high-dimensional data ONLY if density_scaling is enabled
+        let ef_search_scaled = if density_scaling {
+            let dim_scale = (n_features as f32).sqrt();
+            std::cmp::max(
+                ef_search * 2, // Start with 2x base instead of 1x
+                (dim_scale * 4.0) as usize // Increase multiplier from 2.0 to 4.0
+            )
+        } else {
+            ef_search * 2 // No density scaling - just basic 2x multiplier
+        };
 
         // Apply neighbor-count scaling with recall target considerations
         let log_scale = (n_samples as f32).log2();
@@ -75,6 +91,9 @@ impl HnswParams {
             )
         );
 
+        // OPTIONAL BOOST: Apply review suggestion as additional minimum
+        let ef_search_final = std::cmp::max(ef_search_final, 256.max(target_neighbors * 5));
+
         let max_m0 = m * 2;
         let estimated_memory = Self::estimate_memory(n_samples, m, max_m0);
 
@@ -83,6 +102,7 @@ impl HnswParams {
             ef_construction,
             ef_search: ef_search_final,
             max_m0,
+            density_scaling,
             estimated_memory_bytes: estimated_memory,
         }
     }
@@ -97,6 +117,7 @@ impl HnswParams {
                     ef_construction: 32,
                     ef_search: 16,
                     max_m0: 16,
+                    density_scaling: true,
                     estimated_memory_bytes: Self::estimate_memory(n_samples, 8, 16),
                 }
             },
@@ -107,6 +128,7 @@ impl HnswParams {
                     ef_construction: 256,
                     ef_search: 256,
                     max_m0: 128,
+                    density_scaling: true,
                     estimated_memory_bytes: Self::estimate_memory(n_samples, 64, 128),
                 }
             },
@@ -117,6 +139,7 @@ impl HnswParams {
                     ef_construction: 64,
                     ef_search: 32,
                     max_m0: 16,
+                    density_scaling: true,
                     estimated_memory_bytes: Self::estimate_memory(n_samples, 8, 16),
                 }
             },

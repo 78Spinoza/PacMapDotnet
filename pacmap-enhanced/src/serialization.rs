@@ -2,10 +2,59 @@ use serde::{Serialize, Deserialize};
 use zstd::{stream::encode_all as compress, stream::decode_all as decompress};
 use std::fs::File;
 use std::io::{Read, Write};
-use ndarray::Array2;
+use ndarray::{Array2, Array1};
 use crate::quantize::{quantize_embedding_linear, QuantizedEmbedding, dequantize_embedding};
 use crate::stats::NormalizationParams;
 use crate::hnsw_params::HnswParams;
+
+#[cfg(feature = "use_hnsw")]
+use hnsw_rs::hnsw::Hnsw;
+#[cfg(feature = "use_hnsw")]
+use hnsw_rs::dist::DistL2;
+
+// Import is_verbose function from lib.rs
+use crate::is_verbose;
+
+// Define vprint macro locally since macros don't auto-import
+macro_rules! vprint {
+    ($($arg:tt)*) => {
+        if is_verbose() {
+            eprintln!($($arg)*);
+        }
+    };
+}
+
+/// A serializable container for all the data needed to rebuild an HNSW index.
+/// This is a robust alternative to trying to serialize the Hnsw struct itself.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct SerializableHnswIndex {
+    /// The original data points that were inserted into the index.
+    pub data: Vec<Vec<f32>>,
+    /// The HNSW parameters used to build the index.
+    pub params: HnswParams,
+    /// The number of layers in the original index.
+    pub max_layer: usize,
+}
+
+/// Statistics calculated for a transformed data point to assess its relationship
+/// to the original training data's embedding. Used for "No Man's Land" detection.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct TransformStats {
+    /// The low-dimensional coordinates of the transformed point.
+    pub coordinates: Array1<f64>,
+
+    /// The distance to the single closest neighbor in the training embedding.
+    /// A primary indicator of outlierness.
+    pub distance_to_closest_neighbor: f64,
+
+    /// The mean distance to the k nearest neighbors in the training embedding.
+    /// Provides a more stable measure of local density.
+    pub mean_distance_to_k_neighbors: f64,
+
+    /// The distance from the point to the centroid of the entire training embedding.
+    /// A global measure of how far the point is from the "center" of the data.
+    pub distance_to_training_centroid: f64,
+}
 
 /// Core PacMAP model parameters (serializable subset of Configuration)
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -14,12 +63,17 @@ pub struct PacMAPConfig {
     pub embedding_dim: usize,
     pub n_epochs: usize,
     pub learning_rate: f64,
-    pub min_dist: f64,
     pub mid_near_ratio: f64,
     pub far_pair_ratio: f64,
     pub seed: Option<u64>,
     /// HNSW parameters for neighbor search optimization
     pub hnsw_params: HnswParams,
+    /// Whether HNSW was actually used during fitting (vs exact KNN)
+    #[serde(default)]
+    pub used_hnsw: bool,
+    /// Force direct KNN instead of HNSW regardless of dataset size
+    #[serde(default)]
+    pub force_knn: bool,
 }
 
 impl Default for PacMAPConfig {
@@ -29,16 +83,17 @@ impl Default for PacMAPConfig {
             embedding_dim: 2,
             n_epochs: 450,
             learning_rate: 1.0,
-            min_dist: 0.1,
             mid_near_ratio: 0.5,
-            far_pair_ratio: 0.5,
+            far_pair_ratio: 2.0,
             seed: None,
             hnsw_params: HnswParams::default(),
+            used_hnsw: false,
+            force_knn: false,
         }
     }
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize)]
 pub struct PaCMAP {
     pub embedding: Array2<f64>,
     pub config: PacMAPConfig,
@@ -54,6 +109,54 @@ pub struct PaCMAP {
     /// Quantized embedding with parameters (replaces simple embedding_q)
     #[serde(default)]
     pub quantized_embedding: Option<QuantizedEmbedding>,
+
+    /// TRANSFORM SUPPORT: Original high-dimensional training data (quantized)
+    /// Used for initial neighbor search when transforming new points
+    #[serde(default)]
+    pub original_data: Option<QuantizedEmbedding>,
+
+    /// TRANSFORM SUPPORT: Fitted low-dimensional projections
+    /// Used for final neighbor refinement in embedding space
+    /// This is the same as embedding but stored separately for clarity
+    #[serde(default)]
+    pub fitted_projections: Option<Array2<f64>>,
+
+    /// The centroid of the fitted embedding space.
+    /// Used for global outlierness detection during transform ("No Man's Land" detection).
+    #[serde(default)]
+    pub embedding_centroid: Option<Array1<f64>>,
+
+    /// The HNSW index for fast neighbor searches in the original data space.
+    /// It is not serialized and will be rebuilt on load if needed.
+    #[serde(skip)]
+    #[cfg(feature = "use_hnsw")]
+    pub hnsw_index: Option<hnsw_rs::hnsw::Hnsw<'static, f32, hnsw_rs::dist::DistL2>>,
+
+    /// The HNSW index for fast neighbor searches in the embedding space.
+    /// It is not serialized and will be rebuilt on load if needed.
+    #[serde(skip)]
+    #[cfg(feature = "use_hnsw")]
+    pub embedding_hnsw_index: Option<hnsw_rs::hnsw::Hnsw<'static, f32, hnsw_rs::dist::DistL2>>,
+
+    /// The raw bytes of a serialized HNSW index for original data.
+    /// Used for massive datasets where rebuilding is too slow.
+    #[serde(default)]
+    pub serialized_hnsw_index: Option<Vec<u8>>,
+
+    /// The raw bytes of a serialized HNSW index for embedding data.
+    /// Used for massive datasets where rebuilding is too slow.
+    #[serde(default)]
+    pub serialized_embedding_hnsw_index: Option<Vec<u8>>,
+
+    /// CRC32 checksum of the serialized HNSW index for original data.
+    /// Used for integrity validation when loading.
+    #[serde(default)]
+    pub hnsw_index_crc32: Option<u32>,
+
+    /// CRC32 checksum of the serialized HNSW index for embedding data.
+    /// Used for integrity validation when loading.
+    #[serde(default)]
+    pub embedding_hnsw_index_crc32: Option<u32>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -76,6 +179,22 @@ impl PaCMAP {
         }
     }
 
+    /// Store original training data and fitted projections for transform support
+    pub fn store_transform_data(&mut self, original_data: &Array2<f64>, fitted_projections: &Array2<f64>) {
+        // Store quantized original data for efficient storage
+        self.original_data = Some(quantize_embedding_linear(original_data));
+
+        // Store fitted projections (low-dim embeddings)
+        self.fitted_projections = Some(fitted_projections.clone());
+    }
+
+    /// Get dequantized original training data for transforms
+    pub fn get_original_data(&self) -> Option<Array2<f64>> {
+        self.original_data.as_ref().map(|quantized| {
+            dequantize_embedding(quantized)
+        })
+    }
+
     /// Get the embedding in f64 precision, dequantizing if necessary
     pub fn get_embedding(&self) -> Array2<f64> {
         if let Some(ref quantized) = self.quantized_embedding {
@@ -85,6 +204,145 @@ impl PaCMAP {
             // Return original embedding
             self.embedding.clone()
         }
+    }
+
+    /// A helper to ensure the HNSW index is available, rebuilding it if necessary
+    /// (e.g., after loading from disk where it wasn't serialized).
+    #[cfg(feature = "use_hnsw")]
+    pub fn ensure_hnsw_index(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        if self.hnsw_index.is_some() {
+            return Ok(());
+        }
+
+        if let Some(ref serialized_bytes) = self.serialized_hnsw_index {
+            // FAST PATH: Load from serialized index
+            vprint!("🚀 Loading HNSW index from serialized data (fast path)");
+            let serialized_index = deserialize_hnsw_from_bytes(serialized_bytes)?;
+
+            // Build HNSW directly from serialized data
+            let n_samples = serialized_index.data.len();
+            let hnsw = hnsw_rs::hnsw::Hnsw::<f32, hnsw_rs::dist::DistL2>::new(
+                serialized_index.params.m,
+                n_samples,
+                serialized_index.max_layer,
+                serialized_index.params.ef_construction,
+                hnsw_rs::dist::DistL2{}
+            );
+
+            // Insert all data points
+            for (i, point) in serialized_index.data.iter().enumerate() {
+                hnsw.insert((point, i));
+            }
+
+            self.hnsw_index = Some(hnsw);
+        } else {
+            // SLOW PATH: Rebuild from stored data for normal datasets
+            vprint!("🔧 HNSW index not found, rebuilding from stored training data...");
+            let original_data = self.get_original_data().ok_or("Cannot rebuild HNSW index: original training data not stored")?;
+            let (n_samples, _) = original_data.dim();
+
+            let hnsw_params = &self.config.hnsw_params;
+            let points: Vec<Vec<f32>> = (0..n_samples)
+                .map(|i| original_data.row(i).iter().map(|&x| x as f32).collect())
+                .collect();
+
+            let max_layer = ((n_samples as f32).ln() / (hnsw_params.m as f32).ln()).ceil() as usize + 1;
+            let max_layer = max_layer.min(32).max(4);
+
+            let hnsw = hnsw_rs::hnsw::Hnsw::<f32, hnsw_rs::dist::DistL2>::new(
+                hnsw_params.m,
+                n_samples,
+                max_layer,
+                hnsw_params.ef_construction,
+                hnsw_rs::dist::DistL2{}
+            );
+
+            let data_with_id: Vec<(&[f32], usize)> = points.iter().enumerate().map(|(i, p)| (p.as_slice(), i)).collect();
+
+            #[cfg(feature = "parallel")]
+            {
+                hnsw.parallel_insert(&data_with_id);
+            }
+            #[cfg(not(feature = "parallel"))]
+            {
+                for (point, i) in data_with_id {
+                    hnsw.insert((&point.to_vec(), i));
+                }
+            }
+
+            self.hnsw_index = Some(hnsw);
+            vprint!("✅ HNSW index rebuilt successfully.");
+        }
+        Ok(())
+    }
+
+    /// A helper to ensure the embedding HNSW index is available, rebuilding it if necessary
+    #[cfg(feature = "use_hnsw")]
+    pub fn ensure_embedding_hnsw_index(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        if self.embedding_hnsw_index.is_some() {
+            return Ok(());
+        }
+
+        if let Some(ref serialized_bytes) = self.serialized_embedding_hnsw_index {
+            // FAST PATH: Load from serialized index
+            vprint!("🚀 Loading embedding HNSW index from serialized data (fast path)");
+            let serialized_index = deserialize_hnsw_from_bytes(serialized_bytes)?;
+
+            // Build HNSW directly from serialized data
+            let n_samples = serialized_index.data.len();
+            let hnsw = hnsw_rs::hnsw::Hnsw::<f32, hnsw_rs::dist::DistL2>::new(
+                serialized_index.params.m,
+                n_samples,
+                serialized_index.max_layer,
+                serialized_index.params.ef_construction,
+                hnsw_rs::dist::DistL2{}
+            );
+
+            // Insert all data points
+            for (i, point) in serialized_index.data.iter().enumerate() {
+                hnsw.insert((point, i));
+            }
+
+            self.embedding_hnsw_index = Some(hnsw);
+        } else {
+            // SLOW PATH: Rebuild from fitted projections
+            vprint!("🔧 Embedding HNSW index not found, rebuilding from fitted projections...");
+            let fitted_projections = self.fitted_projections.as_ref().ok_or("Cannot rebuild embedding HNSW index: fitted projections not stored")?;
+            let (n_samples, _) = fitted_projections.dim();
+
+            let hnsw_params = &self.config.hnsw_params;
+            let points: Vec<Vec<f32>> = (0..n_samples)
+                .map(|i| fitted_projections.row(i).iter().map(|&x| x as f32).collect())
+                .collect();
+
+            let max_layer = ((n_samples as f32).ln() / (hnsw_params.m as f32).ln()).ceil() as usize + 1;
+            let max_layer = max_layer.min(32).max(4);
+
+            let hnsw = hnsw_rs::hnsw::Hnsw::<f32, hnsw_rs::dist::DistL2>::new(
+                hnsw_params.m,
+                n_samples,
+                max_layer,
+                hnsw_params.ef_construction,
+                hnsw_rs::dist::DistL2{}
+            );
+
+            let data_with_id: Vec<(&[f32], usize)> = points.iter().enumerate().map(|(i, p)| (p.as_slice(), i)).collect();
+
+            #[cfg(feature = "parallel")]
+            {
+                hnsw.parallel_insert(&data_with_id);
+            }
+            #[cfg(not(feature = "parallel"))]
+            {
+                for (point, i) in data_with_id {
+                    hnsw.insert((&point.to_vec(), i));
+                }
+            }
+
+            self.embedding_hnsw_index = Some(hnsw);
+            vprint!("✅ Embedding HNSW index rebuilt successfully.");
+        }
+        Ok(())
     }
 
     /// Save without quantization (preserves full precision)
@@ -234,7 +492,6 @@ impl PaCMAP {
         println!("   - Number of neighbors: {}", self.config.n_neighbors);
         println!("   - Number of epochs: {}", self.config.n_epochs);
         println!("   - Learning rate: {:.3}", self.config.learning_rate);
-        println!("   - Minimum distance: {:.3}", self.config.min_dist);
         println!("   - Mid-near ratio: {:.2}", self.config.mid_near_ratio);
         println!("   - Far-pair ratio: {:.2}", self.config.far_pair_ratio);
         if let Some(seed) = self.config.seed {
@@ -353,4 +610,78 @@ impl PaCMAP {
         println!("===========================================");
         println!();
     }
+}
+
+impl Clone for PaCMAP {
+    fn clone(&self) -> Self {
+        Self {
+            embedding: self.embedding.clone(),
+            config: self.config.clone(),
+            stats: self.stats.clone(),
+            normalization: self.normalization.clone(),
+            quantize_on_save: self.quantize_on_save,
+            quantized_embedding: self.quantized_embedding.clone(),
+            original_data: self.original_data.clone(),
+            fitted_projections: self.fitted_projections.clone(),
+            embedding_centroid: self.embedding_centroid.clone(),
+            #[cfg(feature = "use_hnsw")]
+            hnsw_index: None, // Don't clone HNSW indices - they'll be rebuilt on demand
+            #[cfg(feature = "use_hnsw")]
+            embedding_hnsw_index: None,
+            serialized_hnsw_index: self.serialized_hnsw_index.clone(),
+            serialized_embedding_hnsw_index: self.serialized_embedding_hnsw_index.clone(),
+            hnsw_index_crc32: self.hnsw_index_crc32,
+            embedding_hnsw_index_crc32: self.embedding_hnsw_index_crc32,
+        }
+    }
+}
+
+/// Create serialized HNSW index using binary MessagePack format (much faster than JSON)
+#[cfg(feature = "use_hnsw")]
+pub fn custom_serialize_hnsw(data: &Array2<f64>, hnsw_params: &HnswParams, max_layer: usize) -> Result<SerializableHnswIndex, Box<dyn std::error::Error>> {
+    let data_f32: Vec<Vec<f32>> = data.rows()
+        .into_iter()
+        .map(|row| row.iter().map(|&x| x as f32).collect())
+        .collect();
+
+    let serializable = SerializableHnswIndex {
+        data: data_f32,
+        params: hnsw_params.clone(),
+        max_layer,
+    };
+
+    Ok(serializable)
+}
+
+/// Serialize SerializableHnswIndex to binary bytes using MessagePack
+pub fn serialize_hnsw_to_bytes(serializable_index: &SerializableHnswIndex) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    let serialized_bytes = rmp_serde::to_vec(serializable_index)?;
+    Ok(serialized_bytes)
+}
+
+/// Deserialize SerializableHnswIndex from binary bytes using MessagePack
+pub fn deserialize_hnsw_from_bytes(serialized_bytes: &[u8]) -> Result<SerializableHnswIndex, Box<dyn std::error::Error>> {
+    let serializable_index: SerializableHnswIndex = rmp_serde::from_slice(serialized_bytes)?;
+    Ok(serializable_index)
+}
+
+/// Load HNSW from serialized index (used by transform functions)
+#[cfg(feature = "use_hnsw")]
+pub fn load_hnsw_from_serialized(serialized_index: &SerializableHnswIndex) -> Result<Hnsw<'_, f32, DistL2>, Box<dyn std::error::Error>> {
+    let n_samples = serialized_index.data.len();
+
+    let hnsw = Hnsw::<f32, DistL2>::new(
+        serialized_index.params.m,
+        n_samples,
+        serialized_index.max_layer,
+        serialized_index.params.ef_construction,
+        DistL2{}
+    );
+
+    // Insert all data points
+    for (i, point) in serialized_index.data.iter().enumerate() {
+        hnsw.insert((point, i));
+    }
+
+    Ok(hnsw)
 }

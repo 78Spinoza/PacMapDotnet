@@ -6,7 +6,7 @@ using System.Linq;
 using OxyPlot;
 using OxyPlot.Series;
 using OxyPlot.Axes;
-using OxyPlot.WindowsForms;
+using OxyPlot.SkiaSharp;
 
 namespace PacMapDemo
 {
@@ -210,7 +210,7 @@ namespace PacMapDemo
                 }
 
                 // Export XY view (top view)
-                var exporter = new OxyPlot.WindowsForms.PngExporter { Width = 800, Height = 600, Resolution = 120 };
+                var exporter = new OxyPlot.SkiaSharp.PngExporter { Width = 800, Height = 600 };
                 string xyPath = outputPath.Replace(".png", "_XY_TopView.png");
                 using (var stream = File.Create(xyPath))
                 {
@@ -246,9 +246,10 @@ namespace PacMapDemo
         }
 
         /// <summary>
-        /// Create PacMAP 2D embedding visualization with anatomical part coloring
+        /// Create PacMAP 2D embedding visualization with anatomical part coloring and parameter display
         /// </summary>
-        public static void PlotMammothPacMAP(float[,] embedding, double[,] originalData, string title, string outputPath)
+        public static void PlotMammothPacMAP(float[,] embedding, double[,] originalData, string title, string outputPath,
+            string? parameterInfo = null)
         {
             try
             {
@@ -267,9 +268,16 @@ namespace PacMapDemo
                     { "trunk", OxyColors.Red }
                 };
 
+                // Enhanced title with parameter information
+                string enhancedTitle = title;
+                if (!string.IsNullOrEmpty(parameterInfo))
+                {
+                    enhancedTitle = $"{title}\n{parameterInfo}";
+                }
+
                 var plotModel = new PlotModel
                 {
-                    Title = title,
+                    Title = enhancedTitle,
                     Background = OxyColors.White,
                     PlotAreaBorderColor = OxyColors.Black
                 };
@@ -319,7 +327,7 @@ namespace PacMapDemo
                 }
 
                 // Export
-                var exporter = new OxyPlot.WindowsForms.PngExporter { Width = 1600, Height = 1200, Resolution = 120 };
+                var exporter = new OxyPlot.SkiaSharp.PngExporter { Width = 1600, Height = 1200 };
                 using (var stream = File.Create(outputPath))
                 {
                     exporter.Export(plotModel, stream);
@@ -330,6 +338,68 @@ namespace PacMapDemo
             catch (Exception ex)
             {
                 Console.WriteLine($"ERROR: Failed to create PacMAP plot: {ex.Message}");
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// Plot PacMAP embedding without labels (single color for unlabeled data)
+        /// </summary>
+        public static void PlotSimplePacMAP(float[,] embedding, string title, string outputPath, string? parameterInfo = null)
+        {
+            try
+            {
+                Console.WriteLine($"Creating simple PacMAP plot: {title}");
+
+                int numPoints = embedding.GetLength(0);
+
+                // Enhanced title with parameter information
+                string enhancedTitle = title;
+                if (!string.IsNullOrEmpty(parameterInfo))
+                {
+                    enhancedTitle = $"{title}\n{parameterInfo}";
+                }
+
+                var plotModel = new PlotModel
+                {
+                    Title = enhancedTitle,
+                    Background = OxyColors.White,
+                    PlotAreaBorderColor = OxyColors.Black
+                };
+
+                // Add X-Y axes for 2D embedding
+                plotModel.Axes.Add(new LinearAxis { Position = AxisPosition.Bottom, Title = "X Coordinate (PacMAP Dimension 1)" });
+                plotModel.Axes.Add(new LinearAxis { Position = AxisPosition.Left, Title = "Y Coordinate (PacMAP Dimension 2)" });
+
+                // Create single scatter series with all points - BLACK color
+                var scatterSeries = new ScatterSeries
+                {
+                    Title = $"{numPoints:N0} points",
+                    MarkerType = MarkerType.Circle,
+                    MarkerFill = OxyColors.Black,
+                    MarkerStroke = OxyColors.Black,
+                    MarkerSize = 2
+                };
+
+                for (int i = 0; i < numPoints; i++)
+                {
+                    scatterSeries.Points.Add(new ScatterPoint(embedding[i, 0], embedding[i, 1]));
+                }
+
+                plotModel.Series.Add(scatterSeries);
+
+                // Export
+                var exporter = new OxyPlot.SkiaSharp.PngExporter { Width = 1600, Height = 1200 };
+                using (var stream = File.Create(outputPath))
+                {
+                    exporter.Export(plotModel, stream);
+                }
+
+                Console.WriteLine($"SUCCESS: Simple PacMAP plot saved to: {outputPath}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"ERROR: Failed to create simple PacMAP plot: {ex.Message}");
                 throw;
             }
         }

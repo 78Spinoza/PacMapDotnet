@@ -125,7 +125,7 @@ mod tests {
 
         // Create mock embedding
         let embedding = Array2::from_shape_vec((4, 2), vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]).unwrap();
-        let (mean, p95, max) = compute_distance_stats(&embedding);
+        let (mean, p95, max) = compute_distance_stats(&embedding, 42); // Use fixed seed for testing
 
         // Create PaCMAP model with normalization
         let mut model = PaCMAP {
@@ -139,6 +139,8 @@ mod tests {
             normalization: norm.clone(),
             quantize_on_save: false,
             quantized_embedding: None,
+            original_data: None,
+            fitted_projections: None,
         };
 
         // Test serialization/deserialization

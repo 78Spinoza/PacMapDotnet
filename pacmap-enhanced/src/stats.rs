@@ -4,6 +4,7 @@ use serde::{Serialize, Deserialize};
 use std::error::Error;
 use std::fmt;
 use rand::Rng;
+use rand::SeedableRng;
 
 /// Normalization modes supported by the system
 /// Following UMAP's approach to feature scaling with saved parameters
@@ -114,6 +115,11 @@ impl NormalizationParams {
             return Err(NormalizationError::new("Cannot fit on empty data"));
         }
 
+        // Validate data for numerical issues (NaN or infinite values)
+        if !data.iter().all(|&x| x.is_finite()) {
+            return Err(NormalizationError::new("Data contains NaN or infinite values - cannot compute normalization parameters"));
+        }
+
         if self.n_features == 0 {
             self.n_features = n_features;
         } else if self.n_features != n_features {
@@ -163,6 +169,11 @@ impl NormalizationParams {
                 "Feature dimension mismatch: expected {}, got {}",
                 self.n_features, n_features
             )));
+        }
+
+        // Validate input data for numerical issues (NaN or infinite values)
+        if !data.iter().all(|&x| x.is_finite()) {
+            return Err(NormalizationError::new("Input data contains NaN or infinite values - cannot apply normalization"));
         }
 
         match self.mode {
@@ -369,7 +380,7 @@ impl NormalizationParams {
 
 /// Compute distance statistics for outlier detection with smart approximation
 /// Uses sampling for large datasets to avoid O(n²) performance issues
-pub fn compute_distance_stats(embedding: &Array2<f64>) -> (f64, f64, f64) {
+pub fn compute_distance_stats(embedding: &Array2<f64>, seed: u64) -> (f64, f64, f64) {
     let n = embedding.shape()[0];
     if n < 2 {
         return (0.0, 0.0, 0.0);
@@ -401,7 +412,7 @@ pub fn compute_distance_stats(embedding: &Array2<f64>) -> (f64, f64, f64) {
         }
 
         use std::collections::HashSet;
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
         let mut sampled_pairs = HashSet::new();
 
         // Calculate how many pairs we want to sample

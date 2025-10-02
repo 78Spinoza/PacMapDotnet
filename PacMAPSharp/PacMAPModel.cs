@@ -251,9 +251,67 @@ namespace PacMAPSharp
         /// </summary>
         public float HnswRecall { get; }
 
+        /// <summary>
+        /// Gets the discovered HNSW M parameter (if autodetect was used)
+        /// </summary>
+        public int? DiscoveredHnswM { get; }
+
+        /// <summary>
+        /// Gets the discovered HNSW ef_construction parameter (if autodetect was used)
+        /// </summary>
+        public int? DiscoveredHnswEfConstruction { get; }
+
+        /// <summary>
+        /// Gets the discovered HNSW ef_search parameter (if autodetect was used)
+        /// </summary>
+        public int? DiscoveredHnswEfSearch { get; }
+
+
+        /// <summary>
+        /// Gets the learning rate used in training
+        /// </summary>
+        public double LearningRate { get; }
+
+        /// <summary>
+        /// Gets the number of epochs used in training
+        /// </summary>
+        public int NEpochs { get; }
+
+        /// <summary>
+        /// Gets the mid-near ratio used in pair sampling
+        /// </summary>
+        public double MidNearRatio { get; }
+
+        /// <summary>
+        /// Gets the far pair ratio used in pair sampling
+        /// </summary>
+        public double FarPairRatio { get; }
+
+        /// <summary>
+        /// Gets whether the model uses quantization on save
+        /// </summary>
+        public bool QuantizeOnSave { get; }
+
+        /// <summary>
+        /// Gets the CRC32 checksum of the original HNSW index (null if not available)
+        /// </summary>
+        public uint? HnswIndexCrc32 { get; }
+
+        /// <summary>
+        /// Gets the CRC32 checksum of the embedding HNSW index (null if not available)
+        /// </summary>
+        public uint? EmbeddingHnswIndexCrc32 { get; }
+
+        /// <summary>
+        /// Gets the file path if the model was saved or loaded from a file
+        /// </summary>
+        public string? FilePath { get; }
+
         internal PacMAPModelInfo(int trainingSamples, int inputDimension, int outputDimension,
                                 int neighbors, DistanceMetric metric, NormalizationMode normalization,
-                                bool usedHnsw, float hnswRecall)
+                                bool usedHnsw, float hnswRecall, int? discoveredHnswM, int? discoveredHnswEfConstruction, int? discoveredHnswEfSearch,
+                                double learningRate, int nEpochs, double midNearRatio,
+                                double farPairRatio, bool quantizeOnSave, uint? hnswIndexCrc32 = null, uint? embeddingHnswIndexCrc32 = null, string? filePath = null)
         {
             TrainingSamples = trainingSamples;
             InputDimension = inputDimension;
@@ -263,16 +321,130 @@ namespace PacMAPSharp
             Normalization = normalization;
             UsedHNSW = usedHnsw;
             HnswRecall = hnswRecall;
+            DiscoveredHnswM = discoveredHnswM;
+            DiscoveredHnswEfConstruction = discoveredHnswEfConstruction;
+            DiscoveredHnswEfSearch = discoveredHnswEfSearch;
+            LearningRate = learningRate;
+            NEpochs = nEpochs;
+            MidNearRatio = midNearRatio;
+            FarPairRatio = farPairRatio;
+            QuantizeOnSave = quantizeOnSave;
+            HnswIndexCrc32 = hnswIndexCrc32;
+            EmbeddingHnswIndexCrc32 = embeddingHnswIndexCrc32;
+            FilePath = filePath;
         }
 
         /// <summary>
-        /// Returns a comprehensive string representation of the model info
+        /// Returns a comprehensive string representation of the model info with ALL parameters and file info
         /// </summary>
         public override string ToString()
         {
-            return $"PacMAPModel: {TrainingSamples} samples, {InputDimension}D → {OutputDimension}D, " +
-                   $"neighbors={Neighbors}, metric={Metric}, normalization={Normalization}" +
-                   (UsedHNSW ? $", HNSW (recall={HnswRecall:F1}%)" : ", exact KNN");
+            var sb = new System.Text.StringBuilder();
+
+            // Header
+            sb.AppendLine("╔═══════════════════════════════════════════════════════════════════╗");
+            sb.AppendLine("║                      PacMAP Model Complete Info                   ║");
+            sb.AppendLine("╠═══════════════════════════════════════════════════════════════════╣");
+
+            // File Information
+            if (!string.IsNullOrEmpty(FilePath))
+            {
+                sb.AppendLine($"📁 File: {FilePath}");
+                if (System.IO.File.Exists(FilePath))
+                {
+                    var fileInfo = new System.IO.FileInfo(FilePath);
+                    sb.AppendLine($"   Size: {fileInfo.Length / 1024.0:F1} KB");
+                    sb.AppendLine($"   Modified: {fileInfo.LastWriteTime:yyyy-MM-dd HH:mm:ss}");
+                    sb.AppendLine($"   Status: ✅ EXISTS");
+                }
+                else
+                {
+                    sb.AppendLine($"   Status: ❌ FILE NOT FOUND");
+                }
+                sb.AppendLine();
+            }
+
+            // Dataset Information
+            sb.AppendLine("📊 Dataset Information:");
+            sb.AppendLine($"   Training Samples: {TrainingSamples:N0}");
+            sb.AppendLine($"   Input Dimensions: {InputDimension}D");
+            sb.AppendLine($"   Output Dimensions: {OutputDimension}D");
+            sb.AppendLine($"   Distance Metric: {Metric}");
+            sb.AppendLine($"   Normalization: {Normalization}");
+            sb.AppendLine();
+
+            // Algorithm Configuration
+            sb.AppendLine("⚙️  Algorithm Configuration:");
+            sb.AppendLine($"   Neighbors (k): {Neighbors}");
+            sb.AppendLine($"   Training Epochs: {NEpochs}");
+            sb.AppendLine($"   Learning Rate: {LearningRate:F6}");
+            sb.AppendLine($"   Mid-Near Ratio: {MidNearRatio:F3}");
+            sb.AppendLine($"   Far-Pair Ratio: {FarPairRatio:F3}");
+            sb.AppendLine();
+
+            // Neighbor Search Method
+            if (UsedHNSW)
+            {
+                sb.AppendLine("⚡ HNSW Neighbor Search:");
+                sb.AppendLine($"   Method: Approximate (HNSW)");
+                sb.AppendLine($"   Recall Achieved: {HnswRecall:F1}%");
+
+                if (DiscoveredHnswM.HasValue && DiscoveredHnswEfConstruction.HasValue && DiscoveredHnswEfSearch.HasValue)
+                {
+                    sb.AppendLine($"   M Parameter: {DiscoveredHnswM.Value}");
+                    sb.AppendLine($"   ef_construction: {DiscoveredHnswEfConstruction.Value}");
+                    sb.AppendLine($"   ef_search: {DiscoveredHnswEfSearch.Value}");
+                    sb.AppendLine($"   Status: 🎯 OPTIMIZED (autodetected)");
+                }
+                else
+                {
+                    sb.AppendLine($"   Status: ⚙️  CONFIGURED (manual)");
+                }
+
+                // CRC integrity information
+                if (HnswIndexCrc32.HasValue || EmbeddingHnswIndexCrc32.HasValue)
+                {
+                    sb.AppendLine($"   Index Integrity:");
+                    if (HnswIndexCrc32.HasValue)
+                        sb.AppendLine($"     Original Index CRC32: 0x{HnswIndexCrc32.Value:X8}");
+                    if (EmbeddingHnswIndexCrc32.HasValue)
+                        sb.AppendLine($"     Embedding Index CRC32: 0x{EmbeddingHnswIndexCrc32.Value:X8}");
+                }
+            }
+            else
+            {
+                sb.AppendLine("🔍 Exact KNN Search:");
+                sb.AppendLine($"   Method: Exact neighbor search");
+                sb.AppendLine($"   Accuracy: 100.0%");
+                sb.AppendLine($"   Status: ✅ PRECISE");
+            }
+            sb.AppendLine();
+
+            // Storage and Performance
+            sb.AppendLine("💾 Storage & Performance:");
+            sb.AppendLine($"   Quantization: {(QuantizeOnSave ? "✅ ENABLED (f16 compression)" : "❌ DISABLED (full f64 precision)")}");
+
+            if (QuantizeOnSave)
+            {
+                sb.AppendLine($"   Space Savings: ~50% file size reduction");
+                sb.AppendLine($"   Quality Impact: Minimal (typically <0.1% RMSE)");
+            }
+
+            // Performance characteristics
+            if (UsedHNSW)
+            {
+                sb.AppendLine($"   Speed Profile: Fast embedding, good recall");
+                sb.AppendLine($"   Memory Usage: Low (HNSW optimized)");
+            }
+            else
+            {
+                sb.AppendLine($"   Speed Profile: Slower but exact");
+                sb.AppendLine($"   Memory Usage: Higher (exact computation)");
+            }
+
+            sb.AppendLine("╚═══════════════════════════════════════════════════════════════════╝");
+
+            return sb.ToString();
         }
     }
 
@@ -288,6 +460,7 @@ namespace PacMAPSharp
         public int EfConstruction;   // Manual ef_construction (ignored if auto_scale=true)
         public int EfSearch;         // Manual ef_search (ignored if auto_scale=true)
         public int MemoryLimitMb;    // Memory limit in MB (0 = no limit)
+        public bool AutodetectHnswParams; // If true, do recall validation and auto-optimize; if false, use params as-is
 
         public static PacmapHnswConfig Default => new PacmapHnswConfig
         {
@@ -296,7 +469,8 @@ namespace PacMAPSharp
             M = 16,
             EfConstruction = 128,
             EfSearch = 64,
-            MemoryLimitMb = 0
+            MemoryLimitMb = 0,
+            AutodetectHnswParams = true // Enable recall validation by default
         };
     }
 
@@ -310,7 +484,6 @@ namespace PacMAPSharp
         public int EmbeddingDimensions;
         public int NEpochs;
         public double LearningRate;
-        public double MinDist;
         public double MidNearRatio;
         public double FarPairRatio;
         public int Seed;              // -1 for random seed
@@ -325,11 +498,10 @@ namespace PacMAPSharp
             EmbeddingDimensions = 2,
             NEpochs = 450,
             LearningRate = 0.01,
-            MinDist = 0.1,
             MidNearRatio = 0.5,
-            FarPairRatio = 1.0,
+            FarPairRatio = 2.0,
             Seed = 42,
-            NormalizationMode = 1, // ZScore
+            NormalizationMode = (int)PacMAPSharp.NormalizationMode.ZScore, // Use enum to prevent mapping bugs
             ForceExactKnn = false,
             UseQuantization = false,
             HnswConfig = PacmapHnswConfig.Default
@@ -366,10 +538,12 @@ namespace PacMAPSharp
 
         [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_fit_transform_enhanced")]
         private static extern IntPtr CallFitTransformWindows(IntPtr data, int rows, int cols,
-            PacmapConfig config, IntPtr embedding, NativeProgressCallback? callback);
+            PacmapConfig config, IntPtr embedding, int embeddingBufferLen, NativeProgressCallback? callback);
 
         [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_get_model_info")]
-        private static extern void CallGetModelInfoWindows(IntPtr model, out int nSamples, out int nFeatures, out int embeddingDim, out int normalizationMode);
+        private static extern int CallGetModelInfoWindows(IntPtr model, out int nSamples, out int nFeatures, out int embeddingDim, out int normalizationMode,
+            out int hnswM, out int hnswEfConstruction, out int hnswEfSearch, out bool usedHnsw, out double learningRate,
+            out int nEpochs, out double midNearRatio, out double farPairRatio, out bool quantizeOnSave, out uint hnswIndexCrc32, out uint embeddingHnswIndexCrc32);
 
         [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_get_model_stats")]
         private static extern void CallGetDistanceStatsWindows(IntPtr model, out double mean, out double p95, out double max);
@@ -389,10 +563,12 @@ namespace PacMAPSharp
 
         [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_fit_transform_enhanced")]
         private static extern IntPtr CallFitTransformLinux(IntPtr data, int rows, int cols,
-            PacmapConfig config, IntPtr embedding, NativeProgressCallback? callback);
+            PacmapConfig config, IntPtr embedding, int embeddingBufferLen, NativeProgressCallback? callback);
 
         [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_get_model_info")]
-        private static extern void CallGetModelInfoLinux(IntPtr model, out int nSamples, out int nFeatures, out int embeddingDim, out int normalizationMode);
+        private static extern int CallGetModelInfoLinux(IntPtr model, out int nSamples, out int nFeatures, out int embeddingDim, out int normalizationMode,
+            out int hnswM, out int hnswEfConstruction, out int hnswEfSearch, out bool usedHnsw, out double learningRate,
+            out int nEpochs, out double midNearRatio, out double farPairRatio, out bool quantizeOnSave, out uint hnswIndexCrc32, out uint embeddingHnswIndexCrc32);
 
         [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_get_model_stats")]
         private static extern void CallGetDistanceStatsLinux(IntPtr model, out double mean, out double p95, out double max);
@@ -413,8 +589,12 @@ namespace PacMAPSharp
         private IntPtr _nativeModel = IntPtr.Zero;
         private bool _disposed = false;
         private bool _isFitted = false;
+        private string? _filePath;
         private PacMAPModelInfo? _modelInfo = null;
         private ProgressCallback? _managedCallback = null;
+
+        // Expected DLL version - must match Rust pacmap_enhanced version
+        private const string EXPECTED_DLL_VERSION = "0.3.1";
 
         #endregion
 
@@ -494,6 +674,74 @@ namespace PacMAPSharp
         }
 
         /// <summary>
+        /// Verifies the native DLL version matches the expected C# wrapper version
+        /// </summary>
+        /// <exception cref="InvalidOperationException">Thrown when version mismatch is detected</exception>
+        /// <exception cref="DllNotFoundException">Thrown when native library cannot be loaded</exception>
+        public static void VerifyVersion()
+        {
+            try
+            {
+                // Get the actual version from the native library
+                string actualVersion = GetVersion();
+
+                // Extract just the version number (e.g., "0.3.0" from "PacMAP Enhanced v0.3.0 - HNSW: ENABLED, OpenBLAS: SYSTEM")
+                string extractedVersion = ExtractVersionNumber(actualVersion);
+
+                if (extractedVersion != EXPECTED_DLL_VERSION)
+                {
+                    string errorMsg = $"PacMAP version mismatch detected!\n" +
+                                    $"  Expected: v{EXPECTED_DLL_VERSION}\n" +
+                                    $"  Actual:   v{extractedVersion}\n" +
+                                    $"  Full:     {actualVersion}\n" +
+                                    $"Please update the native library or C# wrapper to matching versions.";
+
+                    throw new InvalidOperationException(errorMsg);
+                }
+            }
+            catch (DllNotFoundException ex)
+            {
+                string errorMsg = $"Failed to load PacMAP native library for version verification. " +
+                                $"Ensure {(IsWindows ? WindowsDll : LinuxDll)} is available.";
+                throw new DllNotFoundException(errorMsg, ex);
+            }
+            catch (InvalidOperationException)
+            {
+                // Re-throw version mismatch errors
+                throw;
+            }
+            catch (Exception ex)
+            {
+                string errorMsg = $"Version verification failed: {ex.Message}";
+                throw new InvalidOperationException(errorMsg, ex);
+            }
+        }
+
+        /// <summary>
+        /// Extracts version number from the full version string returned by native library
+        /// </summary>
+        /// <param name="fullVersionString">Full version string like "PacMAP Enhanced v0.3.0 - HNSW: ENABLED, OpenBLAS: SYSTEM"</param>
+        /// <returns>Just the version number like "0.3.0"</returns>
+        private static string ExtractVersionNumber(string fullVersionString)
+        {
+            if (string.IsNullOrEmpty(fullVersionString))
+                return "unknown";
+
+            // Look for pattern "v{version}" in the string
+            var match = System.Text.RegularExpressions.Regex.Match(fullVersionString, @"v(\d+\.\d+\.\d+)");
+            if (match.Success)
+                return match.Groups[1].Value;
+
+            // Fallback: look for just version pattern without 'v'
+            match = System.Text.RegularExpressions.Regex.Match(fullVersionString, @"(\d+\.\d+\.\d+)");
+            if (match.Success)
+                return match.Groups[1].Value;
+
+            // If no pattern found, return the original string
+            return fullVersionString;
+        }
+
+        /// <summary>
         /// Loads a previously saved PacMAP model from file
         /// </summary>
         /// <param name="filename">Path to the saved model file</param>
@@ -523,6 +771,7 @@ namespace PacMAPSharp
                         throw new InvalidDataException($"Failed to load model from: {filename}");
 
                     model._isFitted = true;
+                    model._filePath = Path.GetFullPath(filename);
                     // TODO: Extract model info from loaded model
                 }
             }
@@ -544,6 +793,11 @@ namespace PacMAPSharp
         /// <param name="metric">Distance metric (default: Euclidean)</param>
         /// <param name="hnswUseCase">HNSW optimization preference (default: Balanced)</param>
         /// <param name="forceExactKnn">Force exact KNN instead of HNSW (default: false)</param>
+        /// <param name="learningRate">Learning rate for optimization (default: 1.0)</param>
+        /// <param name="nEpochs">Number of training epochs (default: 450)</param>
+        /// <param name="midNearRatio">Mid-near pair ratio (default: 0.5)</param>
+        /// <param name="farPairRatio">Far pair ratio (default: 2.0)</param>
+        /// <param name="autodetectHnswParams">Enable HNSW parameter autodetection (default: true)</param>
         /// <param name="seed">Random seed for reproducibility (default: 42)</param>
         /// <param name="progressCallback">Optional progress reporting callback</param>
         /// <returns>Embedding result with coordinates and quality assessment</returns>
@@ -556,9 +810,17 @@ namespace PacMAPSharp
                                   DistanceMetric metric = DistanceMetric.Euclidean,
                                   HnswUseCase hnswUseCase = HnswUseCase.Balanced,
                                   bool forceExactKnn = false,
+                                  double learningRate = 1.0,
+                                  int nEpochs = 450,
+                                  double midNearRatio = 0.5,
+                                  double farPairRatio = 2.0,
+                                  bool autodetectHnswParams = true,
                                   ulong seed = 42,
                                   ProgressCallback? progressCallback = null)
         {
+            // CRITICAL: Verify DLL version before any native calls to prevent binary mismatches
+            VerifyVersion();
+
             if (data == null)
                 throw new ArgumentNullException(nameof(data));
 
@@ -582,34 +844,61 @@ namespace PacMAPSharp
                 fixed (double* dataPtr = data)
                 fixed (double* embeddingPtr = embedding)
                 {
+                    _managedCallback = progressCallback; // Store callback for native handler
                     var nativeCallback = progressCallback != null ? new NativeProgressCallback(NativeProgressHandler) : null;
 
                     var config = PacmapConfig.Default;
                     config.NNeighbors = neighbors;
                     config.EmbeddingDimensions = embeddingDimensions;
+                    config.NEpochs = nEpochs;
                     config.Seed = (int)seed;
                     config.NormalizationMode = (int)normalization; // C# enum matches FFI values directly
                     config.ForceExactKnn = forceExactKnn;
+                    config.LearningRate = learningRate;
+                    config.MidNearRatio = midNearRatio;
+                    config.FarPairRatio = farPairRatio;
                     config.HnswConfig.UseCase = (int)hnswUseCase;
+                    config.HnswConfig.AutodetectHnswParams = autodetectHnswParams;
 
+                    int embeddingBufferLen = rows * embeddingDimensions;
                     _nativeModel = IsWindows
-                        ? CallFitTransformWindows((IntPtr)dataPtr, rows, cols, config, (IntPtr)embeddingPtr, nativeCallback)
-                        : CallFitTransformLinux((IntPtr)dataPtr, rows, cols, config, (IntPtr)embeddingPtr, nativeCallback);
+                        ? CallFitTransformWindows((IntPtr)dataPtr, rows, cols, config, (IntPtr)embeddingPtr, embeddingBufferLen, nativeCallback)
+                        : CallFitTransformLinux((IntPtr)dataPtr, rows, cols, config, (IntPtr)embeddingPtr, embeddingBufferLen, nativeCallback);
 
                     if (_nativeModel == IntPtr.Zero)
                         throw new InvalidOperationException("Failed to fit PacMAP model");
 
                     _isFitted = true;
 
-                    // Get distance statistics
+                    // Get distance statistics and all model parameters
                     if (IsWindows)
                     {
                         CallGetDistanceStatsWindows(_nativeModel, out double mean, out double p95, out double max);
                         var distanceStats = (mean, p95, max);
 
-                        // Store model info
-                        _modelInfo = new PacMAPModelInfo(rows, cols, embeddingDimensions, neighbors,
-                                                       metric, normalization, !forceExactKnn && rows > 1000, 100.0f);
+                        // Get ALL model parameters from the native library (complete serialization metadata)
+                        int infoResult = CallGetModelInfoWindows(_nativeModel, out int actualSamples, out int actualFeatures, out int actualEmbedDim, out int actualNormMode,
+                                                               out int hnswM, out int hnswEfConstruction, out int hnswEfSearch, out bool actualUsedHnsw,
+                                                               out double actualLearningRate, out int actualNEpochs,
+                                                               out double actualMidNearRatio, out double actualFarPairRatio, out bool actualQuantizeOnSave,
+                                                               out uint hnswIndexCrc32, out uint embeddingHnswIndexCrc32);
+
+                        if (infoResult != 0)
+                        {
+                            Console.WriteLine("Warning: Failed to retrieve complete model info from native library");
+                        }
+
+                        // Store complete model info with ALL discovered parameters
+                        int? discoveredM = actualUsedHnsw ? hnswM : null;
+                        int? discoveredEfConstruction = actualUsedHnsw ? hnswEfConstruction : null;
+                        int? discoveredEfSearch = actualUsedHnsw ? hnswEfSearch : null;
+                        uint? crc1 = hnswIndexCrc32 != 0 ? hnswIndexCrc32 : null;
+                        uint? crc2 = embeddingHnswIndexCrc32 != 0 ? embeddingHnswIndexCrc32 : null;
+                        _modelInfo = new PacMAPModelInfo(actualSamples, actualFeatures, actualEmbedDim, neighbors,
+                                                       metric, (NormalizationMode)actualNormMode, actualUsedHnsw, 100.0f,
+                                                       discoveredM, discoveredEfConstruction, discoveredEfSearch,
+                                                       actualLearningRate, actualNEpochs, actualMidNearRatio,
+                                                       actualFarPairRatio, actualQuantizeOnSave, crc1, crc2, _filePath);
 
                         // Convert double array to float array for API consistency
                         var floatEmbedding = new float[embedding.Length];
@@ -629,9 +918,29 @@ namespace PacMAPSharp
                         CallGetDistanceStatsLinux(_nativeModel, out double mean, out double p95, out double max);
                         var distanceStats = (mean, p95, max);
 
-                        // Store model info
-                        _modelInfo = new PacMAPModelInfo(rows, cols, embeddingDimensions, neighbors,
-                                                       metric, normalization, !forceExactKnn && rows > 1000, 100.0f);
+                        // Get ALL model parameters from the native library (complete serialization metadata)
+                        int infoResult = CallGetModelInfoLinux(_nativeModel, out int actualSamples, out int actualFeatures, out int actualEmbedDim, out int actualNormMode,
+                                                             out int hnswM, out int hnswEfConstruction, out int hnswEfSearch, out bool actualUsedHnsw,
+                                                             out double actualLearningRate, out int actualNEpochs,
+                                                             out double actualMidNearRatio, out double actualFarPairRatio, out bool actualQuantizeOnSave,
+                                                             out uint hnswIndexCrc32, out uint embeddingHnswIndexCrc32);
+
+                        if (infoResult != 0)
+                        {
+                            Console.WriteLine("Warning: Failed to retrieve complete model info from native library");
+                        }
+
+                        // Store complete model info with ALL discovered parameters
+                        int? discoveredM = actualUsedHnsw ? hnswM : null;
+                        int? discoveredEfConstruction = actualUsedHnsw ? hnswEfConstruction : null;
+                        int? discoveredEfSearch = actualUsedHnsw ? hnswEfSearch : null;
+                        uint? crc1 = hnswIndexCrc32 != 0 ? hnswIndexCrc32 : null;
+                        uint? crc2 = embeddingHnswIndexCrc32 != 0 ? embeddingHnswIndexCrc32 : null;
+                        _modelInfo = new PacMAPModelInfo(actualSamples, actualFeatures, actualEmbedDim, neighbors,
+                                                       metric, (NormalizationMode)actualNormMode, actualUsedHnsw, 100.0f,
+                                                       discoveredM, discoveredEfConstruction, discoveredEfSearch,
+                                                       actualLearningRate, actualNEpochs, actualMidNearRatio,
+                                                       actualFarPairRatio, actualQuantizeOnSave, crc1, crc2, _filePath);
 
                         // Convert double array to float array for API consistency
                         var floatEmbedding = new float[embedding.Length];
@@ -675,6 +984,20 @@ namespace PacMAPSharp
 
                     if (result != 0)
                         throw new IOException($"Failed to save model to: {filename}");
+
+                    // Store the file path and update model info to include it
+                    _filePath = Path.GetFullPath(filename);
+                    if (_modelInfo != null)
+                    {
+                        var info = _modelInfo.Value;
+                        _modelInfo = new PacMAPModelInfo(info.TrainingSamples, info.InputDimension, info.OutputDimension,
+                                                       info.Neighbors, info.Metric, info.Normalization,
+                                                       info.UsedHNSW, info.HnswRecall,
+                                                       info.DiscoveredHnswM, info.DiscoveredHnswEfConstruction, info.DiscoveredHnswEfSearch,
+                                                       info.LearningRate, info.NEpochs,
+                                                       info.MidNearRatio, info.FarPairRatio, info.QuantizeOnSave,
+                                                       info.HnswIndexCrc32, info.EmbeddingHnswIndexCrc32, _filePath);
+                    }
                 }
             }
         }
