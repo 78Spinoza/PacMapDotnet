@@ -6,7 +6,7 @@
   "compilationOptions": {},
   "targets": {
     ".NETCoreApp,Version=v8.0": {
-      "PacMAPSharp/1.0.0": {
+      "PacMAPSharp/1.1.0": {
         "dependencies": {
           "System.Runtime.InteropServices": "4.3.0"
         },
@@ -81,7 +81,7 @@
     }
   },
   "libraries": {
-    "PacMAPSharp/1.0.0": {
+    "PacMAPSharp/1.1.0": {
       "type": "project",
       "serviceable": false,
       "sha512": ""

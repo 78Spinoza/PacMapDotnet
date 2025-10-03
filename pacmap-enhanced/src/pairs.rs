@@ -423,21 +423,26 @@ pub fn get_knn_indices(data: ArrayView2<f64>, n_neighbors: usize, _seed: u64) ->
 
     // Use same strategy as compute_pairs_hnsw
     if n_samples <= 1000 {
-        return get_knn_indices_bruteforce(data, n_neighbors);
+        // HNSW not efficient for small datasets - fail gracefully
+        panic!("HNSW not efficient for small datasets ({} samples). Minimum 1001 samples required.", n_samples);
     }
 
     #[cfg(feature = "use_hnsw")]
     {
-        // Try HNSW first for large datasets
-        if let Ok(hnsw_result) = try_hnsw_knn_indices(data, n_neighbors) {
-            return hnsw_result;
+        // HNSW ONLY - no fallbacks allowed
+        match try_hnsw_knn_indices(data, n_neighbors) {
+            Ok(hnsw_result) => hnsw_result,
+            Err(e) => panic!("HNSW neighbor search failed: {}. No fallback to brute-force KNN available.", e)
         }
     }
 
-    // Fallback to brute-force
-    get_knn_indices_bruteforce(data, n_neighbors)
+    #[cfg(not(feature = "use_hnsw"))]
+    {
+        panic!("HNSW feature not enabled. Compile with --features use_hnsw");
+    }
 }
 
+#[allow(dead_code)]
 fn get_knn_indices_bruteforce(data: ArrayView2<f64>, n_neighbors: usize) -> Vec<Vec<usize>> {
     let n_samples = data.shape()[0];
 

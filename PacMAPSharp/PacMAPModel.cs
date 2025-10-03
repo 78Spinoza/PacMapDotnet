@@ -606,7 +606,7 @@ namespace PacMAPSharp
         private ProgressCallback? _managedCallback = null;
 
         // Expected DLL version - must match Rust pacmap_enhanced version
-        private const string EXPECTED_DLL_VERSION = "0.3.3";
+        private const string EXPECTED_DLL_VERSION = "0.4.0";
 
         #endregion
 

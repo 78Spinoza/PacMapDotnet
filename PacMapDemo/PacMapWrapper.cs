@@ -103,9 +103,9 @@ namespace PacMapDemo
                         data: doubleData,
                         embeddingDimensions: 2,
                         neighbors: neighbors,
-                        normalization: NormalizationMode.ZScore,
-                        metric: DistanceMetric.Euclidean,
-                        hnswUseCase: HnswUseCase.Balanced,
+                        normalization: PacMAPSharp.NormalizationMode.ZScore,
+                        metric: PacMAPSharp.DistanceMetric.Euclidean,
+                        hnswUseCase: PacMAPSharp.HnswUseCase.Balanced,
                         forceExactKnn: forceExactKnn,
                         seed: (ulong)seed,
                         progressCallback: progressCallback

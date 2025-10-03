@@ -81,7 +81,7 @@ namespace PacMapDemo
                 double learningRate = 1.0;
                 ulong seed = 42;
 
-                var progressCallback = new ProgressCallback((phase, current, total, percent, message) =>
+                var progressCallback = new PacMAPSharp.ProgressCallback((phase, current, total, percent, message) =>
                 {
                     Console.WriteLine($"      [{phase}] {message} ({percent:F1}%)");
                 });
@@ -96,7 +96,7 @@ namespace PacMapDemo
                     embeddingDimensions: embeddingDim,
                     neighbors: neighbors,
                     normalization: NormalizationMode.ZScore,
-                    metric: DistanceMetric.Euclidean,
+                    metric: PacMAPSharp.DistanceMetric.Euclidean,
                     hnswUseCase: HnswUseCase.Balanced,
                     forceExactKnn: !useHnsw,
                     learningRate: learningRate,
@@ -119,7 +119,7 @@ namespace PacMapDemo
                     embeddingDimensions: embeddingDim,
                     neighbors: neighbors,
                     normalization: NormalizationMode.ZScore,
-                    metric: DistanceMetric.Euclidean,
+                    metric: PacMAPSharp.DistanceMetric.Euclidean,
                     hnswUseCase: HnswUseCase.Balanced,
                     forceExactKnn: !useHnsw,
                     learningRate: learningRate,
@@ -435,7 +435,7 @@ namespace PacMapDemo
                 */
 
                 // Quick HNSW debug test first
-                HnswQuickTest.RunMinimalHnswTest();
+                // HnswQuickTest.RunMinimalHnswTest(); // Commented out - file not found
 
                 Console.WriteLine();
                 // SKIP REGULAR MAMMOTH DEMO - RUN ONLY HAIRY MAMMOTH

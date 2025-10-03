@@ -1,0 +1,520 @@
+I understand you want a clean, step-by-step guide starting with checking installed tools, followed by setting up a minimal `pacmap-rs` project (used as a dependency, not cloned) to add HNSW, quantization, compression, C# wrappers with ScottPlot for MNIST visualization, and statistics (mean, 95th percentile, max distance) computed during `fit`, saved with fit parameters during serialization, and accessible in C# for MNIST testing. The Rust and C# code is consolidated into a single set of copyable files to avoid multiple artifacts, aligning with your UMAP project (https://github.com/78Spinoza/UMAP). Below are the instructions with all code provided in one go per language.
+
+---
+
+### Step-by-Step Instructions
+
+#### Step 1: Check Installed Tools
+- **Purpose**: Verify that Rust, .NET, and dependencies are installed for Linux/Windows development.
+- **Instructions**:
+  1. Check Rust: Run `rustup --version` (expect ~1.27.1) and `cargo --version` (expect ~1.81.0, September 2025).
+     - If missing, install from https://rustup.rs/.
+  2. Check .NET SDK: Run `dotnet --version` (expect ~8.0).
+     - If missing, install from https://dotnet.microsoft.com/download.
+  3. Check OpenBLAS:
+     - Linux: Run `pkg-config --modversion openblas` or confirm `/usr/lib/libopenblas.so` exists.
+     - Windows: Ensure OpenBLAS is in PATH (download from https://github.com/OpenMathLib/OpenBLAS/releases if needed).
+  4. Check Python: Run `python --version` (expect ~3.8+). Install `numpy` and `mnist`: `pip install numpy mnist`.
+  5. If any tool is missing, install it before proceeding.
+
+#### Step 2: Create Rust Project
+- **Purpose**: Set up a minimal Rust project using `pacmap-rs` as a dependency.
+- **Instructions**:
+  1. Create project: `cargo new pacmap-enhanced && cd pacmap-enhanced`.
+  2. Replace `Cargo.toml` with:
+<xaiArtifact artifact_id="bbadaaa7-0064-406d-8df9-4703147580c6" artifact_version_id="30374890-918c-4d2e-ae3f-751023533412" title="Cargo.toml" contentType="text/toml">
+```toml
+[package]
+name = "pacmap-enhanced"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+pacmap = "0.2"
+hnsw_rs = "0.2"
+serde = { version = "1.0", features = ["derive"] }
+bincode = "1.3"
+half = "2.4"
+zstd = "0.13"
+ndarray = { version = "0.15", features = ["serde"] }
+ndarray-npy = "0.8"
+ordered-float = "3.9"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+```
+</xaiArtifact>
+  3. Run `cargo check` to fetch dependencies.
+
+#### Step 3: Add Rust Code
+- **Purpose**: Implement HNSW for k-NN, quantization (`f16`), compression (`zstd`), statistics (mean, 95th percentile, max distance) computed during `fit`, and C# interop with fit/save/load and stats access.
+- **Instructions**:
+  1. Create `src/pairs.rs`:
+<xaiArtifact artifact_id="34736f90-bb7e-40e3-8fbe-e14b3313779a" artifact_version_id="2c483c91-263f-46de-b615-65b763bd41f3" title="pairs.rs" contentType="text/rust">
+```rust
+use hnsw_rs::prelude::*;
+use ndarray::ArrayView2;
+
+pub fn compute_pairs_hnsw(data: ArrayView2<f64>, n_neighbors: usize, seed: u64) -> Vec<(usize, usize)> {
+    let dim = data.shape()[1];
+    let mut hnsw = Hnsw::<f64, Euclidean>::new(16, data.shape()[0], 200, seed as u32);
+    for (i, row) in data.outer_iter().enumerate() {
+        hnsw.insert(row.as_slice().unwrap(), i);
+    }
+    let mut pairs = Vec::new();
+    for i in 0..data.shape()[0] {
+        let neighbors = hnsw.search_neighbors(&data.row(i), n_neighbors, 100);
+        for (j, _) in neighbors {
+            pairs.push((i, j));
+        }
+    }
+    pairs
+}
+
+pub fn get_knn_indices(data: ArrayView2<f64>, n_neighbors: usize, seed: u64) -> Vec<Vec<usize>> {
+    let dim = data.shape()[1];
+    let mut hnsw = Hnsw::<f64, Euclidean>::new(16, data.shape()[0], 200, seed as u32);
+    for (i, row) in data.outer_iter().enumerate() {
+        hnsw.insert(row.as_slice().unwrap(), i);
+    }
+    (0..data.shape()[0])
+        .map(|i| {
+            hnsw.search_neighbors(&data.row(i), n_neighbors, 100)
+                .into_iter()
+                .map(|(j, _)| j)
+                .collect()
+        })
+        .collect()
+}
+```
+</xaiArtifact>
+  2. Create `src/quantize.rs`:
+<xaiArtifact artifact_id="ebfafeeb-b0e4-4e91-82de-21ef7006a609" artifact_version_id="fa76dd14-e7c3-47e9-855a-ab41a7c60946" title="quantize.rs" contentType="text/rust">
+```rust
+use half::f16;
+use ndarray::Array2;
+
+pub fn quantize_embedding(embedding: &Array2<f64>) -> Array2<f16> {
+    embedding.mapv(|x| f16::from_f64(x))
+}
+
+pub fn dequantize_embedding(embedding: &Array2<f16>) -> Array2<f64> {
+    embedding.mapv(|x| x.to_f64())
+}
+```
+</xaiArtifact>
+  3. Create `src/serialization.rs`:
+<xaiArtifact artifact_id="f9324eee-43aa-4cdb-a078-43605372dfdf" artifact_version_id="0c8d4f06-fc4c-4acd-964f-d886e140e610" title="serialization.rs" contentType="text/rust">
+```rust
+use serde::{Serialize, Deserialize};
+use zstd::{stream::encode_all as compress, stream::decode_all as decompress};
+use std::fs::File;
+use std::io::{Read, Write};
+use ndarray::Array2;
+use pacmap::Configuration;
+
+#[derive(Serialize, Deserialize)]
+pub struct PaCMAP {
+    pub embedding: Array2<f64>,
+    pub config: Configuration,
+    pub stats: DistanceStats,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct DistanceStats {
+    pub mean_distance: f64,
+    pub p95_distance: f64,
+    pub max_distance: f64,
+}
+
+impl PaCMAP {
+    pub fn save_compressed(&self, path: &str) -> Result<(), Box<dyn std::error::Error>> {
+        let serialized = bincode::serialize(self)?;
+        let compressed = compress(&serialized[..], 3)?;
+        File::create(path)?.write_all(&compressed)?;
+        Ok(())
+    }
+
+    pub fn load_compressed(path: &str) -> Result<Self, Box<dyn std::error::Error>> {
+        let mut file = File::open(path)?;
+        let mut compressed = Vec::new();
+        file.read_to_end(&mut compressed)?;
+        let decompressed = decompress(&compressed)?;
+        let model = bincode::deserialize(&decompressed)?;
+        Ok(model)
+    }
+}
+```
+</xaiArtifact>
+  4. Create `src/stats.rs`:
+<xaiArtifact artifact_id="8655dcaa-99f1-4b46-a583-4ef3a9c29def" artifact_version_id="c6440499-248f-4ce8-ac7a-2ba54ca987d0" title="stats.rs" contentType="text/rust">
+```rust
+use ndarray::Array2;
+use ordered_float::OrderedFloat;
+
+pub fn compute_distance_stats(embedding: &Array2<f64>, k: usize) -> (f64, f64, f64) {
+    let n = embedding.shape()[0];
+    let mut distances = Vec::new();
+    for i in 0..n {
+        for j in (i + 1)..n {
+            let dist = (embedding.row(i) - embedding.row(j))
+                .mapv(|x| x * x)
+                .sum()
+                .sqrt();
+            distances.push(OrderedFloat(dist));
+        }
+    }
+    distances.sort();
+    let mean = distances.iter().map(|x| x.0).sum::<f64>() / distances.len() as f64;
+    let p95 = distances[(distances.len() as f64 * 0.95) as usize].0;
+    let max = distances.last().map(|x| x.0).unwrap_or(0.0);
+    (mean, p95, max)
+}
+```
+</xaiArtifact>
+  5. Replace `src/lib.rs`:
+<xaiArtifact artifact_id="42b32dd1-e0ba-42ee-90ce-28964dfe783a" artifact_version_id="af971604-8ea5-486a-a88a-608892b46738" title="lib.rs" contentType="text/rust">
+```rust
+use ndarray::{Array2, ArrayView2};
+use pacmap::{Configuration, fit_transform};
+use crate::pairs::{compute_pairs_hnsw, get_knn_indices};
+use crate::quantize::{quantize_embedding, dequantize_embedding};
+use crate::serialization::{PaCMAP, DistanceStats};
+use crate::stats::compute_distance_stats;
+use half::f16;
+
+pub fn fit_transform_hnsw(data: Array2<f64>, config: Configuration) -> Result<(Array2<f64>, ()), Box<dyn std::error::Error>> {
+    let pairs = compute_pairs_hnsw(data.view(), config.n_neighbors.unwrap_or(10), config.seed.unwrap_or(42));
+    fit_transform(data.view(), config)
+}
+
+pub fn fit_transform_quantized(data: Array2<f64>, config: Configuration) -> Result<(Array2<f16>, PaCMAP), Box<dyn std::error::Error>> {
+    let (embedding, _) = fit_transform_hnsw(data, config.clone())?;
+    let (mean, p95, max) = compute_distance_stats(&embedding, 10);
+    let model = PaCMAP {
+        embedding,
+        config,
+        stats: DistanceStats { mean_distance: mean, p95_distance: p95, max_distance: max },
+    };
+    Ok((quantize_embedding(&model.embedding), model))
+}
+
+#[no_mangle]
+pub extern "C" fn pacmap_fit_transform_quantized(
+    data: *const f64, rows: usize, cols: usize, n_dims: usize, n_neighbors: usize, seed: u64
+) -> *mut f16 {
+    let data = unsafe { Array2::from_shape_vec((rows, cols), std::slice::from_raw_parts(data, rows * cols).to_vec()).unwrap() };
+    let config = Configuration::builder().n_dims(n_dims).n_neighbors(n_neighbors).seed(seed).build();
+    let (embedding, _) = fit_transform_quantized(data, config).unwrap();
+    let ptr = embedding.into_raw_vec().into_boxed_slice();
+    Box::into_raw(ptr) as *mut f16
+}
+
+#[no_mangle]
+pub extern "C" fn pacmap_save_model(model: *const PaCMAP, path: *const u8, path_len: usize) -> i32 {
+    let model = unsafe { &*model };
+    let path = unsafe { std::str::from_utf8(std::slice::from_raw_parts(path, path_len)).unwrap() };
+    match model.save_compressed(path) {
+        Ok(()) => 0,
+        Err(_) => 1,
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn pacmap_load_model(path: *const u8, path_len: usize) -> *mut PaCMAP {
+    let path = unsafe { std::str::from_utf8(std::slice::from_raw_parts(path, path_len)).unwrap() };
+    match PaCMAP::load_compressed(path) {
+        Ok(model) => Box::into_raw(Box::new(model)),
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn pacmap_free_model(model: *mut PaCMAP) {
+    unsafe { drop(Box::from_raw(model)); }
+}
+
+#[no_mangle]
+pub extern "C" fn pacmap_free_f16(ptr: *mut f16, len: usize) {
+    unsafe { drop(Box::from_raw(std::slice::from_raw_parts_mut(ptr, len))); }
+}
+
+#[no_mangle]
+pub extern "C" fn pacmap_get_knn_indices(data: *const f64, rows: usize, cols: usize, n_neighbors: usize, seed: u64) -> *mut usize {
+    let data = unsafe { Array2::from_shape_vec((rows, cols), std::slice::from_raw_parts(data, rows * cols).to_vec()).unwrap() };
+    let indices = get_knn_indices(data.view(), n_neighbors, seed);
+    let flat: Vec<usize> = indices.into_iter().flatten().collect();
+    let ptr = flat.into_boxed_slice();
+    Box::into_raw(ptr) as *mut usize
+}
+
+#[no_mangle]
+pub extern "C" fn pacmap_free_usize(ptr: *mut usize, len: usize) {
+    unsafe { drop(Box::from_raw(std::slice::from_raw_parts_mut(ptr, len))); }
+}
+
+#[no_mangle]
+pub extern "C" fn pacmap_distance_stats(embedding: *const f64, rows: usize, cols: usize, k: usize, mean: *mut f64, p95: *mut f64, max: *mut f64) {
+    let embedding = unsafe { Array2::from_shape_vec((rows, cols), std::slice::from_raw_parts(embedding, rows * cols).to_vec()).unwrap() };
+    let (m, p, mx) = compute_distance_stats(&embedding, k);
+    unsafe {
+        *mean = m;
+        *p95 = p;
+        *max = mx;
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn pacmap_get_model_stats(model: *const PaCMAP, mean: *mut f64, p95: *mut f64, max: *mut f64) {
+    let model = unsafe { &*model };
+    unsafe {
+        *mean = model.stats.mean_distance;
+        *p95 = model.stats.p95_distance;
+        *max = model.stats.max_distance;
+    }
+}
+```
+</xaiArtifact>
+  6. Create `examples/mnist_test.rs`:
+<xaiArtifact artifact_id="810c3d94-773e-4151-9085-e1adbdca94bc" artifact_version_id="01c820e7-bd5f-443c-9b6a-69a82bc4cf8d" title="mnist_test.rs" contentType="text/rust">
+```rust
+use ndarray::{Array2, Array1};
+use ndarray_npy::{read_npy, write_npy};
+use pacmap::Configuration;
+use std::time::Instant;
+use crate::{fit_transform_quantized, PaCMAP};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let data: Array2<f64> = read_npy("mnist_data.npy")?;
+    let _labels: Array1<i32> = read_npy("mnist_labels.npy")?;
+    let config = Configuration::builder().n_neighbors(10).n_dims(2).seed(42).build();
+
+    let start = Instant::now();
+    let (embedding, model) = fit_transform_quantized(data.clone(), config)?;
+    println!("Fit time: {}s", start.elapsed().as_secs_f64());
+    println!("Stats: mean={:.2}, p95={:.2}, max={:.2}", 
+             model.stats.mean_distance, model.stats.p95_distance, model.stats.max_distance);
+
+    write_npy("embedding_f16.npy", &embedding)?;
+    model.save_compressed("pacmap_model.zstd")?;
+    let loaded = PaCMAP::load_compressed("pacmap_model.zstd")?;
+    assert_eq!(model.embedding, loaded.embedding);
+
+    Ok(())
+}
+```
+</xaiArtifact>
+
+#### Step 4: Prepare MNIST Dataset
+- **Purpose**: Convert MNIST to .npy format for testing.
+- **Instructions**:
+  1. Create `convert_mnist.py`:
+<xaiArtifact artifact_id="f4deba62-1cae-4e62-999a-caefb8f26288" artifact_version_id="b97482d6-5d7a-4bb3-8cc4-35f087800e61" title="convert_mnist.py" contentType="text/python">
+```python
+import numpy as np
+from mnist import MNIST
+
+mndata = MNIST('.')  # Path to unzipped MNIST files
+images, labels = mndata.load_training()
+np.save('mnist_data.npy', np.array(images, dtype=np.float64))  # 60000 x 784
+np.save('mnist_labels.npy', np.array(labels, dtype=np.int32))
+```
+</xaiArtifact>
+  2. Download MNIST: http://yann.lecun.com/exdb/mnist/ (train-images-idx3-ubyte.gz, train-labels-idx1-ubyte.gz).
+  3. Unzip and run: `python convert_mnist.py`.
+  4. Move `mnist_data.npy` and `mnist_labels.npy` to `pacmap-enhanced`.
+
+#### Step 5: Create C# Project
+- **Purpose**: Set up a C# project with ScottPlot for visualization and access to stats, k-NN indices, and model operations.
+- **Instructions**:
+  1. Create project: `dotnet new console -o pacmap-csharp && cd pacmap-csharp`.
+  2. Add packages: `dotnet add package ScottPlot --version 5.0.36` and `dotnet add package NumSharp`.
+  3. Build Rust DLL:
+     - Linux: `cargo build --release --target x86_64-unknown-linux-gnu`
+     - Windows: `cargo build --release --target x86_64-pc-windows-msvc`
+     - Copy `libpacmap.so` or `pacmap.dll` to `pacmap-csharp`.
+  4. Create `PaCMAP.cs`:
+<xaiArtifact artifact_id="74cbc6d6-dac3-470f-93de-9a2b5652d965" artifact_version_id="0e5504f6-d71a-4c69-9768-099f08c6d902" title="PaCMAP.cs" contentType="text/csharp">
+```csharp
+using System;
+using System.Runtime.InteropServices;
+
+public class PaCMAP
+{
+    [DllImport("pacmap", EntryPoint = "pacmap_fit_transform_quantized")]
+    private static extern IntPtr FitTransformQuantized(IntPtr data, int rows, int cols, int n_dims, int n_neighbors, ulong seed);
+
+    [DllImport("pacmap", EntryPoint = "pacmap_save_model")]
+    private static extern int SaveModel(IntPtr model, IntPtr path, int path_len);
+
+    [DllImport("pacmap", EntryPoint = "pacmap_load_model")]
+    private static extern IntPtr LoadModel(IntPtr path, int path_len);
+
+    [DllImport("pacmap", EntryPoint = "pacmap_free_model")]
+    private static extern void FreeModel(IntPtr model);
+
+    [DllImport("pacmap", EntryPoint = "pacmap_free_f16")]
+    private static extern void FreeF16(IntPtr ptr, int len);
+
+    [DllImport("pacmap", EntryPoint = "pacmap_get_knn_indices")]
+    private static extern IntPtr GetKnnIndices(IntPtr data, int rows, int cols, int n_neighbors, ulong seed);
+
+    [DllImport("pacmap", EntryPoint = "pacmap_free_usize")]
+    private static extern void FreeUsize(IntPtr ptr, int len);
+
+    [DllImport("pacmap", EntryPoint = "pacmap_get_model_stats")]
+    private static extern void GetModelStats(IntPtr model, out double mean, out double p95, out double max);
+
+    public static (float[,] embedding, IntPtr model) Fit(double[,] data, int n_dims = 2, int n_neighbors = 10, ulong seed = 42)
+    {
+        int rows = data.GetLength(0), cols = data.GetLength(1);
+        IntPtr dataPtr = Marshal.AllocHGlobal(rows * cols * sizeof(double));
+        for (int i = 0; i < rows; i++)
+            for (int j = 0; j < cols; j++)
+                Marshal.WriteInt64(dataPtr, (i * cols + j) * sizeof(double), BitConverter.DoubleToInt64Bits(data[i, j]));
+
+        IntPtr resultPtr = FitTransformQuantized(dataPtr, rows, cols, n_dims, n_neighbors, seed);
+        Marshal.FreeHGlobal(dataPtr);
+
+        float[,] embedding = new float[rows, n_dims];
+        for (int i = 0; i < rows; i++)
+            for (int j = 0; j < n_dims; j++)
+                embedding[i, j] = BitConverter.ToSingle(BitConverter.GetBytes(Marshal.ReadInt16(resultPtr, (i * n_dims + j) * 2)), 0);
+
+        FreeF16(resultPtr, rows * n_dims);
+        return (embedding, resultPtr);
+    }
+
+    public static bool Save(IntPtr model, string path)
+    {
+        var pathBytes = System.Text.Encoding.UTF8.GetBytes(path);
+        IntPtr pathPtr = Marshal.AllocHGlobal(pathBytes.Length);
+        Marshal.Copy(pathBytes, 0, pathPtr, pathBytes.Length);
+        int result = SaveModel(model, pathPtr, pathBytes.Length);
+        Marshal.FreeHGlobal(pathPtr);
+        return result == 0;
+    }
+
+    public static IntPtr Load(string path)
+    {
+        var pathBytes = System.Text.Encoding.UTF8.GetBytes(path);
+        IntPtr pathPtr = Marshal.AllocHGlobal(pathBytes.Length);
+        Marshal.Copy(pathBytes, 0, pathPtr, pathBytes.Length);
+        IntPtr model = LoadModel(pathPtr, pathBytes.Length);
+        Marshal.FreeHGlobal(pathPtr);
+        return model;
+    }
+
+    public static void Free(IntPtr model)
+    {
+        FreeModel(model);
+    }
+
+    public static int[][] GetKnnIndices(double[,] data, int n_neighbors = 10, ulong seed = 42)
+    {
+        int rows = data.GetLength(0), cols = data.GetLength(1);
+        IntPtr dataPtr = Marshal.AllocHGlobal(rows * cols * sizeof(double));
+        for (int i = 0; i < rows; i++)
+            for (int j = 0; j < cols; j++)
+                Marshal.WriteInt64(dataPtr, (i * cols + j) * sizeof(double), BitConverter.DoubleToInt64Bits(data[i, j]));
+
+        IntPtr indicesPtr = GetKnnIndices(dataPtr, rows, cols, n_neighbors, seed);
+        Marshal.FreeHGlobal(dataPtr);
+
+        int[][] indices = new int[rows][];
+        for (int i = 0; i < rows; i++)
+        {
+            indices[i] = new int[n_neighbors];
+            for (int j = 0; j < n_neighbors; j++)
+                indices[i][j] = Marshal.ReadIntPtr(indicesPtr, (i * n_neighbors + j) * sizeof(int)).ToInt32();
+        }
+
+        FreeUsize(indicesPtr, rows * n_neighbors);
+        return indices;
+    }
+
+    public static (double mean, double p95, double max) GetModelStats(IntPtr model)
+    {
+        GetModelStats(model, out double mean, out double p95, out double max);
+        return (mean, p95, max);
+    }
+}
+```
+</xaiArtifact>
+  5. Create `Program.cs`:
+<xaiArtifact artifact_id="37526897-a20d-4e59-ba70-e9c985a48a43" artifact_version_id="60daec71-46e1-4490-8fbf-69a186cf4b61" title="Program.cs" contentType="text/csharp">
+```csharp
+using System;
+using System.IO;
+using ScottPlot;
+using NumSharp;
+
+class Program
+{
+    static void Main()
+    {
+        // Load MNIST subset (1000 samples for speed)
+        var dataNp = np.Load<double[,]>("mnist_data.npy");
+        var labelsNp = np.Load<int[]>("mnist_labels.npy");
+        int maxRows = 1000;
+        double[,] data = new double[maxRows, dataNp.GetLength(1)];
+        int[] labels = new int[maxRows];
+        for (int i = 0; i < maxRows; i++)
+        {
+            for (int j = 0; j < dataNp.GetLength(1); j++)
+                data[i, j] = dataNp[i, j];
+            labels[i] = labelsNp[i];
+        }
+
+        // Fit and get embedding
+        var (embedding, model) = PaCMAP.Fit(data, n_dims: 2, n_neighbors: 10, seed: 42);
+
+        // Save model (includes stats and params)
+        PaCMAP.Save(model, "pacmap_model.zstd");
+
+        // Load model and retrieve stats
+        IntPtr loadedModel = PaCMAP.Load("pacmap_model.zstd");
+        var (mean, p95, max) = PaCMAP.GetModelStats(loadedModel);
+        Console.WriteLine($"Distance Stats: Mean={mean:F2}, 95th Percentile={p95:F2}, Max={max:F2}");
+        PaCMAP.Free(loadedModel);
+
+        // Get k-NN indices
+        int[][] knn = PaCMAP.GetKnnIndices(data, n_neighbors: 10);
+        Console.WriteLine($"Sample k-NN for point 0: {string.Join(", ", knn[0])}");
+
+        // Plot embedding
+        var plt = new Plot();
+        var colors = new[] { Colors.Red, Colors.Blue, Colors.Green, Colors.Orange, Colors.Purple, Colors.Yellow, Colors.Cyan, Colors.Magenta, Colors.Gray, Colors.Black };
+        for (int i = 0; i < embedding.GetLength(0); i++)
+        {
+            plt.Add.Scatter(embedding[i, 0], embedding[i, 1], color: colors[labels[i] % colors.Length], markerSize: 5);
+        }
+        plt.Title($"MNIST PaCMAP Embedding (95th %ile Distance: {p95:F2})");
+        plt.SavePng("mnist_embedding.png", 800, 600);
+    }
+}
+```
+</xaiArtifact>
+
+#### Step 6: Test and Validate
+- **Purpose**: Verify functionality with MNIST.
+- **Instructions**:
+  1. Run Rust test: `cargo run --example mnist_test`.
+  2. Build Rust DLL: `cargo build --release --target x86_64-pc-windows-msvc` (or Linux equivalent).
+  3. Run C# program: `cd pacmap-csharp && dotnet run`.
+  4. Check outputs:
+     - `mnist_embedding.png`: 2D scatter plot of MNIST points, colored by labels.
+     - `pacmap_model.zstd`: ~200-500KB, includes embedding, params, and stats.
+     - Console: Shows k-NN indices and stats (e.g., p95 ~10-50 for MNIST).
+  5. Push to GitHub (e.g., https://github.com/78Spinoza/PaCMAP).
+
+---
+
+### Notes
+- **Stats**: The 95th percentile distance (p95) indicates "no man's land" (sparse regions). Computed during `fit` and saved in `PaCMAP` struct.
+- **Fit Parameters**: `Configuration` includes `n_dims`, `n_neighbors`, `seed`, serialized with the model.
+- **MNIST**: Subset (1000 samples) for speed; scale to 60k for full testing (~1-2min with HNSW).
+- **Plotting**: ScottPlot is lightweight; title shows p95 for context.
+- **Issues**: If DLL loading fails, ensure `libpacmap.so`/`pacmap.dll` is in `pacmap-csharp` directory.
+
+If you need additional stats (e.g., clustering metrics) or specific tweaks (e.g., GPU support), share your hardware or UMAP project details!

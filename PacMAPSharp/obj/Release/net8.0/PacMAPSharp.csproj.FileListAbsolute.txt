@@ -11,3 +11,5 @@ C:\PacMAN\PacMAPSharp\obj\Release\net8.0\PacMAPSharp.sourcelink.json
 C:\PacMAN\PacMAPSharp\obj\Release\net8.0\PacMAPSharp.dll
 C:\PacMAN\PacMAPSharp\obj\Release\net8.0\refint\PacMAPSharp.dll
 C:\PacMAN\PacMAPSharp\obj\Release\net8.0\ref\PacMAPSharp.dll
+C:\PacMAN\PacMAPSharp\bin\Release\net8.0\libpacmap_enhanced.so
+C:\PacMAN\PacMAPSharp\bin\Release\net8.0\libopenblas.so.0
