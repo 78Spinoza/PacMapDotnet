@@ -1,0 +1,578 @@
+I'll review the provided Rust code, focusing on the `fit` and `transform` functions in `stats.rs`, as well as related functionality across the codebase, particularly for potential issues, refactoring opportunities, and adherence to the requested review style ("review the code and find issues refactoring or other"). I'll also consider the broader context of the PaCMAP implementation, including normalization, HNSW integration, and serialization, since these are interconnected with the `fit` and `transform` functions. The review will identify issues, suggest refactoring improvements, and highlight areas for optimization or clarification, keeping responses concise yet comprehensive.
+
+### Overview
+The codebase implements an enhanced version of the PaCMAP algorithm with HNSW-accelerated neighbor search, normalization, and quantization for dimensionality reduction. The `fit` and `transform` functions in `stats.rs` handle data normalization, a critical component for consistent feature scaling in PaCMAP, similar to UMAP. The `fit` function computes normalization parameters (e.g., means, standard deviations) from training data, while `transform` applies these parameters to normalize new data. These functions are used within the broader `fit_transform_hnsw` and `transform_with_model` functions in `lib.rs`.
+
+### Review of `fit` and `transform` Functions in `stats.rs`
+
+#### 1. `fit` Function
+**Code Summary**: The `fit` function in `NormalizationParams` computes normalization parameters (`means`, `stds`, `mins`, `maxs`, `medians`, `iqrs`) based on the specified `NormalizationMode` (ZScore, MinMax, Robust, or None) for a given `Array2<f64>` dataset.
+
+**Issues and Observations**:
+- **Incomplete Implementation**: The `fit` function references helper methods (`compute_zscore_params`, `compute_minmax_params`, `compute_robust_params`) that are truncated in the provided code. This makes it impossible to fully evaluate their correctness. For example, `compute_zscore_params` uses `data.mean_axis(Axis(0))`, but the standard deviation calculation is missing. Similarly, `compute_robust_params` likely requires median and IQR computations, which are complex and error-prone if not implemented carefully (e.g., handling edge cases like identical values).
+- **Vector Resizing**: The function resizes parameter vectors (`means`, `stds`, etc.) using `resize`, which could be inefficient if called repeatedly. Pre-allocating with the correct size in `new` would be more efficient:
+  ```rust
+  pub fn new(n_features: usize, mode: NormalizationMode) -> Self {
+      Self {
+          means: vec![0.0; n_features],
+          stds: vec![1.0; n_features],
+          mins: vec![0.0; n_features],
+          maxs: vec![1.0; n_features],
+          medians: vec![0.0; n_features],
+          iqrs: vec![1.0; n_features],
+          mode,
+          n_features,
+          is_fitted: false,
+      }
+  }
+  ```
+  The current implementation is correct but could be optimized by avoiding `resize` in `fit` since `n_features` is known at construction.
+- **Error Handling**: The function checks for empty data and feature dimension mismatches, which is good. However, it doesn't validate data for numerical issues (e.g., NaN or infinite values), which could cause problems in statistical computations (e.g., mean or IQR). Adding a check like `data.iter().all(|x| x.is_finite())` would improve robustness.
+- **Redundant `n_features` Check**: The condition `if self.n_features == 0` is unnecessary since `new` ensures `n_features` is set correctly. This could be simplified:
+  ```rust
+  if n_features != self.n_features {
+      return Err(NormalizationError::new(&format!(
+          "Feature dimension mismatch: expected {}, got {}",
+          self.n_features, n_features
+      )));
+  }
+  ```
+- **Mode-Specific Logic**: The `match self.mode` block dispatches to mode-specific methods, which is clean. However, the `None` case does nothing, which is fine but could be documented explicitly to clarify that no parameters are computed.
+
+**Refactoring Suggestions**:
+1. **Complete Missing Implementations**: Ensure `compute_zscore_params`, `compute_minmax_params`, and `compute_robust_params` handle edge cases (e.g., zero variance, identical values, NaN/infinite values). For example, for ZScore:
+   ```rust
+   fn compute_zscore_params(&mut self, data: &Array2<f64>) -> Result<(), NormalizationError> {
+       if !data.iter().all(|x| x.is_finite()) {
+           return Err(NormalizationError::new("Data contains NaN or infinite values"));
+       }
+       self.means = data.mean_axis(Axis(0)).unwrap().to_vec();
+       self.stds = data.std_axis(Axis(0), 1.0).to_vec();
+       for (i, &std) in self.stds.iter().enumerate() {
+           if std <= 0.0 {
+               return Err(NormalizationError::new(&format!("Zero variance in feature {}", i)));
+           }
+       }
+       Ok(())
+   }
+   ```
+2. **Pre-Allocation Optimization**: Remove `resize` calls by ensuring vectors are correctly sized in `new`. This is already mostly done, but confirm no redundant resizing occurs.
+3. **Add Numerical Stability Checks**: Validate input data for NaN/infinite values before computing statistics to prevent crashes or incorrect results.
+4. **Document `None` Case**: Add a comment in the `NormalizationMode::None` branch to clarify that no parameters are computed, improving code readability.
+
+#### 2. `transform` Function
+**Code Summary**: The `transform` function applies normalization to a mutable `Array2<f64>` using the fitted parameters, based on the `NormalizationMode`. It checks if the model is fitted and if the feature dimensions match.
+
+**Issues and Observations**:
+- **Missing Helper Methods**: Like `fit`, the `transform` function relies on truncated helper methods (`apply_zscore_normalization`, `apply_minmax_normalization`, `apply_robust_normalization`). Without these, it's hard to verify correctness. For example, ZScore normalization likely involves `(x - mean) / std`, but edge cases (e.g., zero standard deviation) need handling.
+- **Error Handling**: The function properly checks `is_fitted` and feature dimension mismatches, which is robust. However, it doesn't validate the input data for NaN/infinite values, which could propagate issues during normalization.
+- **Performance**: The `transform` function modifies the input `Array2<f64>` in place, which is efficient. However, without seeing the helper methods, it's unclear if they use optimal ndarray operations (e.g., vectorized operations vs. loops). For example, ZScore normalization should use:
+  ```rust
+  fn apply_zscore_normalization(&self, data: &mut Array2<f64>) -> Result<(), NormalizationError> {
+      for (i, (mean, std)) in self.means.iter().zip(self.stds.iter()).enumerate() {
+          data.column_mut(i).mapv_inplace(|x| (x - mean) / std);
+      }
+      Ok(())
+  }
+  ```
+- **Consistency with `fit`**: The function assumes parameters were computed correctly in `fit`. The `validate_params` method in `stats.rs` checks parameter validity (e.g., non-zero standard deviations), which is good, but it should be called explicitly in `transform` to ensure consistency.
+
+**Refactoring Suggestions**:
+1. **Complete Helper Methods**: Implement and verify the helper methods. For example, for MinMax:
+   ```rust
+   fn apply_minmax_normalization(&self, data: &mut Array2<f64>) -> Result<(), NormalizationError> {
+       for (i, (min, max)) in self.mins.iter().zip(self.maxs.iter()).enumerate() {
+           if max - min <= 0.0 {
+               return Err(NormalizationError::new(&format!("Invalid range for feature {}", i)));
+           }
+           data.column_mut(i).mapv_inplace(|x| (x - min) / (max - min));
+       }
+       Ok(())
+   }
+   ```
+2. **Add Input Validation**: Check for NaN/infinite values in the input data:
+   ```rust
+   if !data.iter().all(|x| x.is_finite()) {
+       return Err(NormalizationError::new("Input data contains NaN or infinite values"));
+   }
+   ```
+3. **Explicit Parameter Validation**: Call `validate_params` at the start of `transform` to ensure parameters are valid before applying normalization.
+4. **Optimize for Performance**: Ensure helper methods use vectorized ndarray operations (e.g., `mapv_inplace`) rather than manual loops to leverage BLAS optimizations.
+
+#### 3. `fit_transform` Function
+**Code Summary**: Combines `fit` and `transform` into a single step for convenience, used during training.
+
+**Issues and Observations**:
+- **Simplicity**: The function is straightforward, calling `fit` followed by `transform`. It inherits all issues from those functions.
+- **Error Propagation**: Errors from `fit` or `transform` are properly propagated, which is good.
+- **Redundancy**: Since `fit` and `transform` already validate feature dimensions, the checks are duplicated. This is not a major issue but could be streamlined.
+
+**Refactoring Suggestions**:
+1. **Streamline Validation**: If `fit` and `transform` are guaranteed to perform the same checks, consider reducing redundancy by trusting `fit`’s validation in `fit_transform`.
+2. **Add Logging**: Add verbose logging (using the `vprint!` macro from `lib.rs`) to report when `fit_transform` is called, aiding debugging in large pipelines.
+
+### Broader Context and Integration
+
+#### Integration with `fit_transform_hnsw` (lib.rs)
+**Code Summary**: This function in `lib.rs` orchestrates the PaCMAP algorithm, including normalization (via `fit_transform`), HNSW-based neighbor search, and embedding computation. It uses `NormalizationParams` and supports progress callbacks.
+
+**Issues and Observations**:
+- **Normalization Integration**: The function likely calls `NormalizationParams::fit_transform` (though the code is truncated). It’s critical that the normalization mode is chosen appropriately (e.g., via `recommend_normalization_mode`). The `recommend_normalization_mode` function uses a simple outlier-based heuristic, which may not always be optimal (e.g., it doesn’t consider feature distributions beyond IQR).
+- **HNSW Usage**: The function decides between HNSW and brute-force KNN based on dataset size (`n_samples > 1000`) and `force_exact_knn`. This is reasonable, but the threshold (1000) is arbitrary and could be tuned based on performance profiling.
+- **Progress Callbacks**: The use of progress callbacks is excellent for user feedback but could be more granular within normalization steps to report specific progress (e.g., “Computing means”, “Applying normalization”).
+- **Error Handling**: The function handles HNSW validation errors well (via `validate_hnsw_quality_with_retry`), but normalization errors could be more descriptive in the callback messages.
+
+**Refactoring Suggestions**:
+1. **Improve Normalization Mode Selection**: Enhance `recommend_normalization_mode` to consider feature variance or skewness, not just outliers. For example:
+   ```rust
+   fn recommend_normalization_mode(data: &Array2<f64>) -> NormalizationMode {
+       let has_outliers = /* existing outlier check */;
+       let variance = data.var_axis(Axis(0), 1.0);
+       let high_variance = variance.iter().any(|&v| v > 1e6);
+       if has_outliers {
+           NormalizationMode::Robust
+       } else if high_variance {
+           NormalizationMode::MinMax
+       } else {
+           NormalizationMode::ZScore
+       }
+   }
+   ```
+2. **Dynamic HNSW Threshold**: Replace the hardcoded `HNSW_THRESHOLD` (1000) with a dynamic value based on profiling or dataset characteristics (e.g., `n_features * log(n_samples)`).
+3. **Granular Progress Callbacks**: Add callbacks within `NormalizationParams::fit` and `transform` to report progress for large datasets:
+   ```rust
+   pub fn fit(&mut self, data: &Array2<f64>, progress_callback: Option<&dyn Fn(&str, usize, usize, f32, &str)>) -> Result<(), NormalizationError> {
+       // ... existing checks ...
+       progress_callback.unwrap_or(&|_, _, _, _, _| ())( "Computing normalization parameters", 0, 100, 0.0, "Starting normalization");
+       // ... compute parameters ...
+       progress_callback.unwrap_or(&|_, _, _, _, _| ())( "Normalization parameters computed", 100, 100, 100.0, "Fit completed");
+       Ok(())
+   }
+   ```
+4. **Error Context**: Enhance error messages to include context (e.g., “Normalization failed during ZScore computation due to zero variance in feature 3”).
+
+#### Integration with `transform_with_model` (lib.rs)
+**Code Summary**: This function transforms new data using a pre-fitted `PaCMAP` model, applying the stored `NormalizationParams` and finding neighbors in both high-dimensional and embedding spaces.
+
+**Issues and Observations**:
+- **Normalization Consistency**: The function relies on the stored `normalization` parameters, which is correct for consistency. However, it doesn’t re-validate the parameters (e.g., via `validate_params`) before applying them, which could catch issues if the model was corrupted during serialization.
+- **HNSW Usage**: The function uses HNSW for neighbor search in both original and embedding spaces if `model.config.used_hnsw` is true. This is consistent but fails hard if HNSW is not compiled (`#[cfg(not(feature = "use_hnsw")]`). A fallback mechanism (e.g., brute-force KNN) could improve robustness.
+- **Memory Efficiency**: The function converts entire rows to `Vec<f32>` for HNSW, which could be memory-intensive for large datasets. Streaming or slicing could reduce memory usage.
+- **Error Handling**: Errors are well-handled with specific codes in the FFI interface, but the error messages could be more descriptive (e.g., specifying which feature caused a dimension mismatch).
+
+**Refactoring Suggestions**:
+1. **Validate Parameters**: Call `model.normalization.validate_params()` before applying normalization to catch corrupted models:
+   ```rust
+   if let Err(e) = model.normalization.validate_params() {
+       return Err(format!("Invalid normalization parameters: {}", e).into());
+   }
+   ```
+2. **HNSW Fallback**: Add a fallback to brute-force KNN if HNSW is unavailable, even if the model was trained with HNSW, to support non-HNSW builds:
+   ```rust
+   #[cfg(not(feature = "use_hnsw"))]
+   {
+       vprint!("WARNING: HNSW not available, falling back to brute-force KNN for transform");
+       // Implement brute-force neighbor search
+   }
+   ```
+3. **Optimize Memory Usage**: Use `ArrayView1<f32>` instead of `Vec<f32>` for HNSW queries to avoid copying:
+   ```rust
+   let query = new_data.row(i).mapv(|x| x as f32);
+   let neighbors = hnsw.search(query.as_slice().unwrap(), k, hnsw_params.ef_search);
+   ```
+4. **Descriptive Errors**: Include more context in error messages, e.g., “Dimension mismatch: expected 50 features, got 45 in new data row 3”.
+
+### Additional Observations Across the Codebase
+1. **Serialization (serialization.rs)**:
+   - The `PaCMAP` struct serializes `embedding` and `quantized_embedding`, which could lead to redundancy if both are stored. Consider clearing `embedding` when `quantized_embedding` is present to save space:
+     ```rust
+     pub fn quantize_for_save(&mut self) {
+         if self.quantized_embedding.is_none() {
+             self.quantized_embedding = Some(quantize_embedding_linear(&self.embedding));
+             if self.quantize_on_save {
+                 self.embedding = Array2::zeros((0, 0)); // Clear to save space
+             }
+         }
+     }
+     ```
+   - The `print_model_settings` function is verbose but useful for debugging. Consider adding a condensed version for production use.
+
+2. **Quantization (quantize.rs)**:
+   - The `quantize_embedding_linear` function uses `f16`, which is good for memory but may lose precision for extreme values. Consider adding a warning if the data range exceeds `f16` limits (±65504).
+   - The `validate_quantization_mse` function provides good quality assessment but could log warnings to the progress callback for better user feedback.
+
+3. **HNSW Parameters (hnsw_params.rs)**:
+   - The `auto_scale` function uses sensible defaults but could incorporate user-specified constraints (e.g., max memory) more explicitly. The `recommend_hnsw_params` function does this but is marked `#[allow(dead_code)]`, suggesting it’s underutilized.
+   - Consider integrating `recommend_hnsw_params` into `fit_transform_hnsw` for more flexible parameter tuning.
+
+4. **Recall Validation (recall_validation.rs)**:
+   - The `compute_hnsw_recall` function uses a subset for efficiency, which is good, but the sample size (`sqrt(n).min(50).max(10)`) could be tuned further based on dataset size or desired confidence.
+   - The retry mechanism in `validate_hnsw_quality_with_retry` is robust but caps `ef_search` at 1024, which may be insufficient for very large datasets. Consider a dynamic cap based on `n_samples`.
+
+5. **FFI Interface (ffi.rs)**:
+   - The FFI interface is well-designed for C# integration, with clear error codes and progress callbacks. However, it could benefit from additional safety checks (e.g., bounds checking for `data` slices).
+   - The `PacmapConfig` struct uses `c_int` for `seed`, which limits it to 32-bit values. Consider using `c_long` for consistency with Rust’s `u64`.
+
+### General Refactoring and Optimization Opportunities
+1. **Consistent Logging**: Use the `vprint!` macro consistently across all functions (e.g., in `fit` and `transform`) to provide debugging information when `PACMAP_VERBOSE` is set.
+2. **Numerical Stability**: Add comprehensive checks for NaN/infinite values across all numerical computations, not just in normalization.
+3. **Memory Optimization**: Optimize memory usage in HNSW searches by avoiding unnecessary `Vec` allocations, especially for large datasets.
+4. **Testing**: The codebase includes test modules (e.g., `test_normalization`), but ensure they cover edge cases like empty datasets, zero variance, or extreme values. Add integration tests for `fit_transform_hnsw` and `transform_with_model` to verify end-to-end behavior.
+5. **Documentation**: Add more detailed docstrings for `fit` and `transform`, specifying expected input ranges, edge cases, and performance characteristics.
+
+### Conclusion
+The `fit` and `transform` functions in `stats.rs` are well-structured but incomplete due to missing helper method implementations. Key issues include potential numerical instability, redundant vector resizing, and lack of input validation for NaN/infinite values. Refactoring suggestions focus on completing implementations, optimizing performance with vectorized operations, and enhancing error handling. In the broader codebase, integration with HNSW, serialization, and quantization is robust but could benefit from memory optimizations, better fallback mechanisms, and more granular progress reporting. The FFI interface is solid for C# integration but needs minor safety improvements.
+
+
+
+about point nr 1: 
+
+
+The issue I've identified is not a bug that would cause a crash or prevent the fit function from completing. Your experience that the code runs and produces an embedding is correct. The problem is a more subtle but critical algorithmic quality issue that leads to inconsistent and suboptimal results, especially for large datasets.
+
+Here is a simple breakdown of the problem:
+
+The algorithm is designed to use two different methods for finding neighbors depending on the dataset size:
+
+    For small datasets (<= 1000 samples): It uses a brute-force method.
+
+    For large datasets (> 1000 samples): It uses HNSW for speed.
+
+The core of the problem is that these two paths are not applying the same logic, so they will behave differently.
+
+    The Brute-Force Path (Small Datasets): This path correctly implements a crucial step called "local distance scaling". This technique adapts to the density of your data. It helps correctly identify neighbors in both very dense clusters and very sparse areas, which is essential for creating a high-quality embedding.
+
+    The HNSW Path (Large Datasets): The specific HNSW function being called in your main lib.rs file (compute_pairs_hnsw_to_per_point) successfully uses HNSW to find approximate nearest neighbors quickly. However, it omits the "local distance scaling" step. It finds neighbors based on raw distance alone.
+
+What is the impact?
+
+    Inconsistent Results: Your algorithm is currently treating small and large datasets differently. The embeddings generated for a dataset with 900 points will follow a different set of rules than one with 1,100 points, making results less reliable and harder to compare.
+
+    Lower Quality Embeddings for Large Data: You are successfully getting the speed benefit of HNSW, but not the full quality benefit of the PaCMAP algorithm. Without density adaptation, the model will struggle on datasets with clusters of varying densities, which is a very common scenario. The resulting embeddings will be of lower quality than they should be.
+
+So, while the fit function works and HNSW is correctly performing the neighbor search, a critical part of the algorithm that ensures high quality is being skipped for all large datasets. My recommendation is to make the HNSW path algorithmically consistent with the brute-force path by adding the missing density adaptation logic.
+
+
+
+Would you like me to provide a specific refactored version of `fit` or `transform` with the suggested changes, or focus on a particular aspect (e.g., HNSW integration, quantization)?
+
+
+
+Of course. To get the full benefits of the PaCMAP algorithm (specifically its density adaptation) while still using HNSW for its speed, you need to make the HNSW neighbor search path algorithmically consistent with the brute-force path.
+
+The solution is to integrate the "local distance scaling" logic directly into the HNSW neighbor-finding function that your library uses for large datasets.
+
+Here is the step-by-step plan to achieve this, based on the provided code:
+
+The Plan: Add Density Adaptation to the HNSW Path
+
+The goal is to modify the function try_hnsw_per_point_search in pairs.rs, as this is the function ultimately responsible for finding neighbors with HNSW for large datasets.
+
+The modification involves two phases:
+
+Phase 1: Estimate Local Density (Sigma) Using HNSW
+
+First, for each data point, you need to calculate its local density factor, known as sigma. You can do this efficiently using the HNSW index you've already built.
+
+    For each point i, perform a quick HNSW search to find its ~10-12 nearest neighbors.
+
+    Calculate sigma for point i as the average distance to its 4th, 5th, and 6th nearest neighbors found via HNSW. This gives you an efficient approximation of the local data density.
+
+    Store these sigma values for every point in the dataset.
+
+Phase 2: Find Neighbors Using Scaled Distances
+
+Next, you will find the final neighbors by re-ranking them based on a scaled distance that incorporates the sigma values.
+
+    For each point i, perform another HNSW search to get a list of candidate neighbors (e.g., n_neighbors + 50 to have extra candidates for re-ranking).
+
+    For each candidate neighbor j, calculate a new scaled distance using the formula: scaled_dist = original_dist_sq / (sigma[i] * sigma[j]).
+
+    Sort the candidate neighbors based on this new scaled_dist, not the original distance.
+
+    Select the top n_neighbors from this sorted list. These are now your density-aware nearest neighbors.
+
+    The function should return these final neighbors along with their original, unscaled distances, as these are needed for the next steps in the PaCMAP algorithm.
+
+Summary of the Outcome
+
+By implementing these changes, you will have a unified neighbor search strategy:
+
+    HNSW will be used for what it's best at: Finding a set of nearby candidate points very quickly in large datasets.
+
+    PaCMAP's core logic will be preserved: The final selection of neighbors will be based on the density-adapted scaled distance, ensuring that the embedding quality is high and consistent with the theoretically sound brute-force method.
+
+This will fix the inconsistency and allow you to use HNSW to its full potential, achieving both high speed and high-quality results from your fit function.
+
+
+
+
+nr 2.
+
+
+
+Of course. The second issue identified in the review was a **critical bug where the HNSW configuration provided by the user through the FFI (C/C#) interface was completely ignored.**
+
+### The Problem Explained
+
+The FFI layer in `ffi.rs` provides a `PacmapHnswConfig` struct, allowing users to manually set HNSW parameters like `m`, `ef_construction`, and `ef_search`. However, these parameters were never actually used. The core fitting logic in `lib.rs` and `pairs.rs` would unconditionally call `HnswParams::auto_scale()`, overwriting any user-provided settings.
+
+This meant a key feature of the library was non-functional for users calling it from C# or other C-compatible languages.
+
+### The Solution
+
+The fix requires passing the user's HNSW configuration down through the entire call chain, from the FFI layer to the functions that actually build the HNSW index. This involves changes in three files: `ffi.rs`, `lib.rs`, and `pairs.rs`.
+
+---
+
+### 1. Corrected Code: `lib.rs`
+
+We need to modify the main fitting functions to accept and use custom HNSW parameters.
+
+**File: `lib.rs`**
+
+```rust
+// In lib.rs
+
+/// Fit the data using HNSW-accelerated PaCMAP transformation
+// CHANGE: Add hnsw_params argument to the function signature
+pub fn fit_transform_hnsw(
+    data: Array2<f64>, 
+    config: Configuration, 
+    force_exact_knn: bool, 
+    progress_callback: Option<&(dyn Fn(&str, usize, usize, f32, &str) + Send + Sync)>,
+    custom_hnsw_params: Option<HnswParams> // NEW: Accept custom params
+) -> Result<(Array2<f64>, Option<HnswParams>), Box<dyn std::error::Error>> {
+    // ... (code at the start of the function remains the same)
+
+    // Track optimized HNSW parameters to return them for model storage
+    let mut optimized_hnsw_params: Option<HnswParams> = None;
+
+    let updated_config = if use_hnsw {
+        // ... (reporting logic)
+
+        // CHANGE: Use the provided parameters if they exist, otherwise validate and use them.
+        let mut hnsw_params = custom_hnsw_params.unwrap_or_else(|| {
+            HnswParams::auto_scale(n_samples, n_features, n_neighbors)
+        });
+
+        // Validate HNSW recall quality with auto-retry and ef_search optimization
+        // CHANGE: Pass the ef_search from our params for validation
+        match validate_hnsw_quality_with_retry(data.view(), n_neighbors, seed, hnsw_params.ef_search, Some(&report_progress)) {
+            Ok((quality_msg, optimized_ef_search)) => {
+                if optimized_ef_search != hnsw_params.ef_search {
+                    vprint!("HNSW ef_search optimized: {} -> {} (auto-retry tuning)", hnsw_params.ef_search, optimized_ef_search);
+                    hnsw_params.ef_search = optimized_ef_search;
+                }
+                vprint!("HNSW validation result: {}", quality_msg);
+            },
+            Err(error) => {
+                return Err(format!("HNSW validation failed: {}", error).into());
+            }
+        }
+
+        // Store optimized parameters for model storage
+        optimized_hnsw_params = Some(hnsw_params.clone());
+
+        // Compute neighbor pairs using HNSW with optimized parameters
+        vprint!("DEBUG: Starting HNSW neighbor computation with ef_search={}...", hnsw_params.ef_search);
+        
+        // CHANGE: Pass the params to the pairs function
+        let hnsw_pairs = match crate::pairs::compute_pairs_hnsw_to_per_point(data.view(), n_neighbors, seed, &hnsw_params) {
+            Ok(mut nn_per_point) => {
+                // ... (symmetrization logic)
+            },
+            Err(e) => {
+                vprint!("ERROR: Failed to compute per-point neighbors: {}, falling back to exact KNN", e);
+                // Fallback logic...
+                Configuration {
+                    pair_configuration: PairConfiguration::default(),
+                    ..config
+                }
+            }
+        };
+        // ... (rest of the function)
+    } else {
+        // ... (exact KNN logic)
+    };
+    // ... (rest of the function)
+}
+
+/// Enhanced fit function with normalization, HNSW auto-scaling, and progress reporting with force_exact_knn control
+// CHANGE: Add custom_hnsw_params argument
+pub fn fit_transform_normalized_with_progress_and_force_knn(
+    mut data: Array2<f64>,
+    config: Configuration,
+    normalization_mode: Option<NormalizationMode>,
+    progress_callback: Option<ProgressCallback>,
+    force_exact_knn: bool,
+    use_quantization: bool,
+    custom_hnsw_params: Option<HnswParams> // NEW: Accept custom params
+) -> Result<(Array2<f64>, PaCMAP>, Box<dyn std::error::Error>> {
+    // ... (code at the start of the function remains the same)
+
+    // CHANGE: Use the provided params or fall back to auto-scaling
+    let mut hnsw_params = if !force_exact_knn {
+        custom_hnsw_params.unwrap_or_else(|| {
+            progress("HNSW Config", 20, 100, 20.0, "Auto-scaling HNSW parameters for dataset");
+            HnswParams::auto_scale(n_samples, n_features, n_neighbors)
+        })
+    } else {
+        progress("Exact KNN", 20, 100, 20.0, "Skipping HNSW configuration - using exact KNN");
+        HnswParams::default() // Not used, but needed for struct
+    };
+
+    // ... (logging logic)
+
+    // Perform fit using HNSW‑enhanced PaCMAP on normalized data
+    progress("Embedding", 30, 100, 30.0, "Computing PacMAP embedding (this may take time for large datasets)");
+    let callback_ref = progress_callback.as_ref().map(|cb| cb.as_ref());
+    
+    // CHANGE: Pass the custom params down to the HNSW fitter
+    let (embedding, optimized_hnsw_params) = fit_transform_hnsw(
+        data.clone(), 
+        config.clone(), 
+        force_exact_knn, 
+        callback_ref,
+        Some(hnsw_params) // Pass the params here
+    )?;
+    // ... (rest of the function)
+}
+```
+
+---
+
+### 2. Corrected Code: `pairs.rs`
+
+The neighbor search functions must now accept `HnswParams` instead of recalculating them.
+
+**File: `pairs.rs`**
+
+```rust
+// In pairs.rs
+
+/// Convert pairs to per-point neighbor lists with distances for proper symmetrization
+/// CHANGE: Add hnsw_params argument
+pub fn compute_pairs_hnsw_to_per_point(
+    data: ArrayView2<f64>, 
+    n_neighbors: usize, 
+    _seed: u64,
+    hnsw_params: &HnswParams // NEW: Accept params as a reference
+) -> Result<Vec<Vec<(usize, f64)>>, String> {
+    let (n_samples, n_features) = data.dim();
+
+    if n_samples < 2 {
+        return Ok(vec![Vec::new(); n_samples]);
+    }
+
+    // Use same strategy as compute_pairs_hnsw
+    if n_samples <= 1000 {
+        return Ok(get_per_point_bruteforce(data, n_neighbors));
+    }
+
+    #[cfg(feature = "use_hnsw")]
+    {
+        // CHANGE: Pass the params to the HNSW helper function
+        if let Ok(per_point_result) = try_hnsw_per_point_search(data, n_neighbors, n_samples, n_features, hnsw_params) {
+            return Ok(per_point_result);
+        }
+    }
+
+    // Fallback to brute-force
+    Ok(get_per_point_bruteforce(data, n_neighbors))
+}
+
+#[cfg(feature = "use_hnsw")]
+// CHANGE: Add hnsw_params argument
+fn try_hnsw_per_point_search(
+    data: ArrayView2<f64>, 
+    n_neighbors: usize, 
+    n_samples: usize, 
+    n_features: usize,
+    hnsw_params: &HnswParams // NEW: Accept params as a reference
+) -> Result<Vec<Vec<(usize, f64)>>, String> {
+    use hnsw_rs::hnsw::Hnsw;
+    use hnsw_rs::dist::DistL2;
+
+    // CHANGE: Remove the auto_scale call. Use the provided params.
+    // let hnsw_params = crate::hnsw_params::HnswParams::auto_scale(n_samples, n_features, n_neighbors); // REMOVE THIS LINE
+    
+    let points: Vec<Vec<f32>> = (0..n_samples)
+        .map(|i| data.row(i).iter().map(|&x| x as f32).collect())
+        .collect();
+
+    let max_layer = ((n_samples as f32).ln() / (hnsw_params.m as f32).ln()).ceil() as usize + 1;
+    let max_layer = max_layer.min(32).max(4);
+
+    let hnsw = Hnsw::<f32, DistL2>::new(
+        hnsw_params.m, // Use the provided M
+        n_samples,
+        max_layer,
+        hnsw_params.ef_construction, // Use the provided ef_construction
+        DistL2{}
+    );
+    // ... (rest of the function remains the same, as it already uses `hnsw_params` for searching)
+}
+```
+
+---
+
+### 3. Corrected Code: `ffi.rs`
+
+Finally, the FFI layer must create the user's parameters and pass them to the Rust fitting function.
+
+**File: `ffi.rs`**
+
+```rust
+// In ffi.rs
+
+#[no_mangle]
+pub extern "C" fn pacmap_fit_transform_enhanced(
+    // ... (function signature is the same)
+) -> PacmapHandle {
+    // ... (safety checks and data conversion are the same)
+
+    // Convert configuration
+    let pacmap_config = config.to_pacmap_configuration();
+    let norm_mode = config.to_normalization_mode();
+
+    // CHANGE: Create the HnswParams from the user's FFI config
+    let hnsw_params = config.to_hnsw_params(rows as usize, cols as usize);
+
+    // ... (progress callback setup is the same)
+
+    // Perform fitting with progress callback and force_exact_knn control
+    let rust_progress_callback = if callback.is_some() {
+        // ... (callback setup)
+    } else {
+        None
+    };
+
+    // CHANGE: Pass the user's hnsw_params to the fitting function
+    match fit_transform_normalized_with_progress_and_force_knn(
+        data_arr,
+        pacmap_config,
+        norm_mode,
+        rust_progress_callback,
+        config.force_exact_knn,
+        config.use_quantization,
+        Some(hnsw_params) // NEW: Pass the configured params here
+    ) {
+        Ok((result_embedding, model)) => {
+            // ... (success logic)
+        }
+        Err(e) => {
+            // ... (error logic)
+        }
+    }
+}
+```
+
+### Summary of Changes
+
+1.  **`ffi.rs`**: The FFI entry point now correctly converts the user's `PacmapHnswConfig` into an `HnswParams` struct and passes it down.
+2.  **`lib.rs`**: The core fitting functions `fit_transform_normalized_with_progress_and_force_knn` and `fit_transform_hnsw` are modified to accept an `Option<HnswParams>`. They use these parameters if provided, otherwise they fall back to `auto_scale`.
+3.  **`pairs.rs`**: The neighbor search function `compute_pairs_hnsw_to_per_point` (and its helper `try_hnsw_per_point_search`) now accept `&HnswParams` as an argument, using them directly instead of recalculating them.
+
+With these changes, the HNSW configuration provided by the user is now correctly respected throughout the entire fitting pipeline, fixing the critical bug.
+
