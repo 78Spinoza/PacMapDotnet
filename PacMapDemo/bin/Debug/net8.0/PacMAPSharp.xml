@@ -1,0 +1,428 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>PacMAPSharp</name>
+    </assembly>
+    <members>
+        <member name="T:PacMAPSharp.DistanceMetric">
+            <summary>
+            Distance metrics supported by Enhanced PacMAP
+            </summary>
+        </member>
+        <member name="F:PacMAPSharp.DistanceMetric.Euclidean">
+            <summary>
+            Euclidean distance (L2 norm) - most common choice for general data
+            </summary>
+        </member>
+        <member name="F:PacMAPSharp.DistanceMetric.Cosine">
+            <summary>
+            Cosine distance - excellent for high-dimensional sparse data (text, images)
+            </summary>
+        </member>
+        <member name="F:PacMAPSharp.DistanceMetric.Manhattan">
+            <summary>
+            Manhattan distance (L1 norm) - robust to outliers
+            </summary>
+        </member>
+        <member name="F:PacMAPSharp.DistanceMetric.Correlation">
+            <summary>
+            Correlation distance - measures linear relationships, good for time series
+            </summary>
+        </member>
+        <member name="F:PacMAPSharp.DistanceMetric.Hamming">
+            <summary>
+            Hamming distance - for binary or categorical data
+            </summary>
+        </member>
+        <member name="T:PacMAPSharp.NormalizationMode">
+            <summary>
+            Normalization modes for input data preprocessing
+            </summary>
+        </member>
+        <member name="F:PacMAPSharp.NormalizationMode.Auto">
+            <summary>
+            Auto-detect best normalization based on data characteristics
+            </summary>
+        </member>
+        <member name="F:PacMAPSharp.NormalizationMode.ZScore">
+            <summary>
+            Z-score normalization: (x - μ) / σ - assumes normal distribution
+            </summary>
+        </member>
+        <member name="F:PacMAPSharp.NormalizationMode.MinMax">
+            <summary>
+            Min-max scaling: (x - min) / (max - min) - maps to [0, 1] range
+            </summary>
+        </member>
+        <member name="F:PacMAPSharp.NormalizationMode.Robust">
+            <summary>
+            Robust scaling: (x - median) / IQR - less sensitive to outliers
+            </summary>
+        </member>
+        <member name="F:PacMAPSharp.NormalizationMode.None">
+            <summary>
+            No normalization applied - use raw data values
+            </summary>
+        </member>
+        <member name="T:PacMAPSharp.HnswUseCase">
+            <summary>
+            HNSW optimization use cases for different performance priorities
+            </summary>
+        </member>
+        <member name="F:PacMAPSharp.HnswUseCase.FastConstruction">
+            <summary>
+            Minimize index construction time - fastest setup, lower accuracy
+            </summary>
+        </member>
+        <member name="F:PacMAPSharp.HnswUseCase.HighAccuracy">
+            <summary>
+            Maximize search accuracy/recall - highest quality, slower setup
+            </summary>
+        </member>
+        <member name="F:PacMAPSharp.HnswUseCase.MemoryOptimized">
+            <summary>
+            Minimize memory footprint - lowest memory usage
+            </summary>
+        </member>
+        <member name="F:PacMAPSharp.HnswUseCase.Balanced">
+            <summary>
+            Balanced performance across all metrics - recommended default
+            </summary>
+        </member>
+        <member name="T:PacMAPSharp.OutlierLevel">
+            <summary>
+            Outlier severity levels for Enhanced PacMAP quality analysis
+            </summary>
+        </member>
+        <member name="F:PacMAPSharp.OutlierLevel.Normal">
+            <summary>
+            Normal embedding - within expected quality range
+            </summary>
+        </member>
+        <member name="F:PacMAPSharp.OutlierLevel.Unusual">
+            <summary>
+            Unusual embedding - slightly outside normal range but acceptable
+            </summary>
+        </member>
+        <member name="F:PacMAPSharp.OutlierLevel.Mild">
+            <summary>
+            Mild outlier - embedding may be less accurate
+            </summary>
+        </member>
+        <member name="F:PacMAPSharp.OutlierLevel.Extreme">
+            <summary>
+            Extreme outlier - embedding reliability is questionable
+            </summary>
+        </member>
+        <member name="F:PacMAPSharp.OutlierLevel.NoMansLand">
+            <summary>
+            Critical outlier - embedding is highly unreliable
+            </summary>
+        </member>
+        <member name="T:PacMAPSharp.EmbeddingResult">
+            <summary>
+            Comprehensive result from PacMAP embedding transformation
+            Provides embedding coordinates plus quality assessment and diagnostics
+            </summary>
+        </member>
+        <member name="P:PacMAPSharp.EmbeddingResult.EmbeddingCoordinates">
+            <summary>
+            Gets the embedding coordinates in the reduced dimensional space
+            </summary>
+        </member>
+        <member name="P:PacMAPSharp.EmbeddingResult.ConfidenceScore">
+            <summary>
+            Gets the confidence score for the embedding quality (0.0 to 1.0)
+            Higher values indicate better preservation of local/global structure
+            </summary>
+        </member>
+        <member name="P:PacMAPSharp.EmbeddingResult.Severity">
+            <summary>
+            Gets the outlier severity assessment for this embedding
+            </summary>
+        </member>
+        <member name="P:PacMAPSharp.EmbeddingResult.DistanceStats">
+            <summary>
+            Gets statistics about the embedding distances
+            </summary>
+        </member>
+        <member name="P:PacMAPSharp.EmbeddingResult.EmbeddingDimension">
+            <summary>
+            Gets the dimensionality of the embedding coordinates
+            </summary>
+        </member>
+        <member name="P:PacMAPSharp.EmbeddingResult.IsReliable">
+            <summary>
+            Gets whether the embedding is considered reliable for production use
+            </summary>
+        </member>
+        <member name="P:PacMAPSharp.EmbeddingResult.QualityAssessment">
+            <summary>
+            Gets a human-readable interpretation of the result quality
+            </summary>
+        </member>
+        <member name="M:PacMAPSharp.EmbeddingResult.ToString">
+            <summary>
+            Returns a comprehensive string representation of the embedding result
+            </summary>
+        </member>
+        <member name="T:PacMAPSharp.ProgressCallback">
+            <summary>
+            Enhanced progress callback delegate for training progress reporting
+            </summary>
+            <param name="phase">Current phase (e.g., "Normalizing", "HNSW Build", "Optimizing")</param>
+            <param name="current">Current progress counter</param>
+            <param name="total">Total items to process</param>
+            <param name="percent">Progress percentage (0-100)</param>
+            <param name="message">Additional information like timing, warnings, or quality metrics</param>
+        </member>
+        <member name="T:PacMAPSharp.PacMAPModelInfo">
+            <summary>
+            Model information for a fitted PacMAP model
+            </summary>
+        </member>
+        <member name="P:PacMAPSharp.PacMAPModelInfo.TrainingSamples">
+            <summary>
+            Gets the number of training samples used to fit this model
+            </summary>
+        </member>
+        <member name="P:PacMAPSharp.PacMAPModelInfo.InputDimension">
+            <summary>
+            Gets the dimensionality of the input data
+            </summary>
+        </member>
+        <member name="P:PacMAPSharp.PacMAPModelInfo.OutputDimension">
+            <summary>
+            Gets the dimensionality of the output embedding
+            </summary>
+        </member>
+        <member name="P:PacMAPSharp.PacMAPModelInfo.Neighbors">
+            <summary>
+            Gets the number of nearest neighbors used
+            </summary>
+        </member>
+        <member name="P:PacMAPSharp.PacMAPModelInfo.Metric">
+            <summary>
+            Gets the distance metric used for neighbor computation
+            </summary>
+        </member>
+        <member name="P:PacMAPSharp.PacMAPModelInfo.Normalization">
+            <summary>
+            Gets the normalization mode applied to the input data
+            </summary>
+        </member>
+        <member name="P:PacMAPSharp.PacMAPModelInfo.UsedHNSW">
+            <summary>
+            Gets whether HNSW acceleration was used
+            </summary>
+        </member>
+        <member name="P:PacMAPSharp.PacMAPModelInfo.HnswRecall">
+            <summary>
+            Gets the HNSW recall percentage achieved (if HNSW was used)
+            </summary>
+        </member>
+        <member name="P:PacMAPSharp.PacMAPModelInfo.DiscoveredHnswM">
+            <summary>
+            Gets the discovered HNSW M parameter (if autodetect was used)
+            </summary>
+        </member>
+        <member name="P:PacMAPSharp.PacMAPModelInfo.DiscoveredHnswEfConstruction">
+            <summary>
+            Gets the discovered HNSW ef_construction parameter (if autodetect was used)
+            </summary>
+        </member>
+        <member name="P:PacMAPSharp.PacMAPModelInfo.DiscoveredHnswEfSearch">
+            <summary>
+            Gets the discovered HNSW ef_search parameter (if autodetect was used)
+            </summary>
+        </member>
+        <member name="P:PacMAPSharp.PacMAPModelInfo.LearningRate">
+            <summary>
+            Gets the learning rate used in training
+            </summary>
+        </member>
+        <member name="P:PacMAPSharp.PacMAPModelInfo.NEpochs">
+            <summary>
+            Gets the number of epochs used in training
+            </summary>
+        </member>
+        <member name="P:PacMAPSharp.PacMAPModelInfo.MidNearRatio">
+            <summary>
+            Gets the mid-near ratio used in pair sampling
+            </summary>
+        </member>
+        <member name="P:PacMAPSharp.PacMAPModelInfo.FarPairRatio">
+            <summary>
+            Gets the far pair ratio used in pair sampling
+            </summary>
+        </member>
+        <member name="P:PacMAPSharp.PacMAPModelInfo.Seed">
+            <summary>
+            Gets the random seed used for deterministic results
+            </summary>
+        </member>
+        <member name="P:PacMAPSharp.PacMAPModelInfo.QuantizeOnSave">
+            <summary>
+            Gets whether the model uses quantization on save
+            </summary>
+        </member>
+        <member name="P:PacMAPSharp.PacMAPModelInfo.HnswIndexCrc32">
+            <summary>
+            Gets the CRC32 checksum of the original HNSW index (null if not available)
+            </summary>
+        </member>
+        <member name="P:PacMAPSharp.PacMAPModelInfo.EmbeddingHnswIndexCrc32">
+            <summary>
+            Gets the CRC32 checksum of the embedding HNSW index (null if not available)
+            </summary>
+        </member>
+        <member name="P:PacMAPSharp.PacMAPModelInfo.FilePath">
+            <summary>
+            Gets the file path if the model was saved or loaded from a file
+            </summary>
+        </member>
+        <member name="M:PacMAPSharp.PacMAPModelInfo.ToString">
+            <summary>
+            Returns a comprehensive string representation of the model info with ALL parameters and file info
+            </summary>
+        </member>
+        <member name="T:PacMAPSharp.PacmapHnswConfig">
+            <summary>
+            HNSW configuration for PacMAP FFI
+            </summary>
+        </member>
+        <member name="T:PacMAPSharp.PacmapConfig">
+            <summary>
+            PacMAP configuration struct for FFI
+            </summary>
+        </member>
+        <member name="T:PacMAPSharp.PacMAPModel">
+            <summary>
+            Enhanced cross-platform C# wrapper for PacMAP dimensionality reduction
+            Features:
+            - HNSW acceleration for large datasets with density-adaptive local scaling
+            - Multiple distance metrics and normalization modes
+            - Complete model save/load functionality
+            - Progress reporting with detailed callback support
+            - Comprehensive quality assessment and validation
+            - Graph symmetrization for improved connectivity
+            </summary>
+        </member>
+        <member name="P:PacMAPSharp.PacMAPModel.IsFitted">
+            <summary>
+            Gets whether this model has been fitted to training data
+            </summary>
+        </member>
+        <member name="P:PacMAPSharp.PacMAPModel.ModelInfo">
+            <summary>
+            Gets comprehensive information about the fitted model
+            Only available after fitting
+            </summary>
+        </member>
+        <member name="M:PacMAPSharp.PacMAPModel.#ctor">
+            <summary>
+            Initializes a new PacMAP model
+            </summary>
+        </member>
+        <member name="M:PacMAPSharp.PacMAPModel.GetVersion">
+            <summary>
+            Gets the version of the native PacMAP library
+            </summary>
+            <returns>Version string from the native library</returns>
+            <exception cref="T:System.PlatformNotSupportedException">Thrown on unsupported platforms</exception>
+            <exception cref="T:System.DllNotFoundException">Thrown when native library cannot be loaded</exception>
+        </member>
+        <member name="M:PacMAPSharp.PacMAPModel.VerifyLibrary">
+            <summary>
+            Verifies that the native library can be loaded and returns version info
+            </summary>
+            <returns>True if library loads successfully, false otherwise</returns>
+        </member>
+        <member name="M:PacMAPSharp.PacMAPModel.VerifyVersion">
+            <summary>
+            Verifies the native DLL version matches the expected C# wrapper version
+            </summary>
+            <exception cref="T:System.InvalidOperationException">Thrown when version mismatch is detected</exception>
+            <exception cref="T:System.DllNotFoundException">Thrown when native library cannot be loaded</exception>
+        </member>
+        <member name="M:PacMAPSharp.PacMAPModel.ExtractVersionNumber(System.String)">
+            <summary>
+            Extracts version number from the full version string returned by native library
+            </summary>
+            <param name="fullVersionString">Full version string like "PacMAP Enhanced v0.3.0 - HNSW: ENABLED, OpenBLAS: SYSTEM"</param>
+            <returns>Just the version number like "0.3.0"</returns>
+        </member>
+        <member name="M:PacMAPSharp.PacMAPModel.Load(System.String)">
+            <summary>
+            Loads a previously saved PacMAP model from file
+            </summary>
+            <param name="filename">Path to the saved model file</param>
+            <returns>Loaded PacMAP model ready for transformation</returns>
+            <exception cref="T:System.ArgumentException">Thrown when filename is invalid</exception>
+            <exception cref="T:System.IO.FileNotFoundException">Thrown when model file doesn't exist</exception>
+            <exception cref="T:System.IO.InvalidDataException">Thrown when model file is corrupted</exception>
+        </member>
+        <member name="M:PacMAPSharp.PacMAPModel.ExtractModelInfoFromLoadedModel">
+            <summary>
+            Extracts model information from a loaded native model
+            </summary>
+        </member>
+        <member name="M:PacMAPSharp.PacMAPModel.Fit(System.Double[0:,0:],System.Int32,System.Int32,PacMAPSharp.NormalizationMode,PacMAPSharp.DistanceMetric,PacMAPSharp.HnswUseCase,System.Boolean,System.Double,System.Int32,System.Double,System.Double,System.Boolean,System.UInt64,PacMAPSharp.ProgressCallback)">
+            <summary>
+            Fits the PacMAP model to training data and returns the embedding
+            </summary>
+            <param name="data">Training data as row-major array (samples × features)</param>
+            <param name="embeddingDimensions">Target dimensionality (default: 2)</param>
+            <param name="neighbors">Number of neighbors to consider (default: 10)</param>
+            <param name="normalization">Data normalization mode (default: ZScore)</param>
+            <param name="metric">Distance metric (default: Euclidean)</param>
+            <param name="hnswUseCase">HNSW optimization preference (default: Balanced)</param>
+            <param name="forceExactKnn">Force exact KNN instead of HNSW (default: false)</param>
+            <param name="learningRate">Learning rate for optimization (default: 1.0)</param>
+            <param name="nEpochs">Number of training epochs (default: 450)</param>
+            <param name="midNearRatio">Mid-near pair ratio (default: 0.5)</param>
+            <param name="farPairRatio">Far pair ratio (default: 2.0)</param>
+            <param name="autodetectHnswParams">Enable HNSW parameter autodetection (default: true)</param>
+            <param name="seed">Random seed for reproducibility (default: 42)</param>
+            <param name="progressCallback">Optional progress reporting callback</param>
+            <returns>Embedding result with coordinates and quality assessment</returns>
+            <exception cref="T:System.ArgumentException">Thrown for invalid parameters</exception>
+            <exception cref="T:System.InvalidOperationException">Thrown when fit fails</exception>
+        </member>
+        <member name="M:PacMAPSharp.PacMAPModel.Transform(System.Double[0:,0:],PacMAPSharp.ProgressCallback)">
+            <summary>
+            Transforms new data using an already fitted PacMAP model
+            </summary>
+            <param name="data">Input data matrix</param>
+            <param name="progressCallback">Optional progress callback</param>
+            <returns>Embedding result for the transformed data</returns>
+            <exception cref="T:System.InvalidOperationException">Thrown when model is not fitted</exception>
+            <exception cref="T:System.ArgumentException">Thrown for invalid parameters</exception>
+        </member>
+        <member name="M:PacMAPSharp.PacMAPModel.Save(System.String)">
+            <summary>
+            Saves the fitted model to a file for later use
+            </summary>
+            <param name="filename">Path where to save the model</param>
+            <exception cref="T:System.InvalidOperationException">Thrown when model is not fitted</exception>
+            <exception cref="T:System.ArgumentException">Thrown for invalid filename</exception>
+            <exception cref="T:System.IO.IOException">Thrown when save operation fails</exception>
+        </member>
+        <member name="M:PacMAPSharp.PacMAPModel.Dispose">
+            <summary>
+            Releases all resources used by the PacMAP model
+            </summary>
+        </member>
+        <member name="M:PacMAPSharp.PacMAPModel.Dispose(System.Boolean)">
+            <summary>
+            Releases unmanaged resources and optionally releases managed resources
+            </summary>
+            <param name="disposing">True to release both managed and unmanaged resources</param>
+        </member>
+        <member name="M:PacMAPSharp.PacMAPModel.Finalize">
+            <summary>
+            Finalizer to ensure native resources are released
+            </summary>
+        </member>
+    </members>
+</doc>
