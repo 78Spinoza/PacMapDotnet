@@ -44,13 +44,13 @@
   <ItemGroup>
     <!-- Windows Native Libraries -->
     <None Include="pacmap_enhanced.dll" Condition="Exists('pacmap_enhanced.dll')">
-      <PackagePath>lib/net8.0/pacmap_enhanced.dll</PackagePath>
+      <PackagePath>pacmap_enhanced.dll</PackagePath>
       <Pack>true</Pack>
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
       <CopyToPublishDirectory>Always</CopyToPublishDirectory>
     </None>
     <None Include="libopenblas.dll" Condition="Exists('libopenblas.dll')">
-      <PackagePath>lib/net8.0/libopenblas.dll</PackagePath>
+      <PackagePath>libopenblas.dll</PackagePath>
       <Pack>true</Pack>
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
       <CopyToPublishDirectory>Always</CopyToPublishDirectory>
@@ -58,7 +58,13 @@
 
     <!-- Linux Native Libraries -->
     <None Include="libpacmap_enhanced.so" Condition="Exists('libpacmap_enhanced.so')">
-      <PackagePath>lib/net8.0/libpacmap_enhanced.so</PackagePath>
+      <PackagePath>libpacmap_enhanced.so</PackagePath>
+      <Pack>true</Pack>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
+    </None>
+    <None Include="libopenblas.so.0" Condition="Exists('libopenblas.so.0')">
+      <PackagePath>libopenblas.so.0</PackagePath>
       <Pack>true</Pack>
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
       <CopyToPublishDirectory>Always</CopyToPublishDirectory>

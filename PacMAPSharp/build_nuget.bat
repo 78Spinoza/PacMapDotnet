@@ -36,7 +36,7 @@ if not exist "pacmap_enhanced.dll" (
     exit /b 1
 )
 
-copy "..\lapack-binaries\windows\libopenblas.dll" "libopenblas.dll" /Y
+copy "libopenblas.dll" "libopenblas.dll" /Y
 if not exist "libopenblas.dll" (
     echo ERROR: Failed to copy OpenBLAS DLL
     exit /b 1
