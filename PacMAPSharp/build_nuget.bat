@@ -9,9 +9,17 @@ if exist bin rmdir /s /q bin
 if exist obj rmdir /s /q obj
 if exist nupkg rmdir /s /q nupkg
 
+rem Ensure LAPACK binaries are available
+echo [2/5] Setting up LAPACK binaries...
+if not exist "..\lapack-binaries\windows\libopenblas.dll" (
+    echo ERROR: LAPACK binaries not found. Please download from README.md
+    exit /b 1
+)
+
 rem Build Rust core library first
-echo [2/5] Building Rust core library...
+echo [3/5] Building Rust core library...
 cd ..\pacmap-enhanced
+set OPENBLAS_PATH=..\lapack-binaries\windows
 cargo build --release
 if errorlevel 1 (
     echo ERROR: Failed to build Rust library
@@ -21,14 +29,14 @@ if errorlevel 1 (
 cd ..\PacMAPSharp
 
 rem Copy latest native binaries
-echo [3/5] Copying native binaries...
+echo [4/5] Copying native binaries...
 copy "..\pacmap-enhanced\target\release\pacmap_enhanced.dll" "pacmap_enhanced.dll" /Y
 if not exist "pacmap_enhanced.dll" (
     echo ERROR: Failed to copy Rust DLL
     exit /b 1
 )
 
-copy "..\lapack-binaries\bin\libopenblas.dll" "libopenblas.dll" /Y
+copy "..\lapack-binaries\windows\libopenblas.dll" "libopenblas.dll" /Y
 if not exist "libopenblas.dll" (
     echo ERROR: Failed to copy OpenBLAS DLL
     exit /b 1
