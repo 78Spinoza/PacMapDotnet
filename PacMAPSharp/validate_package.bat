@@ -52,14 +52,22 @@ if not exist "lib\net8.0\PacMAPSharp.dll" (
     set VALID=0
 )
 
-if not exist "runtimes\win-x64\native\pacmap_enhanced.dll" (
-    echo ERROR: Missing native library: runtimes\win-x64\native\pacmap_enhanced.dll
+if not exist "pacmap_enhanced.dll" (
+    echo ERROR: Missing native library: pacmap_enhanced.dll
     set VALID=0
 )
 
-if not exist "runtimes\win-x64\native\libopenblas.dll" (
-    echo ERROR: Missing OpenBLAS library: runtimes\win-x64\native\libopenblas.dll
+if not exist "libopenblas.dll" (
+    echo ERROR: Missing OpenBLAS library: libopenblas.dll
     set VALID=0
+)
+
+if not exist "libpacmap_enhanced.so" (
+    echo WARNING: Missing Linux native library: libpacmap_enhanced.so
+)
+
+if not exist "libopenblas.so.0" (
+    echo WARNING: Missing Linux OpenBLAS library: libopenblas.so.0
 )
 
 if not exist "PacMAPSharp.nuspec" (
