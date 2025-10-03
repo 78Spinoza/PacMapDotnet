@@ -9,7 +9,7 @@
     <!-- Package Information -->
     <PackageId>PacMAPSharp</PackageId>
     <Title>PacMAP Sharp - Fast Dimensionality Reduction</Title>
-    <Version>1.0.2</Version>
+    <Version>1.1.0</Version>
     <Authors>PacMAP Team</Authors>
     <Company>Open Source</Company>
     <Description>Enhanced C# wrapper for PacMAP (Pairwise Controlled Manifold Approximation) dimensionality reduction with HNSW acceleration, density-adaptive scaling, and comprehensive quality validation.</Description>
@@ -19,6 +19,8 @@
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
     <PackageReleaseNotes>
+      v1.1.0: Major HNSW incorporation completion - deterministic construction, local distance scaling, 4-phase transform pipeline, comprehensive normalization system, and "No Man's Land" detection. Updated Rust core to v0.4.0 with production-ready HNSW implementation.
+      v1.0.3: Updated Rust core to v0.3.4 with professional-grade progress callbacks and thread-safe FFI callback system
       v1.0.2: Updated Rust core to v0.3.3 with enhanced HNSW auto-retry and improved parameter optimization
       v1.0.1: Bug fixes and improved error handling
       v1.0.0: Initial release with HNSW acceleration, local distance scaling, and enhanced quality validation
