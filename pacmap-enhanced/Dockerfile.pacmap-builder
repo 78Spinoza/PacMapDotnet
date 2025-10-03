@@ -1,0 +1,39 @@
+# Pre-built PacMAP Builder Image
+# This creates a reusable Docker image with all dependencies installed
+FROM ubuntu:22.04
+
+# Install all dependencies once
+RUN apt-get update && apt-get install -y \
+    curl \
+    build-essential \
+    pkg-config \
+    libssl-dev \
+    libopenblas-dev \
+    libopenblas-base \
+    git \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set up OpenBLAS environment variables for Rust build
+ENV OPENBLAS_PATH=/usr
+ENV OPENBLAS_LIB=/usr/lib/x86_64-linux-gnu
+ENV PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig:$PKG_CONFIG_PATH
+
+# Install Rust once
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+
+# Set up Rust environment
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+# Add common Rust targets
+RUN rustup target add x86_64-unknown-linux-gnu
+
+# Pre-compile common dependencies to speed up builds
+RUN cargo install --force --version 1.0.0 cargo-cache && \
+    cargo cache --autoclean
+
+# Set working directory
+WORKDIR /build
+
+# This image is now ready for fast PacMAP builds
+CMD ["bash"]
