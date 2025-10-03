@@ -26,14 +26,14 @@ echo [1/2] Building PacMAP Enhanced Windows version...
 echo ----------------------------------------
 
 echo [INFO] Building Windows release with OpenBLAS...
-set "OPENBLAS_PATH=%CD%\..\lapack-binaries"
+set "OPENBLAS_PATH=%CD%\..\lapack-binaries\windows"
 echo OpenBLAS path: %OPENBLAS_PATH%
 
 echo [INFO] Copying OpenBLAS DLL to target directory for tests...
 if not exist "target\release" mkdir "target\release"
-copy "%OPENBLAS_PATH%\bin\libopenblas.dll" "target\release\libopenblas.dll" /Y >nul
+copy "%OPENBLAS_PATH%\libopenblas.dll" "target\release\libopenblas.dll" /Y >nul
 if not exist "target\release\deps" mkdir "target\release\deps"
-copy "%OPENBLAS_PATH%\bin\libopenblas.dll" "target\release\deps\libopenblas.dll" /Y >nul
+copy "%OPENBLAS_PATH%\libopenblas.dll" "target\release\deps\libopenblas.dll" /Y >nul
 
 cargo build --release
 if !ERRORLEVEL! NEQ 0 (
@@ -229,7 +229,7 @@ if not exist "..\PacMAPSharp\PacMAPSharp" (
 
 REM Copy Windows DLL if it exists (would need to be built as cdylib)
 if exist "target\release\pacmap_enhanced.dll" (
-    copy "target\release\pacmap_enhanced.dll" "..\PacMAPSharp\PacMAPSharp\pacmap_enhanced.dll"
+    copy "target\release\pacmap_enhanced.dll" "..\PacMAPSharp\pacmap_enhanced.dll"
     if !ERRORLEVEL! EQU 0 (
         echo [PASS] Copied Windows pacmap_enhanced.dll to C# project
     ) else (
@@ -239,7 +239,7 @@ if exist "target\release\pacmap_enhanced.dll" (
     echo [INFO] Windows DLL not found (Rust project may need cdylib configuration)
 )
 
-REM Copy Linux .so file to PacMAPSharp project base
+REM Copy Linux .so file to PacMAPSharp project base (NOT subfolder!)
 if exist "build-linux\libpacmap_enhanced.so" (
     copy "build-linux\libpacmap_enhanced.so" "..\PacMAPSharp\libpacmap_enhanced.so"
     if !ERRORLEVEL! EQU 0 (
@@ -257,6 +257,16 @@ if exist "build-linux\libpacmap_enhanced.so" (
     )
 ) else (
     echo [INFO] Linux .so file not found in build-linux directory
+)
+
+REM Copy Windows OpenBLAS to PacMAPSharp project base
+if exist "%OPENBLAS_PATH%\libopenblas.dll" (
+    copy "%OPENBLAS_PATH%\libopenblas.dll" "..\PacMAPSharp\libopenblas.dll"
+    if !ERRORLEVEL! EQU 0 (
+        echo [PASS] Copied Windows libopenblas.dll to PacMAPSharp project
+    ) else (
+        echo [FAIL] Failed to copy Windows OpenBLAS - Error: !ERRORLEVEL!
+    )
 )
 
 echo [PASS] PacMAP Enhanced libraries setup completed
