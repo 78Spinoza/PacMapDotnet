@@ -16,7 +16,7 @@ using System.Reflection;
     "sionality reduction with HNSW acceleration, density-adaptive scaling, and compre" +
     "hensive quality validation."))]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.1.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.1.0+31bcceb7e1fad808cb54c039a0a787e19aaea066")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.1.0+adcceb45f75a50d225fad3a6d48dd4d1dc11355e")]
 [assembly: System.Reflection.AssemblyProductAttribute("PacMAPSharp")]
 [assembly: System.Reflection.AssemblyTitleAttribute("PacMAPSharp")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.1.0.0")]

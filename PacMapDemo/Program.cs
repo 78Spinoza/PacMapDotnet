@@ -81,14 +81,9 @@ namespace PacMapDemo
                 double learningRate = 1.0;
                 ulong seed = 42;
 
-                var progressCallback = new PacMAPSharp.ProgressCallback((phase, current, total, percent, message) =>
-                {
-                    Console.WriteLine($"      [{phase}] {message} ({percent:F1}%)");
-                });
-
                 // === STEP 1: Fit and Transform ===
                 Console.WriteLine("      Step 1: Fit and transform...");
-                var pacmap1 = new PacMAPModel();
+                var pacmap1 = new PacMAPSharp.PacMAPModel();
                 var stopwatch1 = Stopwatch.StartNew();
 
                 var result1 = pacmap1.Fit(
@@ -103,7 +98,7 @@ namespace PacMapDemo
                     nEpochs: nEpochs,
                     autodetectHnswParams: true,
                     seed: seed,
-                    progressCallback: progressCallback
+                    progressCallback: null  // DISABLE CALLBACK TO FIX CORRUPTION
                 );
                 stopwatch1.Stop();
 
@@ -126,7 +121,7 @@ namespace PacMapDemo
                     nEpochs: nEpochs,
                     autodetectHnswParams: true,
                     seed: seed,
-                    progressCallback: progressCallback
+                    progressCallback: null
                 );
 
                 var embedding2 = ConvertEmbeddingToFloatArray(result2);
@@ -179,7 +174,7 @@ namespace PacMapDemo
                 var stopwatch3 = Stopwatch.StartNew();
                 var result3 = pacmap2.Transform(
                     data: data,
-                    progressCallback: progressCallback
+                    progressCallback: null
                 );
                 stopwatch3.Stop();
 

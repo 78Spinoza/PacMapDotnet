@@ -2,7 +2,8 @@
 // Following UMAP Enhanced patterns for C# integration
 
 use std::ffi::{CStr, CString};
-use std::os::raw::{c_char, c_int, c_float, c_double};
+use std::os::raw::{c_char, c_int, c_float, c_double, c_void};
+use std::panic;
 use ndarray::Array2;
 use pacmap::Configuration;
 use crate::{fit_transform_normalized_with_progress_and_force_knn_with_hnsw, transform_with_model};
@@ -32,13 +33,11 @@ pub extern "C" fn pacmap_get_version() -> *const c_char {
 }
 
 /// Progress callback function type for C# integration
-/// Follows UMAP Enhanced v2 callback pattern
+/// Safe callback pattern - passes user_data and byte array only
 pub type PacmapProgressCallback = extern "C" fn(
-    phase: *const c_char,        // Current phase: "Normalizing", "Building HNSW", "PacMAP", etc.
-    current: c_int,              // Current progress counter
-    total: c_int,                // Total items to process
-    percent: c_float,            // Progress percentage (0-100)
-    message: *const c_char,      // Time estimates, warnings, or NULL
+    user_data: *mut c_void,      // User data pointer (GCHandle from C#)
+    data_ptr: *const u8,         // Message data bytes
+    len: usize,                  // Length of data in bytes
 );
 
 /// HNSW configuration struct for C FFI
@@ -167,41 +166,40 @@ impl PacmapConfig {
     }
 }
 
+/// Debug printing macro - controlled by VERBOSE flag
+macro_rules! vprint {
+    ($($arg:tt)*) => {
+        if cfg!(feature = "verbose") {
+            println!($($arg)*);
+        }
+    };
+}
+
 /// Model handle for C FFI - opaque pointer
 pub type PacmapHandle = *mut PaCMAP;
 
-/// Safe callback wrapper for FFI progress callbacks
-/// Handles string conversion and memory management safely using std::ffi::CString
+/// Safe callback wrapper using the recommended pattern
+/// Creates a single message string and passes it as bytes with user_data
 macro_rules! safe_progress_callback {
-    ($callback:expr, $phase:expr, $current:expr, $total:expr, $percent:expr, $message:expr) => {
+    ($callback:expr, $user_data:expr, $phase:expr, $current:expr, $total:expr, $percent:expr, $message:expr) => {
         if let Some(cb) = $callback {
-            // Create CString objects and leak them to ensure they outlive the callback
-            // This is a controlled memory leak for FFI safety
-            let phase_cstring = std::ffi::CString::new($phase).unwrap_or_else(|_| {
-                std::ffi::CString::new("Unknown").unwrap()
+            // Create a single formatted message string
+            let full_message = format!("[{}] {} ({:.1}%)", $phase, $message, $percent);
+            let message_bytes = full_message.as_bytes();
+
+            // Use catch_unwind to prevent panics from crossing FFI boundary
+            let res = panic::catch_unwind(|| {
+                cb(
+                    $user_data,
+                    message_bytes.as_ptr(),
+                    message_bytes.len()
+                );
             });
 
-            let message_ptr = if $message.is_empty() {
-                std::ptr::null()
-            } else {
-                let message_cstring = std::ffi::CString::new($message).unwrap_or_else(|_| {
-                    std::ffi::CString::new("").unwrap()
-                });
-                Box::into_raw(Box::new(message_cstring)) as *const c_char
-            };
-
-            let phase_ptr = Box::into_raw(Box::new(phase_cstring)) as *const c_char;
-
-            cb(
-                phase_ptr,
-                $current as c_int,
-                $total as c_int,
-                $percent,
-                message_ptr,
-            );
-
-            // Note: This intentionally leaks memory to prevent use-after-free
-            // The number of progress callbacks is bounded and minimal
+            if res.is_err() {
+                // Log error but don't let panic escape FFI boundary
+                // Silent error handling - library shouldn't print
+            }
         }
     };
 }
@@ -249,6 +247,7 @@ pub extern "C" fn pacmap_fit_transform_enhanced(
     embedding: *mut c_double,
     embedding_buffer_len: c_int,
     callback: Option<PacmapProgressCallback>,
+    user_data: *mut c_void,
 ) -> PacmapHandle {
     // Safety checks
     if data.is_null() || embedding.is_null() || rows <= 0 || cols <= 0 {
@@ -278,7 +277,7 @@ pub extern "C" fn pacmap_fit_transform_enhanced(
 
     // Create progress callback wrapper
     let progress_callback = |phase: &str, current: usize, total: usize, percent: f32, message: &str| {
-        safe_progress_callback!(callback, phase, current, total, percent, message);
+        safe_progress_callback!(callback, user_data, phase, current, total, percent, message);
     };
 
     // Report progress: Starting
@@ -309,25 +308,8 @@ pub extern "C" fn pacmap_fit_transform_enhanced(
     // Report progress: Normalization
     progress_callback("Normalizing", 20, 100, 20.0, "Applying data normalization");
 
-    // Perform fitting with progress callback and force_exact_knn control
-    let rust_progress_callback = if callback.is_some() {
-        Some(Box::new(move |phase: &str, current: usize, total: usize, percent: f32, message: &str| {
-            if let Some(cb) = callback {
-                // Convert Rust strings to C strings for FFI
-                let phase_cstr = CString::new(phase).unwrap_or_else(|_| CString::new("Unknown").unwrap());
-                let message_cstr = CString::new(message).unwrap_or_else(|_| CString::new("").unwrap());
-                cb(
-                    phase_cstr.as_ptr(),
-                    current as c_int,
-                    total as c_int,
-                    percent,
-                    message_cstr.as_ptr(),
-                );
-            }
-        }) as Box<dyn Fn(&str, usize, usize, f32, &str) + Send + Sync>)
-    } else {
-        None
-    };
+    // DISABLE CALLBACKS FOR NOW - they cause thread safety issues
+    let rust_progress_callback: Option<Box<dyn Fn(&str, usize, usize, f32, &str) + Send + Sync>> = None;
 
     // DEBUG: Report FFI parameters via callback
     let ffi_debug_msg = format!(" FFI DEBUG: force_exact_knn={}, use_quantization={}", config.force_exact_knn, config.use_quantization);
@@ -412,6 +394,7 @@ pub extern "C" fn pacmap_transform(
     embedding: *mut c_double,
     embedding_buffer_len: c_int,
     callback: Option<PacmapProgressCallback>,
+    user_data: *mut c_void,
 ) -> c_int {
     // Safety checks
     if handle.is_null() || data.is_null() || embedding.is_null() || rows <= 0 || cols <= 0 {
@@ -442,7 +425,7 @@ pub extern "C" fn pacmap_transform(
 
     // Create progress callback wrapper
     let progress_callback = |phase: &str, current: usize, total: usize, percent: f32, message: &str| {
-        safe_progress_callback!(callback, phase, current, total, percent, message);
+        safe_progress_callback!(callback, user_data, phase, current, total, percent, message);
     };
 
     progress_callback("Transform", 0, 100, 0.0, "Transforming new data using existing model");
@@ -599,7 +582,7 @@ pub extern "C" fn pacmap_save_model_enhanced(
     quantize: bool,
 ) -> c_int {
     if handle.is_null() || path.is_null() {
-        eprintln!("ERROR: Save model: null handle or path");
+        // Silent error handling - library shouldn't print
         return -1;
     }
 
@@ -608,7 +591,7 @@ pub extern "C" fn pacmap_save_model_enhanced(
         match CStr::from_ptr(path).to_str() {
             Ok(s) => s,
             Err(e) => {
-                eprintln!("ERROR: Save model: invalid UTF-8 in path: {:?}", e);
+                // Silent error handling - library shouldn't print
                 return -2;
             }
         }
