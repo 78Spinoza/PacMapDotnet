@@ -1,9 +1,8 @@
-use pacmap_enhanced::*;
+use pacmap_enhanced::serialization::{PacMAPConfig, PaCMAP};
 use ndarray::{Array2};
 use ndarray_rand::RandomExt;
 use ndarray_rand::rand_distr::Uniform;
 use std::time::Instant;
-use pacmap::Configuration;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("=== PacMAP Transform Consistency Test (Rust) ===");

@@ -1,0 +1,6 @@
+C:\PacMAN\obj\Release\net8.0\SeedTest.csproj.AssemblyReference.cache
+C:\PacMAN\obj\Release\net8.0\SeedTest.GeneratedMSBuildEditorConfig.editorconfig
+C:\PacMAN\obj\Release\net8.0\SeedTest.AssemblyInfoInputs.cache
+C:\PacMAN\obj\Release\net8.0\SeedTest.AssemblyInfo.cs
+C:\PacMAN\obj\Release\net8.0\SeedTest.csproj.CoreCompileInputs.cache
+C:\PacMAN\obj\Release\net8.0\SeedTest.sourcelink.json

@@ -1,6 +1,0 @@
-C:\PacMAN\FrameGenerator\obj\Release\net8.0\FrameGenerator.csproj.AssemblyReference.cache
-C:\PacMAN\FrameGenerator\obj\Release\net8.0\FrameGenerator.GeneratedMSBuildEditorConfig.editorconfig
-C:\PacMAN\FrameGenerator\obj\Release\net8.0\FrameGenerator.AssemblyInfoInputs.cache
-C:\PacMAN\FrameGenerator\obj\Release\net8.0\FrameGenerator.AssemblyInfo.cs
-C:\PacMAN\FrameGenerator\obj\Release\net8.0\FrameGenerator.csproj.CoreCompileInputs.cache
-C:\PacMAN\FrameGenerator\obj\Release\net8.0\FrameGenerator.sourcelink.json

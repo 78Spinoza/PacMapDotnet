@@ -4,6 +4,47 @@
         <name>PacMAPSharp</name>
     </assembly>
     <members>
+        <member name="T:PacMAPSharp.ProgressEventArgs">
+            <summary>
+            Progress event arguments for PacMAP operations
+            </summary>
+        </member>
+        <member name="T:PacMAPSharp.ThreadSafeProgressCallbackManager">
+            <summary>
+            Manages thread-safe progress callbacks using the queue+poll pattern
+            This is the recommended approach for multi-threaded applications
+            </summary>
+        </member>
+        <member name="E:PacMAPSharp.ThreadSafeProgressCallbackManager.ProgressChanged">
+            <summary>
+            Event fired when progress messages are received from Rust
+            </summary>
+        </member>
+        <member name="M:PacMAPSharp.ThreadSafeProgressCallbackManager.PollMessages">
+            <summary>
+            Poll for messages from the Rust side and fire events
+            </summary>
+        </member>
+        <member name="M:PacMAPSharp.ThreadSafeProgressCallbackManager.ParseAndFireEvent(System.String)">
+            <summary>
+            Parse the message format and fire the progress event
+            </summary>
+        </member>
+        <member name="M:PacMAPSharp.ThreadSafeProgressCallbackManager.StartPollingIfNotRunning">
+            <summary>
+            Start the polling thread if not already running
+            </summary>
+        </member>
+        <member name="M:PacMAPSharp.ThreadSafeProgressCallbackManager.PollingThread">
+            <summary>
+            Background thread that continuously polls for messages
+            </summary>
+        </member>
+        <member name="M:PacMAPSharp.ThreadSafeProgressCallbackManager.Dispose">
+            <summary>
+            Dispose resources and stop polling
+            </summary>
+        </member>
         <member name="T:PacMAPSharp.DistanceMetric">
             <summary>
             Distance metrics supported by Enhanced PacMAP
@@ -236,6 +277,26 @@
             Gets the discovered HNSW ef_search parameter (if autodetect was used)
             </summary>
         </member>
+        <member name="P:PacMAPSharp.PacMAPModelInfo.HnswMaxM0">
+            <summary>
+            Gets the HNSW maximum connections per layer 0 node (M0 parameter)
+            </summary>
+        </member>
+        <member name="P:PacMAPSharp.PacMAPModelInfo.HnswSeed">
+            <summary>
+            Gets the HNSW random seed used for deterministic construction
+            </summary>
+        </member>
+        <member name="P:PacMAPSharp.PacMAPModelInfo.HnswMaxLayer">
+            <summary>
+            Gets the current number of layers in the HNSW index
+            </summary>
+        </member>
+        <member name="P:PacMAPSharp.PacMAPModelInfo.HnswTotalElements">
+            <summary>
+            Gets the total number of elements indexed in the HNSW structure
+            </summary>
+        </member>
         <member name="P:PacMAPSharp.PacMAPModelInfo.LearningRate">
             <summary>
             Gets the learning rate used in training
@@ -308,6 +369,37 @@
             - Graph symmetrization for improved connectivity
             </summary>
         </member>
+        <member name="M:PacMAPSharp.PacMAPModel.HasMessages">
+            <summary>
+            Platform-safe wrapper for checking if messages are available
+            </summary>
+        </member>
+        <member name="M:PacMAPSharp.PacMAPModel.PollNextMessage">
+            <summary>
+            Poll for the next message and return it as a string
+            Returns null if no message is available
+            </summary>
+        </member>
+        <member name="M:PacMAPSharp.PacMAPModel.PollNextMessage(System.Byte[],System.Int32@)">
+            <summary>
+            Platform-safe wrapper for polling the next message
+            </summary>
+        </member>
+        <member name="M:PacMAPSharp.PacMAPModel.ClearMessages">
+            <summary>
+            Platform-safe wrapper for clearing messages
+            </summary>
+        </member>
+        <member name="M:PacMAPSharp.PacMAPModel.EnqueueMessage(System.String)">
+            <summary>
+            Platform-safe wrapper for enqueuing messages
+            </summary>
+        </member>
+        <member name="M:PacMAPSharp.PacMAPModel.RegisterTextCallback(PacMAPSharp.PacMAPModel.NativeProgressCallback,System.IntPtr)">
+            <summary>
+            Platform-safe wrapper for registering text callbacks
+            </summary>
+        </member>
         <member name="P:PacMAPSharp.PacMAPModel.IsFitted">
             <summary>
             Gets whether this model has been fitted to training data
@@ -317,6 +409,19 @@
             <summary>
             Gets comprehensive information about the fitted model
             Only available after fitting
+            </summary>
+        </member>
+        <member name="P:PacMAPSharp.PacMAPModel.UseThreadSafeCallbacks">
+            <summary>
+            Gets or sets whether to use thread-safe callback system (recommended)
+            When true, uses queue+poll pattern for multi-threaded safety
+            When false, uses legacy direct callbacks (not recommended for multi-threaded applications)
+            </summary>
+        </member>
+        <member name="P:PacMAPSharp.PacMAPModel.ThreadSafeCallbackManager">
+            <summary>
+            Gets the thread-safe callback manager for accessing progress events
+            Only available when UseThreadSafeCallbacks is true
             </summary>
         </member>
         <member name="M:PacMAPSharp.PacMAPModel.#ctor">

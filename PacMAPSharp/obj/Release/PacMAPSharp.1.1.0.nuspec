@@ -15,7 +15,7 @@
       v1.0.1: Bug fixes and improved error handling
       v1.0.0: Initial release with HNSW acceleration, local distance scaling, and enhanced quality validation</releaseNotes>
     <tags>dimensionality-reduction machine-learning pacmap embedding hnsw visualization</tags>
-    <repository type="git" url="https://github.com/YingfanWang/PaCMAP" commit="adcceb45f75a50d225fad3a6d48dd4d1dc11355e" />
+    <repository type="git" url="https://github.com/YingfanWang/PaCMAP" commit="8494bb8faccbb68bf1c3015a230f9c36ab48fd37" />
     <dependencies>
       <group targetFramework="net8.0">
         <dependency id="System.Runtime.InteropServices" version="4.3.0" exclude="Build,Analyzers" />
@@ -23,11 +23,11 @@
     </dependencies>
   </metadata>
   <files>
-    <file src="C:\PacMAN\PacMAPSharp\bin\Release\net8.0\PacMAPSharp.dll" target="lib\net8.0\PacMAPSharp.dll" />
-    <file src="C:\PacMAN\PacMAPSharp\bin\Release\net8.0\PacMAPSharp.xml" target="lib\net8.0\PacMAPSharp.xml" />
-    <file src="C:\PacMAN\PacMAPSharp\pacmap_enhanced.dll" target="pacmap_enhanced.dll" />
-    <file src="C:\PacMAN\PacMAPSharp\libopenblas.dll" target="libopenblas.dll" />
-    <file src="C:\PacMAN\PacMAPSharp\libpacmap_enhanced.so" target="libpacmap_enhanced.so" />
-    <file src="C:\PacMAN\PacMAPSharp\libopenblas.so.0" target="libopenblas.so.0" />
+    <file src="C:\PacMAN\PacMapSharp\bin\Release\net8.0\PacMAPSharp.dll" target="lib\net8.0\PacMAPSharp.dll" />
+    <file src="C:\PacMAN\PacMapSharp\bin\Release\net8.0\PacMAPSharp.xml" target="lib\net8.0\PacMAPSharp.xml" />
+    <file src="C:\PacMAN\PacMapSharp\pacmap_enhanced.dll" target="pacmap_enhanced.dll" />
+    <file src="C:\PacMAN\PacMapSharp\libopenblas.dll" target="libopenblas.dll" />
+    <file src="C:\PacMAN\PacMapSharp\libpacmap_enhanced.so" target="libpacmap_enhanced.so" />
+    <file src="C:\PacMAN\PacMapSharp\libopenblas.so.0" target="libopenblas.so.0" />
   </files>
 </package>

@@ -11,11 +11,36 @@ namespace PacMapDemo
     public class SimplePacMapModel : IDisposable
     {
         private bool _disposed = false;
+        private bool _useThreadSafeCallbacks = false;
 
         /// <summary>
         /// Event fired during operations to report progress
         /// </summary>
         public event EventHandler<ProgressEventArgs>? ProgressChanged;
+
+        /// <summary>
+        /// Gets or sets whether to use thread-safe callbacks
+        /// When enabled, uses the new queue+poll pattern for multi-threaded safety
+        /// </summary>
+        public bool UseThreadSafeCallbacks
+        {
+            get => _useThreadSafeCallbacks;
+            set
+            {
+                if (value != _useThreadSafeCallbacks)
+                {
+                    _useThreadSafeCallbacks = value;
+                    if (value)
+                    {
+                        Console.WriteLine("🔄 Enabling thread-safe callback system (queue+poll pattern)");
+                    }
+                    else
+                    {
+                        Console.WriteLine("🔄 Using legacy direct callback system");
+                    }
+                }
+            }
+        }
 
         /// <summary>
         /// Fit PacMAP model to data and return 2D embedding
@@ -65,8 +90,12 @@ namespace PacMapDemo
             PacMAPModel? realModel = null;
             try
             {
-                realModel = new PacMAPModel();
-                Console.WriteLine("✅ Real PacMAP model created successfully");
+                // Create PacMAP model with thread-safe callback configuration
+                realModel = new PacMAPModel
+                {
+                    UseThreadSafeCallbacks = _useThreadSafeCallbacks
+                };
+                Console.WriteLine($"✅ Real PacMAP model created successfully with {(_useThreadSafeCallbacks ? "thread-safe" : "legacy")} callbacks");
             }
             catch (Exception ex)
             {
@@ -74,12 +103,6 @@ namespace PacMapDemo
                 Console.WriteLine($"⚠️  Falling back to simulation mode for debugging...");
                 realModel = null;
             }
-
-            // Create progress callback that forwards to our event
-            PacMAPSharp.ProgressCallback progressCallback = (phase, current, total, percent, message) =>
-            {
-                ReportProgress(phase, current, total, percent, message ?? "");
-            };
 
             float[,] floatResult;
 
@@ -99,6 +122,21 @@ namespace PacMapDemo
                         }
                     }
 
+                    if (_useThreadSafeCallbacks)
+                    {
+                        // Set up thread-safe callback event handling
+                        realModel.ThreadSafeCallbackManager.ProgressChanged += (sender, args) =>
+                        {
+                            ReportProgress(args.Phase, args.Current, args.Total, args.Percent, args.Message);
+                        };
+                    }
+
+                    // Create progress callback for legacy system
+                    PacMAPSharp.ProgressCallback progressCallback = (phase, current, total, percent, message) =>
+                    {
+                        ReportProgress(phase, current, total, percent, message ?? "");
+                    };
+
                     var embeddingResult = realModel.Fit(
                         data: doubleData,
                         embeddingDimensions: 2,
@@ -108,7 +146,7 @@ namespace PacMapDemo
                         hnswUseCase: PacMAPSharp.HnswUseCase.Balanced,
                         forceExactKnn: forceExactKnn,
                         seed: (ulong)seed,
-                        progressCallback: progressCallback
+                        progressCallback: _useThreadSafeCallbacks ? null : progressCallback
                     );
 
                     // Convert result back to float[,]
@@ -202,21 +240,64 @@ namespace PacMapDemo
         }
 
         /// <summary>
-        /// Get model information
+        /// Get model information including HNSW parameters when available
         /// </summary>
         public ModelInfo GetModelInfo()
         {
-            return new ModelInfo
+            var modelInfo = new ModelInfo
             {
                 NSamples = _lastNSamples,
                 NFeatures = _lastNFeatures,
                 EmbeddingDim = 2,
-                MemoryUsageMb = 10
+                MemoryUsageMb = 10,
+                HasHnswInfo = false
             };
+
+            // Try to get HNSW info from a real PacMAP model if available
+            try
+            {
+                using (var realModel = new PacMAPModel())
+                {
+                    if (realModel.IsFitted)
+                    {
+                        var hnswInfo = realModel.ModelInfo;
+                        modelInfo.HnswM = hnswInfo.DiscoveredHnswM ?? 0;
+                        modelInfo.HnswEfConstruction = hnswInfo.DiscoveredHnswEfConstruction ?? 0;
+                        modelInfo.HnswEfSearch = hnswInfo.DiscoveredHnswEfSearch ?? 0;
+                        modelInfo.HnswMaxM0 = hnswInfo.HnswMaxM0 ?? 0;
+                        modelInfo.HnswSeed = hnswInfo.HnswSeed ?? 0;
+                        modelInfo.HnswMaxLayer = hnswInfo.HnswMaxLayer ?? 0;
+                        modelInfo.HnswTotalElements = hnswInfo.HnswTotalElements ?? 0;
+                        modelInfo.HasHnswInfo = true;
+                    }
+                }
+            }
+            catch
+            {
+                // HNSW info not available, use defaults
+                modelInfo.HnswM = 16;
+                modelInfo.HnswEfConstruction = 64;
+                modelInfo.HnswEfSearch = 64;
+                modelInfo.HnswMaxM0 = 32;
+                modelInfo.HnswSeed = 42;
+                modelInfo.HnswMaxLayer = 1;
+                modelInfo.HnswTotalElements = 0;
+            }
+
+            return modelInfo;
         }
 
         private int _lastNSamples = 0;
         private int _lastNFeatures = 0;
+
+        /// <summary>
+        /// Constructor with optional thread-safe callback configuration
+        /// </summary>
+        /// <param name="useThreadSafeCallbacks">Whether to enable thread-safe callbacks (default: false)</param>
+        public SimplePacMapModel(bool useThreadSafeCallbacks = false)
+        {
+            UseThreadSafeCallbacks = useThreadSafeCallbacks;
+        }
 
         /// <summary>
         /// Save model (demonstration)
@@ -226,6 +307,99 @@ namespace PacMapDemo
             Console.WriteLine($"💾 Saving model: {path} (quantization: {quantize})");
             // In real implementation, this would save the actual model
             System.IO.File.WriteAllText(path, "Demo PacMAP Model");
+        }
+
+        /// <summary>
+        /// Demonstrates manual callback polling for thread-safe callbacks
+        /// This method shows how to poll for messages from the Rust side
+        /// Only works when UseThreadSafeCallbacks is true
+        /// </summary>
+        /// <param name="pollingIntervalMs">Polling interval in milliseconds (default: 50)</param>
+        /// <param name="cancellationToken">Optional cancellation token to stop polling</param>
+        public void StartManualCallbackPolling(int pollingIntervalMs = 50, System.Threading.CancellationToken? cancellationToken = null)
+        {
+            if (!_useThreadSafeCallbacks)
+            {
+                throw new InvalidOperationException("Thread-safe callbacks are not enabled. Set UseThreadSafeCallbacks = true to use polling.");
+            }
+
+            Console.WriteLine($"🔄 Starting manual callback polling (interval: {pollingIntervalMs}ms)");
+
+            var cts = cancellationToken ?? new System.Threading.CancellationTokenSource().Token;
+
+            System.Threading.Tasks.Task.Run(async () =>
+            {
+                try
+                {
+                    while (!cts.IsCancellationRequested)
+                    {
+                        // Check if there are messages and process them
+                        if (PacMAPModel.HasMessages())
+                        {
+                            var message = PacMAPModel.PollNextMessage();
+                            if (!string.IsNullOrEmpty(message))
+                            {
+                                Console.WriteLine($"[Polled Message] {message}");
+                            }
+                        }
+
+                        await System.Threading.Tasks.Task.Delay(pollingIntervalMs, cts);
+                    }
+                }
+                catch (System.OperationCanceledException)
+                {
+                    Console.WriteLine("🔄 Callback polling stopped (cancelled)");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"❌ Callback polling error: {ex.Message}");
+                }
+            });
+        }
+
+        /// <summary>
+        /// Polls for a single message from the thread-safe callback queue
+        /// Returns null if no message is available
+        /// Only works when UseThreadSafeCallbacks is true
+        /// </summary>
+        /// <returns>Message string or null if no message available</returns>
+        public string? PollSingleMessage()
+        {
+            if (!_useThreadSafeCallbacks)
+            {
+                throw new InvalidOperationException("Thread-safe callbacks are not enabled. Set UseThreadSafeCallbacks = true to use polling.");
+            }
+
+            return PacMAPModel.PollNextMessage();
+        }
+
+        /// <summary>
+        /// Checks if there are any pending messages in the thread-safe callback queue
+        /// Only works when UseThreadSafeCallbacks is true
+        /// </summary>
+        /// <returns>True if messages are available</returns>
+        public bool HasPendingMessages()
+        {
+            if (!_useThreadSafeCallbacks)
+            {
+                throw new InvalidOperationException("Thread-safe callbacks are not enabled. Set UseThreadSafeCallbacks = true to use polling.");
+            }
+
+            return PacMAPModel.HasMessages();
+        }
+
+        /// <summary>
+        /// Clears all pending messages from the thread-safe callback queue
+        /// Only works when UseThreadSafeCallbacks is true
+        /// </summary>
+        public void ClearPendingMessages()
+        {
+            if (!_useThreadSafeCallbacks)
+            {
+                throw new InvalidOperationException("Thread-safe callbacks are not enabled. Set UseThreadSafeCallbacks = true to use polling.");
+            }
+
+            PacMAPModel.ClearMessages();
         }
 
         private void ReportProgress(string phase, int current, int total, float percent, string message)
@@ -256,7 +430,7 @@ namespace PacMapDemo
     }
 
     /// <summary>
-    /// Model information structure
+    /// Model information structure with basic and HNSW parameters
     /// </summary>
     public struct ModelInfo
     {
@@ -264,6 +438,16 @@ namespace PacMapDemo
         public int NFeatures;
         public int EmbeddingDim;
         public int MemoryUsageMb;
+
+        // HNSW Parameters (when available)
+        public int HnswM;
+        public int HnswEfConstruction;
+        public int HnswEfSearch;
+        public int HnswMaxM0;
+        public long HnswSeed;
+        public int HnswMaxLayer;
+        public int HnswTotalElements;
+        public bool HasHnswInfo;
     }
 
     /// <summary>

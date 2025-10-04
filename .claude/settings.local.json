@@ -74,7 +74,15 @@
       "WebFetch(domain:docs.rs)",
       "WebFetch(domain:raw.githubusercontent.com)",
       "Bash(curl:*)",
-      "Bash(wget:*)"
+      "Bash(wget:*)",
+      "Bash(rustc:*)",
+      "Bash(1)",
+      "Bash(\".\\PacMapDemo\\bin\\Release\\net8.0\\PacMapDemo.exe\" --help)",
+      "Bash(\".\\PacMapDemo\\bin\\Release\\net8.0\\PacMapDemo.exe\")",
+      "Bash(\"./PacMapDemo/bin/Release/net8.0/PacMapDemo.exe\")",
+      "Bash(findstr:*)",
+      "Bash(\"C:\\PacMAN\\PacMapDemo\\bin\\Release\\net8.0\\PacMapDemo.exe\" mammoth hnsw)",
+      "Bash(.PacMapDemo.exe:*)"
     ],
     "deny": [],
     "ask": []

@@ -15,7 +15,7 @@
       v1.0.1: Bug fixes and improved error handling
       v1.0.0: Initial release with HNSW acceleration, local distance scaling, and enhanced quality validation</releaseNotes>
     <tags>dimensionality-reduction machine-learning pacmap embedding hnsw visualization</tags>
-    <repository type="git" url="https://github.com/YingfanWang/PaCMAP" commit="0850aae7c4ddccd9defdf061f16322caebb990b5" />
+    <repository type="git" url="https://github.com/YingfanWang/PaCMAP" commit="8494bb8faccbb68bf1c3015a230f9c36ab48fd37" />
     <dependencies>
       <group targetFramework="net8.0">
         <dependency id="System.Runtime.InteropServices" version="4.3.0" exclude="Build,Analyzers" />

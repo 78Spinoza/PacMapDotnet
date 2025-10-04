@@ -1,0 +1,24 @@
+1) removed all the code because of hallucination and not be carefull with git. 2 days job gone. 
+2) refused to change the library of HNSW_RS several time started to work with it but in the middle deicided to go back. 
+3) Remove the pacman-core that we created because of hallucination several days job if I did not have a copy. 
+4) imlemented the new HNSW 0.11 but again revert back to HNSW rs again (self decided) 
+5) Pretended that all test was passed we had critical errors. 
+6) Reimplemented pacman code again since I had copies. 
+7) again wanted to delete all code when working with git and got confused. 
+8) Ignorred that the callback text from C# was junk and looked bad. even if I ask do investigate and solve it 3 timees nothing was done. 
+9) Finally understood that we corruped memory and made lots of other things fail because of ffi. I gave detail instruction how to fix the ffi and you did. 
+10) started to remove the pacman core again and revert to imported non deterministc pacman for 3 time by your self even if I said we have to use pacman core. 
+11) Impplemented fake O(N) HNSW implementation and do not mensioned and said that the mitigration of HNSW 0.11 was done and working 
+12) lie about that all test was passed. 
+13) Again went back to HNSW_rs without telling me had to stop and redo work again 
+14)finally removed HNSW_rs and replaced the fake O(N). 
+15) decided to alway quantisize but do not tell anybody causing lots of issues.  
+16) removed the FFI callback fix in 8 by your self. 
+17) we had to implement it now for third  time (FFI callback fix)  
+18) decided that CRC check during save / load is going to be null and removed it. 
+19) removed the recal validation for automatic HNSW hyperparmeters somewere alog the way by your self. Needs to re implement. 
+20) Hallucinated away multiple distance posibility hard coded euclidian from the start. Now we are fored to euclidian only. 
+21) forgetting how to do the recall progress and use report_progress(..) instead  let Some(callback) = progress_callback  and remove proper secure callback curropting memory like in 8 and 9 reverting back to 8 and 9 becuase of compile error and we have to do it again. You done this 12 times randomly. 
+
+
+

@@ -1,6 +1,0 @@
-C:\PacMAN\TestPacMap\obj\Debug\net9.0\TestPacMap.csproj.AssemblyReference.cache
-C:\PacMAN\TestPacMap\obj\Debug\net9.0\TestPacMap.GeneratedMSBuildEditorConfig.editorconfig
-C:\PacMAN\TestPacMap\obj\Debug\net9.0\TestPacMap.AssemblyInfoInputs.cache
-C:\PacMAN\TestPacMap\obj\Debug\net9.0\TestPacMap.AssemblyInfo.cs
-C:\PacMAN\TestPacMap\obj\Debug\net9.0\TestPacMap.csproj.CoreCompileInputs.cache
-C:\PacMAN\TestPacMap\obj\Debug\net9.0\TestPacMap.sourcelink.json

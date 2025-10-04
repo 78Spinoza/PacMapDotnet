@@ -133,8 +133,7 @@ pub fn compute_pairs_hnsw_with_params(data: ArrayView2<f64>, n_neighbors: usize,
 
 #[cfg(feature = "use_hnsw")]
 fn try_hnsw_search_with_params(data: ArrayView2<f64>, n_neighbors: usize, n_samples: usize, n_features: usize, seed: u64, custom_hnsw_params: Option<crate::hnsw_params::HnswParams>) -> Result<Vec<(usize, usize)>, String> {
-    use hnsw_rs::hnsw::Hnsw;
-    use hnsw_rs::dist::DistL2;
+    use crate::hnsw_wrapper::DeterministicHnsw;
 
     // CRITICAL: Deterministic HNSW construction - using comprehensive approach
 
@@ -148,61 +147,24 @@ fn try_hnsw_search_with_params(data: ArrayView2<f64>, n_neighbors: usize, n_samp
         auto_params
     };
 
-    // Convert data to Vec<Vec<f32>> format
+    // Convert data to Vec<Vec<f32>> format with deterministic conversion
     let points: Vec<Vec<f32>> = (0..n_samples)
         .map(|i| {
-            data.row(i).iter().map(|&x| x as f32).collect()
+            data.row(i).iter().map(|&x| crate::hnsw_wrapper::deterministic_f32_from_f64(x)).collect()
         })
         .collect();
 
-    // Calculate dynamic max_layer based on dataset size and m parameter
-    let max_layer = ((n_samples as f32).ln() / (hnsw_params.m as f32).ln()).ceil() as usize + 1;
-    let max_layer = max_layer.min(32).max(4); // Cap between 4-32 layers
+    // Build deterministic HNSW index with seed
+    let mut hnsw = DeterministicHnsw::new(
+        hnsw_params.m,
+        n_samples,
+        hnsw_params.ef_construction,
+        seed
+    );
 
-    // CRITICAL: Build HNSW index with deterministic construction
-    // Final approach: Single-threaded construction + deterministic insertion order
-    let hnsw = {
-        use std::sync::Mutex;
-        static GLOBAL_CONSTRUCTION_LOCK: Mutex<()> = Mutex::new(());
-
-        // CRITICAL: Single-threaded HNSW construction ONLY (search remains parallel)
-        let _construction_lock = GLOBAL_CONSTRUCTION_LOCK.lock().map_err(|e| format!("Failed to acquire construction lock: {}", e))?;
-
-        // Set process-wide seed for any internal RNG usage
-        std::env::set_var("PACMAP_HNSW_SEED", seed.to_string());
-        std::env::set_var("RUST_TEST_TIME_UNIT", "1000,1000"); // Force deterministic timing
-
-        Hnsw::<f32, DistL2>::new(
-            hnsw_params.m,              // max_nb_connection
-            n_samples,                  // max_elements
-            max_layer,                  // max_layer (dynamic)
-            hnsw_params.ef_construction, // ef_construction
-            DistL2{}                    // distance_function
-        )
-    };
-
-    // DETERMINISTIC INSERTION: Sort points by seed-based hash for reproducible order
-    // Even with single-threaded construction, insertion order affects graph structure
-    let mut data_with_id: Vec<(&[f32], usize)> = points.iter().enumerate().map(|(i, p)| (p.as_slice(), i)).collect();
-
-    // Sort by deterministic hash combining seed + point coordinates + index
-    data_with_id.sort_by_key(|(point, id)| {
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
-
-        let mut hasher = DefaultHasher::new();
-        seed.hash(&mut hasher);  // Include seed in hash
-        id.hash(&mut hasher);    // Include original index
-        for &coord in point.iter() {
-            // Hash float bits for deterministic ordering
-            (coord.to_bits()).hash(&mut hasher);
-        }
-        hasher.finish()
-    });
-
-    // Insert in deterministic order (single-threaded)
-    for (point, i) in data_with_id {
-        hnsw.insert((&point.to_vec(), i));
+    // Insert points in original order (determinism is handled by seeded RNG in wrapper)
+    for (_i, point) in points.iter().enumerate() {
+        hnsw.insert(point.as_slice());
     }
 
     // CRITICAL FIX: Implement local distance scaling for proper density adaptation
@@ -353,8 +315,7 @@ fn try_hnsw_per_point_search(data: ArrayView2<f64>, n_neighbors: usize, n_sample
 
 #[cfg(feature = "use_hnsw")]
 fn try_hnsw_per_point_search_with_params(data: ArrayView2<f64>, n_neighbors: usize, n_samples: usize, n_features: usize, custom_hnsw_params: Option<crate::hnsw_params::HnswParams>) -> Result<Vec<Vec<(usize, f64)>>, String> {
-    use hnsw_rs::hnsw::Hnsw;
-    use hnsw_rs::dist::DistL2;
+    use crate::hnsw_wrapper::DeterministicHnsw;
 
     let hnsw_params = if let Some(custom_params) = custom_hnsw_params {
         custom_params
@@ -363,31 +324,19 @@ fn try_hnsw_per_point_search_with_params(data: ArrayView2<f64>, n_neighbors: usi
     };
 
     let points: Vec<Vec<f32>> = (0..n_samples)
-        .map(|i| data.row(i).iter().map(|&x| x as f32).collect())
+        .map(|i| data.row(i).iter().map(|&x| crate::hnsw_wrapper::deterministic_f32_from_f64(x)).collect())
         .collect();
 
-    let max_layer = ((n_samples as f32).ln() / (hnsw_params.m as f32).ln()).ceil() as usize + 1;
-    let max_layer = max_layer.min(32).max(4);
-
-    let hnsw = Hnsw::<f32, DistL2>::new(
+    let mut hnsw = DeterministicHnsw::new(
         hnsw_params.m,
         n_samples,
-        max_layer,
         hnsw_params.ef_construction,
-        DistL2{}
+        42 // Use a fixed seed for reproducibility in this function
     );
 
-    let data_with_id: Vec<(&[f32], usize)> = points.iter().enumerate().map(|(i, p)| (p.as_slice(), i)).collect();
-
-    #[cfg(feature = "parallel")]
-    {
-        hnsw.parallel_insert(&data_with_id);
-    }
-    #[cfg(not(feature = "parallel"))]
-    {
-        for (point, i) in data_with_id {
-            hnsw.insert((&point.to_vec(), i));
-        }
+    // Insert all points into HNSW
+    for (_i, point) in points.iter().enumerate() {
+        hnsw.insert(point.as_slice());
     }
 
     let result = (0..n_samples)
@@ -466,42 +415,28 @@ fn get_knn_indices_bruteforce(data: ArrayView2<f64>, n_neighbors: usize) -> Vec<
 
 #[cfg(feature = "use_hnsw")]
 fn try_hnsw_knn_indices(data: ArrayView2<f64>, n_neighbors: usize) -> Result<Vec<Vec<usize>>, String> {
-    use hnsw_rs::hnsw::Hnsw;
-    use hnsw_rs::dist::DistL2;
+    use crate::hnsw_wrapper::DeterministicHnsw;
 
     let (n_samples, n_features) = data.dim();
     let hnsw_params = crate::hnsw_params::HnswParams::auto_scale(n_samples, n_features, n_neighbors);
 
     let points: Vec<Vec<f32>> = (0..n_samples)
         .map(|i| {
-            data.row(i).iter().map(|&x| x as f32).collect()
+            data.row(i).iter().map(|&x| crate::hnsw_wrapper::deterministic_f32_from_f64(x)).collect()
         })
         .collect();
 
     // Calculate dynamic max_layer based on dataset size and m parameter
-    let max_layer = ((n_samples as f32).ln() / (hnsw_params.m as f32).ln()).ceil() as usize + 1;
-    let max_layer = max_layer.min(32).max(4); // Cap between 4-32 layers
-
-    let hnsw = Hnsw::<f32, DistL2>::new(
+    let mut hnsw = DeterministicHnsw::new(
         hnsw_params.m,
         n_samples,
-        max_layer,                  // max_layer (dynamic)
         hnsw_params.ef_construction,
-        DistL2{}
+        42 // Fixed seed for reproducibility
     );
 
-    // Insert all points into HNSW index using parallel insert if available
-    let data_with_id: Vec<(&[f32], usize)> = points.iter().enumerate().map(|(i, p)| (p.as_slice(), i)).collect();
-
-    #[cfg(feature = "parallel")]
-    {
-        hnsw.parallel_insert(&data_with_id);
-    }
-    #[cfg(not(feature = "parallel"))]
-    {
-        for (point, i) in data_with_id {
-            hnsw.insert((&point.to_vec(), i));
-        }
+    // Insert all points into HNSW index
+    for (_i, point) in points.iter().enumerate() {
+        hnsw.insert(point.as_slice());
     }
 
     let result = (0..n_samples)

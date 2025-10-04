@@ -240,7 +240,7 @@ namespace PacMapDemo
         private static extern IntPtr WindowsGetErrorMessage(int errorCode);
 
         [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_get_model_info")]
-        private static extern int WindowsGetModelInfo(IntPtr model, out int nVertices, out int nDim, out int embeddingDim, out int nNeighbors, out float midNearRatio, out float farPairRatio, out DistanceMetric metric, out int hnswM, out int hnswEfConstruction, out int hnswEfSearch);
+        private static extern int WindowsGetModelInfo(IntPtr model, out int nVertices, out int nDim, out int embeddingDim, out int nNeighbors, out float midNearRatio, out float farPairRatio, out DistanceMetric metric, out int hnswM, out int hnswEfConstruction, out int hnswEfSearch, out int hnswMaxM0, out long hnswSeed, out int hnswMaxLayer, out int hnswTotalElements);
 
         [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_is_fitted")]
         private static extern int WindowsIsFitted(IntPtr model);
@@ -280,7 +280,7 @@ namespace PacMapDemo
         private static extern IntPtr LinuxGetErrorMessage(int errorCode);
 
         [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_get_model_info")]
-        private static extern int LinuxGetModelInfo(IntPtr model, out int nVertices, out int nDim, out int embeddingDim, out int nNeighbors, out float midNearRatio, out float farPairRatio, out DistanceMetric metric, out int hnswM, out int hnswEfConstruction, out int hnswEfSearch);
+        private static extern int LinuxGetModelInfo(IntPtr model, out int nVertices, out int nDim, out int embeddingDim, out int nNeighbors, out float midNearRatio, out float farPairRatio, out DistanceMetric metric, out int hnswM, out int hnswEfConstruction, out int hnswEfSearch, out int hnswMaxM0, out long hnswSeed, out int hnswMaxLayer, out int hnswTotalElements);
 
         [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_is_fitted")]
         private static extern int LinuxIsFitted(IntPtr model);
@@ -336,10 +336,10 @@ namespace PacMapDemo
                 if (!IsFitted)
                     throw new InvalidOperationException("Model must be fitted before accessing model info");
 
-                var result = CallGetModelInfo(_nativeModel, out var nVertices, out var nDim, out var embeddingDim, out var nNeighbors, out var midNearRatio, out var farPairRatio, out var metric, out var hnswM, out var hnswEfConstruction, out var hnswEfSearch);
+                var result = CallGetModelInfo(_nativeModel, out var nVertices, out var nDim, out var embeddingDim, out var nNeighbors, out var midNearRatio, out var farPairRatio, out var metric, out var hnswM, out var hnswEfConstruction, out var hnswEfSearch, out var hnswMaxM0, out var hnswSeed, out var hnswMaxLayer, out var hnswTotalElements);
                 ThrowIfError(result);
 
-                return new PacMapModelInfo(nVertices, nDim, embeddingDim, nNeighbors, midNearRatio, farPairRatio, metric, hnswM, hnswEfConstruction, hnswEfSearch);
+                return new PacMapModelInfo(nVertices, nDim, embeddingDim, nNeighbors, midNearRatio, farPairRatio, metric, hnswM, hnswEfConstruction, hnswEfSearch, hnswMaxM0, hnswSeed, hnswMaxLayer, hnswTotalElements);
             }
         }
 
@@ -933,12 +933,12 @@ namespace PacMapDemo
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static int CallGetModelInfo(IntPtr model, out int nVertices, out int nDim, out int embeddingDim, out int nNeighbors, out float midNearRatio, out float farPairRatio, out DistanceMetric metric, out int hnswM, out int hnswEfConstruction, out int hnswEfSearch)
+        private static int CallGetModelInfo(IntPtr model, out int nVertices, out int nDim, out int embeddingDim, out int nNeighbors, out float midNearRatio, out float farPairRatio, out DistanceMetric metric, out int hnswM, out int hnswEfConstruction, out int hnswEfSearch, out int hnswMaxM0, out long hnswSeed, out int hnswMaxLayer, out int hnswTotalElements)
         {
             try
             {
-                return IsWindows ? WindowsGetModelInfo(model, out nVertices, out nDim, out embeddingDim, out nNeighbors, out midNearRatio, out farPairRatio, out metric, out hnswM, out hnswEfConstruction, out hnswEfSearch)
-                                 : LinuxGetModelInfo(model, out nVertices, out nDim, out embeddingDim, out nNeighbors, out midNearRatio, out farPairRatio, out metric, out hnswM, out hnswEfConstruction, out hnswEfSearch);
+                return IsWindows ? WindowsGetModelInfo(model, out nVertices, out nDim, out embeddingDim, out nNeighbors, out midNearRatio, out farPairRatio, out metric, out hnswM, out hnswEfConstruction, out hnswEfSearch, out hnswMaxM0, out hnswSeed, out hnswMaxLayer, out hnswTotalElements)
+                                 : LinuxGetModelInfo(model, out nVertices, out nDim, out embeddingDim, out nNeighbors, out midNearRatio, out farPairRatio, out metric, out hnswM, out hnswEfConstruction, out hnswEfSearch, out hnswMaxM0, out hnswSeed, out hnswMaxLayer, out hnswTotalElements);
             }
             catch
             {
@@ -946,6 +946,7 @@ namespace PacMapDemo
                 nVertices = 0; nDim = 0; embeddingDim = 2; nNeighbors = 15;
                 midNearRatio = 0.5f; farPairRatio = 0.5f; metric = DistanceMetric.Euclidean;
                 hnswM = 16; hnswEfConstruction = 64; hnswEfSearch = 64;
+                hnswMaxM0 = 32; hnswSeed = 42; hnswMaxLayer = 1; hnswTotalElements = 0;
                 return PACMAP_ERROR_MODEL_NOT_FITTED;
             }
         }
@@ -1121,11 +1122,31 @@ namespace PacMapDemo
         public int HnswEfSearch { get; }
 
         /// <summary>
+        /// Gets the HNSW maximum connections per layer 0 node (M0 parameter)
+        /// </summary>
+        public int HnswMaxM0 { get; }
+
+        /// <summary>
+        /// Gets the HNSW random seed used for deterministic construction
+        /// </summary>
+        public long HnswSeed { get; }
+
+        /// <summary>
+        /// Gets the current number of layers in the HNSW index
+        /// </summary>
+        public int HnswMaxLayer { get; }
+
+        /// <summary>
+        /// Gets the total number of elements indexed in the HNSW structure
+        /// </summary>
+        public int HnswTotalElements { get; }
+
+        /// <summary>
         /// Gets the human-readable name of the distance metric
         /// </summary>
         public string MetricName => PacMapModel.GetMetricName(Metric);
 
-        internal PacMapModelInfo(int trainingSamples, int inputDimension, int outputDimension, int neighbors, float midNearRatio, float farPairRatio, DistanceMetric metric, int hnswM, int hnswEfConstruction, int hnswEfSearch)
+        internal PacMapModelInfo(int trainingSamples, int inputDimension, int outputDimension, int neighbors, float midNearRatio, float farPairRatio, DistanceMetric metric, int hnswM, int hnswEfConstruction, int hnswEfSearch, int hnswMaxM0, long hnswSeed, int hnswMaxLayer, int hnswTotalElements)
         {
             TrainingSamples = trainingSamples;
             InputDimension = inputDimension;
@@ -1137,6 +1158,10 @@ namespace PacMapDemo
             HnswM = hnswM;
             HnswEfConstruction = hnswEfConstruction;
             HnswEfSearch = hnswEfSearch;
+            HnswMaxM0 = hnswMaxM0;
+            HnswSeed = hnswSeed;
+            HnswMaxLayer = hnswMaxLayer;
+            HnswTotalElements = hnswTotalElements;
         }
 
         /// <summary>
@@ -1147,7 +1172,8 @@ namespace PacMapDemo
         {
             return $"Enhanced PacMAP Model: {TrainingSamples} samples, {InputDimension}D → {OutputDimension}D, " +
                    $"k={Neighbors}, mid_near={MidNearRatio:F3}, far_pair={FarPairRatio:F3}, metric={MetricName}, " +
-                   $"HNSW(M={HnswM}, ef_c={HnswEfConstruction}, ef_s={HnswEfSearch})";
+                   $"HNSW(M={HnswM}, M0={HnswMaxM0}, ef_c={HnswEfConstruction}, ef_s={HnswEfSearch}, seed={HnswSeed}, " +
+                   $"layers={HnswMaxLayer}, elements={HnswTotalElements})";
         }
     }
 

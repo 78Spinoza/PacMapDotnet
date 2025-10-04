@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("PacMapDemo")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+40b6440c7994ad48575fbe43e02f1294ee10534f")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+8494bb8faccbb68bf1c3015a230f9c36ab48fd37")]
 [assembly: System.Reflection.AssemblyProductAttribute("PacMapDemo")]
 [assembly: System.Reflection.AssemblyTitleAttribute("PacMapDemo")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
