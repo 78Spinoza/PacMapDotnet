@@ -1,6 +1,0 @@
-C:\PacMAN\obj\Release\net8.0\ThreadSafeCallbackTest.csproj.AssemblyReference.cache
-C:\PacMAN\obj\Release\net8.0\ThreadSafeCallbackTest.GeneratedMSBuildEditorConfig.editorconfig
-C:\PacMAN\obj\Release\net8.0\ThreadSafeCallbackTest.AssemblyInfoInputs.cache
-C:\PacMAN\obj\Release\net8.0\ThreadSafeCallbackTest.AssemblyInfo.cs
-C:\PacMAN\obj\Release\net8.0\ThreadSafeCallbackTest.csproj.CoreCompileInputs.cache
-C:\PacMAN\obj\Release\net8.0\ThreadSafeCallbackTest.sourcelink.json
