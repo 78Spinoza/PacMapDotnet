@@ -1,1 +1,27 @@
 *.npy
+
+# Claude Code
+.claude/
+
+# Build artifacts
+obj/
+bin/
+Results/
+
+# Test files and temporary files
+*.tmp
+*.bak
+*~
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vs/
+*.user
+*.suo
+
+# Build outputs
+*.exe
+*.dll
+*.so
+*.dylib
