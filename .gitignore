@@ -40,12 +40,16 @@ project.lock.json
 runtimes/
 */runtimes/
 
-# Large data files that shouldn't be in repo
-*.csv
-*.png
-*.jpg
-*.jpeg
-*.bin
+# Build outputs and model files (but be careful not to block all images/data)
+*/Results/*.png
+*/Results/*.csv
+*/Results/*.bin
+*/bin/**/*.png
+*/bin/**/*.csv
+*/bin/**/*.bin
+*.model.bin
+*_embedding.csv
+*_projection.png
 
 # C# specific build artifacts
 *.deps.json
