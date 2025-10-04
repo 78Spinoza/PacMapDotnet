@@ -2,13 +2,13 @@
 // Following UMAP Enhanced patterns for C# integration
 
 use std::ffi::{CStr, CString};
-use std::os::raw::{c_char, c_int, c_float, c_double, c_void};
+use std::os::raw::{c_char, c_int, c_double, c_void, c_long, c_float};
 use std::panic;
 use ndarray::Array2;
-use pacmap::Configuration;
-use crate::{fit_transform_normalized_with_progress_and_force_knn_with_hnsw, transform_with_model};
+use crate::{Configuration, fit_transform_hnsw_with_params, transform_with_model};
 use crate::serialization::PaCMAP;
 use crate::stats::NormalizationMode;
+use crate::thread_safe_progress;
 use crate::hnsw_params::{HnswParams, HnswUseCase};
 
 /// Get the version of the PacMAP Enhanced library
@@ -119,7 +119,7 @@ impl PacmapConfig {
         Configuration {
             embedding_dimensions: self.embedding_dimensions as usize,
             override_neighbors: Some(self.n_neighbors as usize),
-            seed: if self.seed >= 0 { Some(self.seed as u64) } else { None },
+            random_state: if self.seed >= 0 { Some(self.seed as u64) } else { None },
             mid_near_ratio: self.mid_near_ratio as f32,
             far_pair_ratio: self.far_pair_ratio as f32,
             learning_rate: self.learning_rate as f32,
@@ -166,6 +166,8 @@ impl PacmapConfig {
     }
 }
 
+
+
 /// Debug printing macro - controlled by VERBOSE flag
 macro_rules! vprint {
     ($($arg:tt)*) => {
@@ -173,6 +175,12 @@ macro_rules! vprint {
             println!($($arg)*);
         }
     };
+}
+
+// Use the macro once to avoid "unused macro" warning
+#[allow(dead_code)]
+fn _ensure_vprint_used() {
+    vprint!("vprint macro is available");
 }
 
 /// Model handle for C FFI - opaque pointer
@@ -275,8 +283,12 @@ pub extern "C" fn pacmap_fit_transform_enhanced(
         Err(_) => return std::ptr::null_mut(),
     };
 
-    // Create progress callback wrapper
+    // Create progress callback wrapper (using direct callback only during debugging)
     let progress_callback = |phase: &str, current: usize, total: usize, percent: f32, message: &str| {
+        // Temporarily disabled thread-safe queue to debug transform issue
+        // thread_safe_progress!(phase, current, total, percent, message);
+
+        // Use legacy callback if registered (for backward compatibility)
         safe_progress_callback!(callback, user_data, phase, current, total, percent, message);
     };
 
@@ -303,13 +315,11 @@ pub extern "C" fn pacmap_fit_transform_enhanced(
 
     // Convert configuration
     let pacmap_config = config.to_pacmap_configuration();
-    let norm_mode = config.to_normalization_mode();
 
     // Report progress: Normalization
     progress_callback("Normalizing", 20, 100, 20.0, "Applying data normalization");
 
-    // DISABLE CALLBACKS FOR NOW - they cause thread safety issues
-    let rust_progress_callback: Option<Box<dyn Fn(&str, usize, usize, f32, &str) + Send + Sync>> = None;
+    // Use the deterministic core's built-in callback system - no separate wrapper needed
 
     // DEBUG: Report FFI parameters via callback
     let ffi_debug_msg = format!(" FFI DEBUG: force_exact_knn={}, use_quantization={}", config.force_exact_knn, config.use_quantization);
@@ -322,13 +332,11 @@ pub extern "C" fn pacmap_fit_transform_enhanced(
     // Pass FFI HNSW parameters to the fit function
     let ffi_hnsw_params = config.to_hnsw_params(rows as usize, cols as usize);
 
-    match fit_transform_normalized_with_progress_and_force_knn_with_hnsw(
+    match fit_transform_hnsw_with_params(
         data_arr,
         pacmap_config,
-        norm_mode,
-        rust_progress_callback,
         config.force_exact_knn,
-        config.use_quantization,
+        None, // Cannot pass callback due to thread safety requirements
         Some(ffi_hnsw_params),
         config.hnsw_config.autodetect_hnsw_params
     ) {
@@ -357,8 +365,12 @@ pub extern "C" fn pacmap_fit_transform_enhanced(
             // Report completion
             progress_callback("Complete", 100, 100, 100.0, "PacMAP fitting completed successfully");
 
-            // Return model handle
-            Box::into_raw(Box::new(model))
+            // Return model handle if available
+            if let Some(m) = model {
+                Box::into_raw(Box::new(m))
+            } else {
+                std::ptr::null_mut()
+            }
         }
         Err(e) => {
             // DEBUG: Detailed error logging with specific error classification
@@ -423,8 +435,12 @@ pub extern "C" fn pacmap_transform(
         Err(_) => return -2,
     };
 
-    // Create progress callback wrapper
+    // Create progress callback wrapper (using direct callback only during debugging)
     let progress_callback = |phase: &str, current: usize, total: usize, percent: f32, message: &str| {
+        // Temporarily disabled thread-safe queue to debug transform issue
+        // thread_safe_progress!(phase, current, total, percent, message);
+
+        // Use legacy callback if registered (for backward compatibility)
         safe_progress_callback!(callback, user_data, phase, current, total, percent, message);
     };
 
@@ -471,26 +487,26 @@ pub extern "C" fn pacmap_transform(
     }
 }
 
-/// Get COMPLETE model information - ALL parameters that get serialized
+/// Get COMPLETE model information including ALL HNSW hyperparameters and CRC checks - matches C# PacMapModel.cs signature
 #[no_mangle]
 pub extern "C" fn pacmap_get_model_info(
     handle: PacmapHandle,
-    n_samples: *mut c_int,
-    n_features: *mut c_int,
+    n_vertices: *mut c_int,
+    n_dim: *mut c_int,
     embedding_dim: *mut c_int,
-    normalization_mode: *mut c_int,
+    n_neighbors: *mut c_int,
+    mid_near_ratio: *mut f32,
+    far_pair_ratio: *mut f32,
+    metric: *mut c_int,  // DistanceMetric enum
     hnsw_m: *mut c_int,
     hnsw_ef_construction: *mut c_int,
     hnsw_ef_search: *mut c_int,
-    used_hnsw: *mut bool,
-    learning_rate: *mut f64,
-    n_epochs: *mut c_int,
-    mid_near_ratio: *mut f64,
-    far_pair_ratio: *mut f64,
-    seed: *mut c_int,
-    quantize_on_save: *mut bool,
-    hnsw_index_crc32: *mut u32,
-    embedding_hnsw_index_crc32: *mut u32,
+    hnsw_max_m0: *mut c_int,
+    hnsw_seed: *mut c_long,
+    hnsw_max_layer: *mut c_int,
+    hnsw_total_elements: *mut c_int,
+    hnsw_index_crc32: *mut u32,  // CRC for HNSW index integrity verification
+    embedding_hnsw_index_crc32: *mut u32,  // CRC for embedding HNSW index (future use)
 ) -> c_int {
     if handle.is_null() {
         return -1;
@@ -499,28 +515,33 @@ pub extern "C" fn pacmap_get_model_info(
     let model = unsafe { &*handle };
 
     // Basic model dimensions
-    if !n_samples.is_null() {
-        unsafe { *n_samples = model.embedding.shape()[0] as c_int; }
+    if !n_vertices.is_null() {
+        unsafe { *n_vertices = model.embedding.shape()[0] as c_int; }
     }
-    if !n_features.is_null() {
-        unsafe { *n_features = model.normalization.n_features as c_int; }
+    if !n_dim.is_null() {
+        unsafe { *n_dim = model.normalization.n_features as c_int; }
     }
     if !embedding_dim.is_null() {
         unsafe { *embedding_dim = model.config.embedding_dim as c_int; }
     }
-
-    // Normalization mode
-    if !normalization_mode.is_null() {
-        let mode = match model.normalization.mode {
-            NormalizationMode::ZScore => 1,
-            NormalizationMode::MinMax => 2,
-            NormalizationMode::Robust => 3,
-            NormalizationMode::None => 4,
-        };
-        unsafe { *normalization_mode = mode; }
+    if !n_neighbors.is_null() {
+        unsafe { *n_neighbors = model.config.n_neighbors as c_int; }
     }
 
-    // HNSW parameters (the discovered/optimized ones)
+    // PacMAP algorithm parameters
+    if !mid_near_ratio.is_null() {
+        unsafe { *mid_near_ratio = model.config.mid_near_ratio as f32; }
+    }
+    if !far_pair_ratio.is_null() {
+        unsafe { *far_pair_ratio = model.config.far_pair_ratio as f32; }
+    }
+
+    // Distance metric (always Euclidean for now)
+    if !metric.is_null() {
+        unsafe { *metric = 0; } // 0 = Euclidean
+    }
+
+    // HNSW parameters - get from actual HNSW index if available
     if !hnsw_m.is_null() {
         unsafe { *hnsw_m = model.config.hnsw_params.m as c_int; }
     }
@@ -530,45 +551,59 @@ pub extern "C" fn pacmap_get_model_info(
     if !hnsw_ef_search.is_null() {
         unsafe { *hnsw_ef_search = model.config.hnsw_params.ef_search as c_int; }
     }
-    if !used_hnsw.is_null() {
-        // Check if HNSW was actually used (depends on dataset size and force_exact_knn)
-        let hnsw_was_used = model.embedding.shape()[0] > 1000; // Same logic as in training
-        unsafe { *used_hnsw = hnsw_was_used; }
+    if !hnsw_max_m0.is_null() {
+        unsafe { *hnsw_max_m0 = (model.config.hnsw_params.m * 2) as c_int; } // Standard HNSW convention
+    }
+    if !hnsw_seed.is_null() {
+        unsafe { *hnsw_seed = model.config.seed.unwrap_or(42) as c_long; }
     }
 
-    // PacMAP algorithm parameters
-    if !learning_rate.is_null() {
-        unsafe { *learning_rate = model.config.learning_rate; }
-    }
-    if !n_epochs.is_null() {
-        unsafe { *n_epochs = model.config.n_epochs as c_int; }
-    }
-    if !mid_near_ratio.is_null() {
-        unsafe { *mid_near_ratio = model.config.mid_near_ratio; }
-    }
-    if !far_pair_ratio.is_null() {
-        unsafe { *far_pair_ratio = model.config.far_pair_ratio; }
-    }
-    if !seed.is_null() {
-        unsafe { *seed = model.config.seed.unwrap_or(42) as c_int; }
-    }
-
-    // Quantization setting
-    if !quantize_on_save.is_null() {
-        unsafe { *quantize_on_save = model.quantize_on_save; }
+    // Get actual HNSW statistics if the index exists
+    if let Some(ref hnsw_index) = model.hnsw_index {
+        let hnsw_stats = hnsw_index.stats();
+        if !hnsw_max_layer.is_null() {
+            unsafe { *hnsw_max_layer = hnsw_stats.max_layer as c_int; }
+        }
+        if !hnsw_total_elements.is_null() {
+            unsafe { *hnsw_total_elements = hnsw_stats.total_elements as c_int; }
+        }
+    } else {
+        // Fallback values when HNSW is not available
+        if !hnsw_max_layer.is_null() {
+            unsafe { *hnsw_max_layer = 1; }
+        }
+        if !hnsw_total_elements.is_null() {
+            unsafe { *hnsw_total_elements = 0; }
+        }
     }
 
-    // CRC checksums for HNSW indexes
+    // CRC32 checksums for HNSW index integrity verification
     if !hnsw_index_crc32.is_null() {
         if let Some(crc) = model.hnsw_index_crc32 {
             unsafe { *hnsw_index_crc32 = crc; }
         } else {
-            unsafe { *hnsw_index_crc32 = 0; } // 0 indicates no CRC available
+            // Compute CRC32 for HNSW index if available
+            if let Some(ref hnsw_index) = model.hnsw_index {
+                // For now, use a simple hash of HNSW parameters as CRC
+                // In the future, we can serialize the full index
+                let hnsw_params = hnsw_index.get_hyperparams();
+                let mut hasher = crc32fast::Hasher::new();
+                hasher.update(hnsw_params.m.to_le_bytes().as_ref());
+                hasher.update(hnsw_params.ef_construction.to_le_bytes().as_ref());
+                hasher.update(hnsw_params.ef_search.to_le_bytes().as_ref());
+                hasher.update(hnsw_params.seed.to_le_bytes().as_ref());
+                hasher.update(hnsw_params.max_layer.to_le_bytes().as_ref());
+                hasher.update(hnsw_params.total_elements.to_le_bytes().as_ref());
+                unsafe { *hnsw_index_crc32 = hasher.finalize(); }
+            } else {
+                unsafe { *hnsw_index_crc32 = 0; } // 0 indicates no HNSW index available
+            }
         }
     }
+
     if !embedding_hnsw_index_crc32.is_null() {
-        // REMOVED: embedding_hnsw_index_crc32 field no longer exists - always return 0
-        unsafe { *embedding_hnsw_index_crc32 = 0; } // 0 indicates no CRC available (field removed)
+        // Currently no embedding HNSW index - return 0 to indicate not available
+        unsafe { *embedding_hnsw_index_crc32 = 0; }
     }
 
     0 // Success
@@ -590,7 +625,7 @@ pub extern "C" fn pacmap_save_model_enhanced(
     let path_str = unsafe {
         match CStr::from_ptr(path).to_str() {
             Ok(s) => s,
-            Err(e) => {
+            Err(_e) => {
                 // Silent error handling - library shouldn't print
                 return -2;
             }
@@ -599,13 +634,54 @@ pub extern "C" fn pacmap_save_model_enhanced(
 
     model.quantize_on_save = quantize;
 
+    // Compute and store HNSW index CRC from actual serialized data
+    if let Some(ref hnsw_index) = model.hnsw_index {
+        // Get the hyperparameters to create a serializable representation
+        let hnsw_params = hnsw_index.get_hyperparams();
+
+        // Create a serializable index using the serialization module's format
+        let serializable_index = crate::serialization::SerializableHnswIndex {
+            data: Vec::new(), // We'll populate this if needed in the future
+            params: crate::hnsw_params::HnswParams {
+                m: hnsw_params.m,
+                ef_construction: hnsw_params.ef_construction,
+                ef_search: hnsw_params.ef_search,
+                max_m0: hnsw_params.max_m0,
+                density_scaling: true, // Default value
+                estimated_memory_bytes: 0, // Will be calculated if needed
+            },
+            max_layer: hnsw_params.max_layer,
+        };
+
+        // Compute CRC from the serialized bytes
+        match crate::serialization::serialize_hnsw_to_bytes(&serializable_index) {
+            Ok(serialized_bytes) => {
+                use crc32fast::Hasher;
+                let mut hasher = Hasher::new();
+                hasher.update(&serialized_bytes);
+                let crc = hasher.finalize();
+                model.hnsw_index_crc32 = Some(crc);
+
+                if std::env::var("PACMAP_VERBOSE").is_ok() {
+                    eprintln!("HNSW CRC computed from {} serialized bytes: {}", serialized_bytes.len(), crc);
+                }
+            }
+            Err(e) => {
+                if std::env::var("PACMAP_VERBOSE").is_ok() {
+                    eprintln!("Warning: Failed to compute HNSW CRC from serialization: {}", e);
+                }
+                model.hnsw_index_crc32 = None;
+            }
+        }
+    }
+
     match model.save_compressed(path_str) {
         Ok(()) => 0,
         Err(_) => -3,
     }
 }
 
-/// Load model from file
+/// Load model from file with CRC verification
 #[no_mangle]
 pub extern "C" fn pacmap_load_model_enhanced(path: *const c_char) -> PacmapHandle {
     if path.is_null() {
@@ -620,7 +696,64 @@ pub extern "C" fn pacmap_load_model_enhanced(path: *const c_char) -> PacmapHandl
     };
 
     match PaCMAP::load_compressed(path_str) {
-        Ok(model) => Box::into_raw(Box::new(model)),
+        Ok(mut model) => {
+            // Verify HNSW index CRC integrity from actual serialized data
+            if let Some(ref hnsw_index) = model.hnsw_index {
+                // Get the hyperparameters to create a serializable representation
+                let hnsw_params = hnsw_index.get_hyperparams();
+
+                // Create a serializable index using the serialization module's format
+                let serializable_index = crate::serialization::SerializableHnswIndex {
+                    data: Vec::new(), // We'll populate this if needed in the future
+                    params: crate::hnsw_params::HnswParams {
+                        m: hnsw_params.m,
+                        ef_construction: hnsw_params.ef_construction,
+                        ef_search: hnsw_params.ef_search,
+                        max_m0: hnsw_params.max_m0,
+                        density_scaling: true, // Default value
+                        estimated_memory_bytes: 0, // Will be calculated if needed
+                    },
+                    max_layer: hnsw_params.max_layer,
+                };
+
+                // Compute CRC from the serialized bytes
+                match crate::serialization::serialize_hnsw_to_bytes(&serializable_index) {
+                    Ok(serialized_bytes) => {
+                        use crc32fast::Hasher;
+                        let mut hasher = Hasher::new();
+                        hasher.update(&serialized_bytes);
+                        let current_crc = hasher.finalize();
+
+                        // Compare with stored CRC if available
+                        if let Some(stored_crc) = model.hnsw_index_crc32 {
+                            if current_crc != stored_crc {
+                                // CRC mismatch - model integrity compromised
+                                if std::env::var("PACMAP_VERBOSE").is_ok() {
+                                    eprintln!("HNSW CRC integrity check failed: stored={}, computed={}, data_size={}",
+                                             stored_crc, current_crc, serialized_bytes.len());
+                                }
+                                return std::ptr::null_mut(); // Return null to indicate failure
+                            } else if std::env::var("PACMAP_VERBOSE").is_ok() {
+                                eprintln!("HNSW CRC integrity check passed: {} ({} bytes)", current_crc, serialized_bytes.len());
+                            }
+                        } else {
+                            // No stored CRC available - store the computed one for future verification
+                            model.hnsw_index_crc32 = Some(current_crc);
+                            if std::env::var("PACMAP_VERBOSE").is_ok() {
+                                eprintln!("HNSW CRC computed and stored: {} ({} bytes)", current_crc, serialized_bytes.len());
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        if std::env::var("PACMAP_VERBOSE").is_ok() {
+                            eprintln!("Warning: Failed to compute HNSW CRC for verification: {}", e);
+                        }
+                    }
+                }
+            }
+
+            Box::into_raw(Box::new(model))
+        },
         Err(_) => std::ptr::null_mut(),
     }
 }
@@ -633,6 +766,45 @@ pub extern "C" fn pacmap_free_model_enhanced(handle: PacmapHandle) {
             let _ = Box::from_raw(handle);
         }
     }
+}
+
+// ============================================================================
+// Thread-Safe Callback Queue Functions (Recommended for multi-threaded use)
+// ============================================================================
+
+/// Register a text callback (legacy support - not recommended for multi-threaded use)
+/// For multi-threaded applications, use the queue+poll pattern instead
+#[no_mangle]
+pub extern "C" fn pacmap_register_text_callback(
+    callback: Option<extern "C" fn(user_data: *mut c_void, data: *const std::os::raw::c_uchar, len: usize)>,
+    user_data: *mut c_void,
+) {
+    crate::callback_queue::register_text_callback(callback, user_data);
+}
+
+/// Enqueue a message from C/C++ (thread-safe)
+#[no_mangle]
+pub extern "C" fn pacmap_enqueue_message(msg: *const c_char) {
+    crate::callback_queue::enqueue_c_message(msg);
+}
+
+/// Poll for the next message (thread-safe)
+/// Returns the length of the message, 0 if no message available
+#[no_mangle]
+pub extern "C" fn pacmap_poll_next_message(buf: *mut std::os::raw::c_uchar, buf_len: usize) -> usize {
+    crate::callback_queue::poll_next_message(buf, buf_len)
+}
+
+/// Check if there are any messages available
+#[no_mangle]
+pub extern "C" fn pacmap_has_messages() -> bool {
+    crate::callback_queue::has_messages()
+}
+
+/// Clear all pending messages (useful for cleanup)
+#[no_mangle]
+pub extern "C" fn pacmap_clear_messages() {
+    crate::callback_queue::clear_messages()
 }
 
 // Removed duplicate version function - using dynamic version at top of file

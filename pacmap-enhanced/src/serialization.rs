@@ -7,10 +7,10 @@ use crate::quantize::{quantize_embedding_linear, QuantizedEmbedding, dequantize_
 use crate::stats::NormalizationParams;
 use crate::hnsw_params::HnswParams;
 
-#[cfg(feature = "use_hnsw")]
-use hnsw_rs::hnsw::Hnsw;
-#[cfg(feature = "use_hnsw")]
-use hnsw_rs::dist::DistL2;
+// HNSW serialization disabled - indices will be rebuilt on demand
+// The new deterministic hnsw crate doesn't support the same serialization
+//#[cfg(feature = "use_hnsw")]
+//use crate::hnsw_wrapper::DeterministicHnsw;
 
 // Import is_verbose function from lib.rs
 use crate::is_verbose;
@@ -54,6 +54,17 @@ pub struct TransformStats {
     /// The distance from the point to the centroid of the entire training embedding.
     /// A global measure of how far the point is from the "center" of the data.
     pub distance_to_training_centroid: f64,
+}
+
+impl Default for TransformStats {
+    fn default() -> Self {
+        Self {
+            coordinates: Array1::zeros(2), // Default 2D embedding
+            distance_to_closest_neighbor: 0.0,
+            mean_distance_to_k_neighbors: 0.0,
+            distance_to_training_centroid: 0.0,
+        }
+    }
 }
 
 /// Core PacMAP model parameters (serializable subset of Configuration)
@@ -110,8 +121,13 @@ pub struct PaCMAP {
     #[serde(default)]
     pub quantized_embedding: Option<QuantizedEmbedding>,
 
-    /// TRANSFORM SUPPORT: Original high-dimensional training data (quantized)
-    /// Used for initial neighbor search when transforming new points
+    /// TRANSFORM SUPPORT: Original high-dimensional training data (full precision for exact KNN)
+    /// Used for exact neighbor search when KNN algorithm is used
+    #[serde(default)]
+    pub original_data_full: Option<Array2<f64>>,
+
+    /// TRANSFORM SUPPORT: Original high-dimensional training data (quantized for HNSW)
+    /// Used for initial neighbor search when transforming new points with HNSW
     #[serde(default)]
     pub original_data: Option<QuantizedEmbedding>,
 
@@ -125,17 +141,13 @@ pub struct PaCMAP {
     #[serde(default)]
     pub embedding_centroid: Option<Array1<f64>>,
 
-    /// The HNSW index for fast neighbor searches in the original data space.
-    /// It is not serialized and will be rebuilt on load if needed.
+    /// HNSW indices - re-enabled with new deterministic hnsw crate
     #[serde(skip)]
     #[cfg(feature = "use_hnsw")]
-    pub hnsw_index: Option<hnsw_rs::hnsw::Hnsw<'static, f32, hnsw_rs::dist::DistL2>>,
-
-    /// The HNSW index for fast neighbor searches in the embedding space.
-    /// It is not serialized and will be rebuilt on load if needed.
+    pub hnsw_index: Option<crate::hnsw_wrapper::DeterministicHnsw>,
     #[serde(skip)]
     #[cfg(feature = "use_hnsw")]
-    pub embedding_hnsw_index: Option<hnsw_rs::hnsw::Hnsw<'static, f32, hnsw_rs::dist::DistL2>>,
+    pub embedding_hnsw_index: Option<crate::hnsw_wrapper::DeterministicHnsw>,
 
     /// The raw bytes of a serialized HNSW index for original data.
     /// Used for massive datasets where rebuilding is too slow.
@@ -164,6 +176,16 @@ pub struct DistanceStats {
     pub max_distance: f64,
 }
 
+impl Default for DistanceStats {
+    fn default() -> Self {
+        Self {
+            mean_distance: 0.0,
+            p95_distance: 0.0,
+            max_distance: 0.0,
+        }
+    }
+}
+
 impl PaCMAP {
     /// Prepare a quantized copy of the embedding for saving.
     /// This is called automatically by `save_compressed` when
@@ -183,20 +205,43 @@ impl PaCMAP {
                original_data.shape()[0], original_data.shape()[1],
                fitted_projections.shape()[0], fitted_projections.shape()[1]);
 
-        // Store quantized original data for efficient storage
-        self.original_data = Some(quantize_embedding_linear(original_data));
+        // Store original data based on algorithm type
+        // HNSW models: NO original data storage (only index), Exact KNN: original data
+        if self.config.used_hnsw {
+            // HNSW mode: NO original data storage - HNSW index handles neighbor searches
+            vprint!("HNSW MODE: No original data storage (using HNSW index for neighbor search)");
+        } else if self.quantize_on_save {
+            // Exact KNN with quantization enabled - save quantized original data for space efficiency
+            self.original_data = Some(quantize_embedding_linear(original_data));
+            vprint!("QUANTIZATION ENABLED: Stored quantized original training data for Exact KNN");
+        } else {
+            // Full precision storage for Exact KNN models
+            self.original_data_full = Some(original_data.clone());
+            vprint!("FULL PRECISION: Stored full precision original training data for Exact KNN");
+        }
 
-        // Store fitted projections (low-dim embeddings)
+        // Store fitted projections (low-dim embeddings) - always full precision
         self.fitted_projections = fitted_projections.clone();
 
         vprint!("SUCCESS: Transform data stored successfully");
     }
 
-    /// Get dequantized original training data for transforms
+    /// Get original training data for transforms (full precision preferred)
     pub fn get_original_data(&self) -> Option<Array2<f64>> {
-        self.original_data.as_ref().map(|quantized| {
-            dequantize_embedding(quantized)
-        })
+        // Always prefer full precision data when available
+        if let Some(ref full_data) = self.original_data_full {
+            vprint!("TRANSFORM: Using full precision original training data");
+            return Some(full_data.clone());
+        }
+
+        // Use quantized data only when explicitly enabled during save
+        if let Some(ref quantized) = self.original_data {
+            vprint!("TRANSFORM: Using quantized original training data (quantization was enabled)");
+            return Some(dequantize_embedding(quantized));
+        }
+
+        vprint!("WARNING: No original training data available for transform");
+        None
     }
 
     /// Get the embedding in f64 precision, dequantizing if necessary
@@ -210,10 +255,76 @@ impl PaCMAP {
         }
     }
 
-    /// A helper to ensure the HNSW index is available, rebuilding it if necessary
-    /// (e.g., after loading from disk where it wasn't serialized).
+    /// Temporarily disabled during migration to deterministic hnsw crate
+    /// TODO: Re-implement with DeterministicHnsw wrapper
     #[cfg(feature = "use_hnsw")]
     pub fn ensure_hnsw_index(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        // Re-enabled with deterministic hnsw 0.11 implementation
+        if self.hnsw_index.is_some() {
+            return Ok(());
+        }
+
+        if let Some(ref serialized_bytes) = self.serialized_hnsw_index {
+            // FAST PATH: Load from serialized index
+            vprint!("LOADING: Loading HNSW index from serialized data (fast path)");
+            let serialized_index = deserialize_hnsw_from_bytes(serialized_bytes)?;
+
+            // Build HNSW directly from serialized data using deterministic hnsw 0.11
+            let n_samples = serialized_index.data.len();
+            let seed = self.config.seed.unwrap_or(42);
+            let mut hnsw = crate::hnsw_wrapper::DeterministicHnsw::new(
+                serialized_index.params.m,
+                n_samples,
+                serialized_index.params.ef_construction,
+                seed,
+            );
+
+            // Insert all data points
+            for point in &serialized_index.data {
+                hnsw.insert(point.as_slice());
+            }
+
+            self.hnsw_index = Some(hnsw);
+            vprint!("SUCCESS: HNSW index loaded from serialized data");
+        } else {
+            // SLOW PATH: Rebuild from stored data for exact KNN, HNSW should never reach here
+            if self.config.used_hnsw {
+                // HNSW models should always have serialized index - this is an error case
+                return Err("HNSW index not found in serialized data and original training data not stored. Cannot rebuild HNSW index.".into());
+            }
+
+            vprint!("REBUILDING: HNSW index not found, rebuilding from stored training data...");
+            let original_data = self.get_original_data().ok_or("Cannot rebuild HNSW index: original training data not stored")?;
+            let (n_samples, _) = original_data.dim();
+
+            let hnsw_params = &self.config.hnsw_params;
+            let points: Vec<Vec<f32>> = (0..n_samples)
+                .map(|i| original_data.row(i).iter().map(|&x| crate::hnsw_wrapper::deterministic_f32_from_f64(x)).collect())
+                .collect();
+
+            // Create deterministic HNSW using our wrapper
+            let seed = self.config.seed.unwrap_or(42);
+            let mut hnsw = crate::hnsw_wrapper::DeterministicHnsw::new(
+                hnsw_params.m,
+                n_samples,
+                hnsw_params.ef_construction,
+                seed,
+            );
+
+            // Insert all points with deterministic HNSW 0.11 API
+            for point in &points {
+                hnsw.insert(point.as_slice());
+            }
+
+            self.hnsw_index = Some(hnsw);
+            vprint!("SUCCESS: HNSW index rebuilt successfully.");
+        }
+        Ok(())
+    }
+
+    /* OLD IMPLEMENTATION - DISABLED
+    #[cfg(feature = "use_hnsw")]
+    pub fn ensure_hnsw_index_OLD(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         if self.hnsw_index.is_some() {
             return Ok(());
         }
@@ -225,53 +336,59 @@ impl PaCMAP {
 
             // Build HNSW directly from serialized data
             let n_samples = serialized_index.data.len();
-            let hnsw = hnsw_rs::hnsw::Hnsw::<f32, hnsw_rs::dist::DistL2>::new(
+            // Rebuild HNSW from serialized data using deterministic hnsw 0.11
+            use hnsw::Hnsw;
+            use space::Metric;
+            use rand_pcg::Pcg64;
+
+            let seed = self.config.seed.unwrap_or(42);
+            let rng = Pcg64::seed_from_u64(seed);
+
+            let hnsw = Hnsw::<f32, crate::hnsw_wrapper::EuclideanMetric>::new(
                 serialized_index.params.m,
                 n_samples,
-                serialized_index.max_layer,
                 serialized_index.params.ef_construction,
-                hnsw_rs::dist::DistL2{}
+                crate::hnsw_wrapper::EuclideanMetric,
+                rng,
             );
 
             // Insert all data points
-            for (i, point) in serialized_index.data.iter().enumerate() {
-                hnsw.insert((point, i));
+            for point in &serialized_index.data {
+                hnsw.insert(point.as_slice());
             }
 
             self.hnsw_index = Some(hnsw);
         } else {
-            // SLOW PATH: Rebuild from stored data for normal datasets
+            // SLOW PATH: Rebuild from stored data for exact KNN, HNSW should never reach here
+            if self.config.used_hnsw {
+                // HNSW models should always have serialized index - this is an error case
+                return Err("HNSW index not found in serialized data and original training data not stored. Cannot rebuild HNSW index.".into());
+            }
+
             vprint!("REBUILDING: HNSW index not found, rebuilding from stored training data...");
             let original_data = self.get_original_data().ok_or("Cannot rebuild HNSW index: original training data not stored")?;
             let (n_samples, _) = original_data.dim();
 
             let hnsw_params = &self.config.hnsw_params;
             let points: Vec<Vec<f32>> = (0..n_samples)
-                .map(|i| original_data.row(i).iter().map(|&x| x as f32).collect())
+                .map(|i| original_data.row(i).iter().map(|&x| crate::hnsw_wrapper::deterministic_f32_from_f64(x)).collect())
                 .collect();
 
             let max_layer = ((n_samples as f32).ln() / (hnsw_params.m as f32).ln()).ceil() as usize + 1;
             let max_layer = max_layer.min(32).max(4);
 
-            let hnsw = hnsw_rs::hnsw::Hnsw::<f32, hnsw_rs::dist::DistL2>::new(
+            // Create deterministic HNSW using our wrapper
+            let seed = self.config.seed.unwrap_or(42);
+            let mut hnsw = crate::hnsw_wrapper::DeterministicHnsw::new(
                 hnsw_params.m,
                 n_samples,
-                max_layer,
                 hnsw_params.ef_construction,
-                hnsw_rs::dist::DistL2{}
+                seed,
             );
 
-            let data_with_id: Vec<(&[f32], usize)> = points.iter().enumerate().map(|(i, p)| (p.as_slice(), i)).collect();
-
-            #[cfg(feature = "parallel")]
-            {
-                hnsw.parallel_insert(&data_with_id);
-            }
-            #[cfg(not(feature = "parallel"))]
-            {
-                for (point, i) in data_with_id {
-                    hnsw.insert((&point.to_vec(), i));
-                }
+            // Insert all points with deterministic HNSW 0.11 API
+            for point in &points {
+                hnsw.insert(point.as_slice());
             }
 
             self.hnsw_index = Some(hnsw);
@@ -279,10 +396,19 @@ impl PaCMAP {
         }
         Ok(())
     }
+    */ // End of OLD ensure_hnsw_index
 
-    /// A helper to ensure the embedding HNSW index is available, rebuilding it if necessary
+    /// Temporarily disabled during migration to deterministic hnsw crate
     #[cfg(feature = "use_hnsw")]
     pub fn ensure_embedding_hnsw_index(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        // Temporarily disabled - HNSW indices must be built externally
+        eprintln!("WARNING: HNSW serialization temporarily disabled during migration");
+        Ok(())
+    }
+
+    /* OLD IMPLEMENTATION - DISABLED
+    #[cfg(feature = "use_hnsw")]
+    pub fn ensure_embedding_hnsw_index_OLD(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         if self.embedding_hnsw_index.is_some() {
             return Ok(());
         }
@@ -294,37 +420,38 @@ impl PaCMAP {
 
         let hnsw_params = &self.config.hnsw_params;
         let points: Vec<Vec<f32>> = (0..n_samples)
-            .map(|i| fitted_projections.row(i).iter().map(|&x| x as f32).collect())
+            .map(|i| fitted_projections.row(i).iter().map(|&x| crate::hnsw_wrapper::deterministic_f32_from_f64(x)).collect())
             .collect();
 
         let max_layer = ((n_samples as f32).ln() / (hnsw_params.m as f32).ln()).ceil() as usize + 1;
         let max_layer = max_layer.min(32).max(4);
 
-        let hnsw = hnsw_rs::hnsw::Hnsw::<f32, hnsw_rs::dist::DistL2>::new(
+        // Create deterministic HNSW with seed from config
+        use hnsw::Hnsw;
+        use space::Metric;
+        use rand_pcg::Pcg64;
+
+        let seed = self.config.seed.unwrap_or(42);
+        let rng = Pcg64::seed_from_u64(seed);
+
+        let hnsw = Hnsw::<f32, crate::hnsw_wrapper::EuclideanMetric>::new(
             hnsw_params.m,
             n_samples,
-            max_layer,
             hnsw_params.ef_construction,
-            hnsw_rs::dist::DistL2{}
+            crate::hnsw_wrapper::EuclideanMetric,
+            rng,
         );
 
-        let data_with_id: Vec<(&[f32], usize)> = points.iter().enumerate().map(|(i, p)| (p.as_slice(), i)).collect();
-
-        #[cfg(feature = "parallel")]
-        {
-            hnsw.parallel_insert(&data_with_id);
-        }
-        #[cfg(not(feature = "parallel"))]
-        {
-            for (point, i) in data_with_id {
-                hnsw.insert((&point.to_vec(), i));
-            }
+        // Insert all points with deterministic HNSW 0.11 API
+        for point in &points {
+            hnsw.insert(point.as_slice());
         }
 
         self.embedding_hnsw_index = Some(hnsw);
         vprint!("SUCCESS: Embedding HNSW index rebuilt successfully.");
         Ok(())
     }
+    */ // End of OLD ensure_embedding_hnsw_index
 
     /// Save without quantization (preserves full precision)
     pub fn save_uncompressed(&self, path: &str) -> Result<(), Box<dyn std::error::Error>> {
@@ -602,6 +729,7 @@ impl Clone for PaCMAP {
             normalization: self.normalization.clone(),
             quantize_on_save: self.quantize_on_save,
             quantized_embedding: self.quantized_embedding.clone(),
+            original_data_full: self.original_data_full.clone(),
             original_data: self.original_data.clone(),
             fitted_projections: self.fitted_projections.clone(),
             embedding_centroid: self.embedding_centroid.clone(),
@@ -647,22 +775,23 @@ pub fn deserialize_hnsw_from_bytes(serialized_bytes: &[u8]) -> Result<Serializab
     Ok(serializable_index)
 }
 
-/// Load HNSW from serialized index (used by transform functions)
+// Load HNSW from serialized index - Updated for new HNSW 0.11
 #[cfg(feature = "use_hnsw")]
-pub fn load_hnsw_from_serialized(serialized_index: &SerializableHnswIndex) -> Result<Hnsw<'_, f32, DistL2>, Box<dyn std::error::Error>> {
+pub fn load_hnsw_from_serialized(serialized_index: &SerializableHnswIndex) -> Result<crate::hnsw_wrapper::DeterministicHnsw, Box<dyn std::error::Error>> {
+    use crate::hnsw_wrapper::DeterministicHnsw;
+
     let n_samples = serialized_index.data.len();
 
-    let hnsw = Hnsw::<f32, DistL2>::new(
+    let mut hnsw = DeterministicHnsw::new(
         serialized_index.params.m,
         n_samples,
-        serialized_index.max_layer,
         serialized_index.params.ef_construction,
-        DistL2{}
+        42 // Fixed seed for reproducibility
     );
 
     // Insert all data points
-    for (i, point) in serialized_index.data.iter().enumerate() {
-        hnsw.insert((point, i));
+    for (_i, point) in serialized_index.data.iter().enumerate() {
+        hnsw.insert(point.as_slice());
     }
 
     Ok(hnsw)

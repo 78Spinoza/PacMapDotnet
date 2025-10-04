@@ -1,10 +1,221 @@
 using System;
+using System.Collections.Concurrent;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
+using System.Text;
+using System.Threading;
 
 namespace PacMAPSharp
 {
+    /// <summary>
+    /// Progress event arguments for PacMAP operations
+    /// </summary>
+    public class ProgressEventArgs : EventArgs
+    {
+        public string Phase { get; set; } = "";
+        public int Current { get; set; }
+        public int Total { get; set; }
+        public float Percent { get; set; }
+        public string Message { get; set; } = "";
+    }
+
+    /// <summary>
+    /// Manages thread-safe progress callbacks using the queue+poll pattern
+    /// This is the recommended approach for multi-threaded applications
+    /// </summary>
+    public class ThreadSafeProgressCallbackManager : IDisposable
+    {
+        private Thread? _pollingThread;
+        private CancellationTokenSource? _cancellationTokenSource;
+        private readonly object _lock = new object();
+        private event EventHandler<ProgressEventArgs>? _progressEvent;
+        private bool _isDisposed = false;
+
+        /// <summary>
+        /// Event fired when progress messages are received from Rust
+        /// </summary>
+        public event EventHandler<ProgressEventArgs>? ProgressChanged
+        {
+            add
+            {
+                lock (_lock)
+                {
+                    _progressEvent += value;
+                    if (!_isDisposed)
+                        StartPollingIfNotRunning();
+                }
+            }
+            remove
+            {
+                lock (_lock)
+                {
+                    _progressEvent -= value;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Poll for messages from the Rust side and fire events
+        /// </summary>
+        public void PollMessages()
+        {
+            while (PacMAPModel.HasMessages())
+            {
+                if (PacMAPModel.PollNextMessage(new byte[2048], out int messageLength))
+                {
+                    if (messageLength > 0)
+                    {
+                        var buffer = new byte[messageLength];
+                        if (PacMAPModel.PollNextMessage(buffer, out int actualLength) && actualLength > 0)
+                        {
+                            string message = Encoding.UTF8.GetString(buffer, 0, actualLength);
+                            ParseAndFireEvent(message);
+                        }
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Parse the message format and fire the progress event
+        /// </summary>
+        private void ParseAndFireEvent(string message)
+        {
+            try
+            {
+                // Expected format: "[Phase] message (percentage%)"
+                var match = System.Text.RegularExpressions.Regex.Match(message, @"\[([^\]]+)\]\s*([^(]+)\s*\(([\d.]+)%\)");
+                if (match.Success)
+                {
+                    string phase = match.Groups[1].Value.Trim();
+                    string details = match.Groups[2].Value.Trim();
+                    float percent = float.Parse(match.Groups[3].Value);
+
+                    var args = new ProgressEventArgs
+                    {
+                        Phase = phase,
+                        Current = (int)percent, // Approximate
+                        Total = 100, // Normalize to 100
+                        Percent = percent,
+                        Message = details
+                    };
+
+                    _progressEvent?.Invoke(this, args);
+                }
+                else
+                {
+                    // Fallback: treat the entire message as details
+                    var args = new ProgressEventArgs
+                    {
+                        Phase = "Progress",
+                        Current = 0,
+                        Total = 100,
+                        Percent = 0,
+                        Message = message
+                    };
+
+                    _progressEvent?.Invoke(this, args);
+                }
+            }
+            catch
+            {
+                // If parsing fails, still fire the event with raw message
+                var args = new ProgressEventArgs
+                {
+                    Phase = "Progress",
+                    Current = 0,
+                    Total = 100,
+                    Percent = 0,
+                    Message = message
+                };
+
+                _progressEvent?.Invoke(this, args);
+            }
+        }
+
+        /// <summary>
+        /// Start the polling thread if not already running
+        /// </summary>
+        private void StartPollingIfNotRunning()
+        {
+            if (_pollingThread != null && _pollingThread.IsAlive)
+                return;
+
+            _cancellationTokenSource = new CancellationTokenSource();
+            _pollingThread = new Thread(PollingThread)
+            {
+                IsBackground = true,
+                Name = "PacMAPProgressPoller"
+            };
+            _pollingThread.Start();
+        }
+
+        /// <summary>
+        /// Background thread that continuously polls for messages
+        /// </summary>
+        private void PollingThread()
+        {
+            try
+            {
+                while (_cancellationTokenSource != null && !_cancellationTokenSource.IsCancellationRequested)
+                {
+                    PollMessages();
+                    Thread.Sleep(50); // Poll every 50ms
+                }
+            }
+            catch (ThreadAbortException)
+            {
+                // Thread is being aborted
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"PacMAP progress polling thread error: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Dispose resources and stop polling
+        /// </summary>
+        public void Dispose()
+        {
+            lock (_lock)
+            {
+                if (_isDisposed)
+                    return;
+
+                _isDisposed = true;
+
+                if (_cancellationTokenSource != null)
+                {
+                    _cancellationTokenSource.Cancel();
+                    _cancellationTokenSource.Dispose();
+                    _cancellationTokenSource = null;
+                }
+
+                if (_pollingThread != null && _pollingThread.IsAlive)
+                {
+                    try
+                    {
+                        _pollingThread.Join(1000); // Wait up to 1 second
+                        if (_pollingThread.IsAlive)
+                        {
+                            _pollingThread.Interrupt();
+                        }
+                    }
+                    catch
+                    {
+                        // Ignore thread interruption errors
+                    }
+                }
+
+                // Clear any remaining messages
+                PacMAPModel.ClearMessages();
+
+                _progressEvent = null;
+            }
+        }
+    }
     /// <summary>
     /// Distance metrics supported by Enhanced PacMAP
     /// </summary>
@@ -266,6 +477,25 @@ namespace PacMAPSharp
         /// </summary>
         public int? DiscoveredHnswEfSearch { get; }
 
+        /// <summary>
+        /// Gets the HNSW maximum connections per layer 0 node (M0 parameter)
+        /// </summary>
+        public int? HnswMaxM0 { get; }
+
+        /// <summary>
+        /// Gets the HNSW random seed used for deterministic construction
+        /// </summary>
+        public long? HnswSeed { get; }
+
+        /// <summary>
+        /// Gets the current number of layers in the HNSW index
+        /// </summary>
+        public int? HnswMaxLayer { get; }
+
+        /// <summary>
+        /// Gets the total number of elements indexed in the HNSW structure
+        /// </summary>
+        public int? HnswTotalElements { get; }
 
         /// <summary>
         /// Gets the learning rate used in training
@@ -315,6 +545,7 @@ namespace PacMAPSharp
         internal PacMAPModelInfo(int trainingSamples, int inputDimension, int outputDimension,
                                 int neighbors, DistanceMetric metric, NormalizationMode normalization,
                                 bool usedHnsw, float hnswRecall, int? discoveredHnswM, int? discoveredHnswEfConstruction, int? discoveredHnswEfSearch,
+                                int? hnswMaxM0, long? hnswSeed, int? hnswMaxLayer, int? hnswTotalElements,
                                 double learningRate, int nEpochs, double midNearRatio,
                                 double farPairRatio, int seed, bool quantizeOnSave, uint? hnswIndexCrc32 = null, uint? embeddingHnswIndexCrc32 = null, string? filePath = null)
         {
@@ -329,6 +560,10 @@ namespace PacMAPSharp
             DiscoveredHnswM = discoveredHnswM;
             DiscoveredHnswEfConstruction = discoveredHnswEfConstruction;
             DiscoveredHnswEfSearch = discoveredHnswEfSearch;
+            HnswMaxM0 = hnswMaxM0;
+            HnswSeed = hnswSeed;
+            HnswMaxLayer = hnswMaxLayer;
+            HnswTotalElements = hnswTotalElements;
             LearningRate = learningRate;
             NEpochs = nEpochs;
             MidNearRatio = midNearRatio;
@@ -536,7 +771,7 @@ namespace PacMAPSharp
 
         // Native progress callback delegate
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-        private delegate void NativeProgressCallback(IntPtr phase, int current, int total, float percent, IntPtr message);
+        private delegate void NativeProgressCallback(IntPtr userData, IntPtr dataPtr, UIntPtr len);
 
         // Native function imports - Windows
         [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_get_version")]
@@ -547,9 +782,9 @@ namespace PacMAPSharp
             PacmapConfig config, IntPtr embedding, int embeddingBufferLen, NativeProgressCallback? callback);
 
         [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_get_model_info")]
-        private static extern int CallGetModelInfoWindows(IntPtr model, out int nSamples, out int nFeatures, out int embeddingDim, out int normalizationMode,
-            out int hnswM, out int hnswEfConstruction, out int hnswEfSearch, out bool usedHnsw, out double learningRate,
-            out int nEpochs, out double midNearRatio, out double farPairRatio, out int seed, out bool quantizeOnSave, out uint hnswIndexCrc32, out uint embeddingHnswIndexCrc32);
+        private static extern int CallGetModelInfoWindows(IntPtr model, out int nSamples, out int nFeatures, out int embeddingDim, out int nNeighbors,
+            out float midNearRatio, out float farPairRatio, out int metric, out int hnswM, out int hnswEfConstruction, out int hnswEfSearch,
+            out int hnswMaxM0, out long hnswSeed, out int hnswMaxLayer, out int hnswTotalElements, out uint hnswIndexCrc32, out uint embeddingHnswIndexCrc32);
 
         [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_get_model_stats")]
         private static extern void CallGetDistanceStatsWindows(IntPtr model, out double mean, out double p95, out double max);
@@ -566,6 +801,23 @@ namespace PacMAPSharp
         [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_free_model_enhanced")]
         private static extern void CallFreeModelWindows(IntPtr model);
 
+        // Thread-safe callback queue functions
+        [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_register_text_callback")]
+        private static extern void CallRegisterTextCallbackWindows(IntPtr callback, IntPtr user_data);
+
+        [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_enqueue_message")]
+        private static extern void CallEnqueueMessageWindows(IntPtr message);
+
+        [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_poll_next_message")]
+        private static extern UIntPtr CallPollNextMessageWindows(IntPtr buffer, UIntPtr bufLen);
+
+        [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_has_messages")]
+        [return: MarshalAs(UnmanagedType.I1)]
+        private static extern bool CallHasMessagesWindows();
+
+        [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_clear_messages")]
+        private static extern void CallClearMessagesWindows();
+
         // Linux function imports - similar pattern
         [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_get_version")]
         private static extern IntPtr CallGetVersionLinux();
@@ -575,9 +827,9 @@ namespace PacMAPSharp
             PacmapConfig config, IntPtr embedding, int embeddingBufferLen, NativeProgressCallback? callback);
 
         [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_get_model_info")]
-        private static extern int CallGetModelInfoLinux(IntPtr model, out int nSamples, out int nFeatures, out int embeddingDim, out int normalizationMode,
-            out int hnswM, out int hnswEfConstruction, out int hnswEfSearch, out bool usedHnsw, out double learningRate,
-            out int nEpochs, out double midNearRatio, out double farPairRatio, out int seed, out bool quantizeOnSave, out uint hnswIndexCrc32, out uint embeddingHnswIndexCrc32);
+        private static extern int CallGetModelInfoLinux(IntPtr model, out int nSamples, out int nFeatures, out int embeddingDim, out int nNeighbors,
+            out float midNearRatio, out float farPairRatio, out int metric, out int hnswM, out int hnswEfConstruction, out int hnswEfSearch,
+            out int hnswMaxM0, out long hnswSeed, out int hnswMaxLayer, out int hnswTotalElements, out uint hnswIndexCrc32, out uint embeddingHnswIndexCrc32);
 
         [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_get_model_stats")]
         private static extern void CallGetDistanceStatsLinux(IntPtr model, out double mean, out double p95, out double max);
@@ -594,6 +846,153 @@ namespace PacMAPSharp
         [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_free_model_enhanced")]
         private static extern void CallFreeModelLinux(IntPtr model);
 
+        // Thread-safe callback queue functions - Linux
+        [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_register_text_callback")]
+        private static extern void CallRegisterTextCallbackLinux(IntPtr callback, IntPtr user_data);
+
+        [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_enqueue_message")]
+        private static extern void CallEnqueueMessageLinux(IntPtr message);
+
+        [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_poll_next_message")]
+        private static extern UIntPtr CallPollNextMessageLinux(IntPtr buffer, UIntPtr bufLen);
+
+        [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_has_messages")]
+        [return: MarshalAs(UnmanagedType.I1)]
+        private static extern bool CallHasMessagesLinux();
+
+        [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_clear_messages")]
+        private static extern void CallClearMessagesLinux();
+
+        #endregion
+
+        #region Thread-Safe Callback Wrapper Methods
+
+        /// <summary>
+        /// Platform-safe wrapper for checking if messages are available
+        /// </summary>
+        public static bool HasMessages()
+        {
+            try
+            {
+                return IsWindows
+                    ? CallHasMessagesWindows()
+                    : CallHasMessagesLinux();
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Poll for the next message and return it as a string
+        /// Returns null if no message is available
+        /// </summary>
+        public static string? PollNextMessage()
+        {
+            try
+            {
+                byte[] buffer = new byte[2048];
+                if (PollNextMessage(buffer, out int messageLength) && messageLength > 0)
+                {
+                    return Encoding.UTF8.GetString(buffer, 0, messageLength);
+                }
+                return null;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Platform-safe wrapper for polling the next message
+        /// </summary>
+        public static bool PollNextMessage(byte[] buffer, out int messageLength)
+        {
+            messageLength = 0;
+            try
+            {
+                GCHandle handle = GCHandle.Alloc(buffer, GCHandleType.Pinned);
+                try
+                {
+                    UIntPtr len = IsWindows
+                        ? CallPollNextMessageWindows(handle.AddrOfPinnedObject(), (UIntPtr)buffer.Length)
+                        : CallPollNextMessageLinux(handle.AddrOfPinnedObject(), (UIntPtr)buffer.Length);
+
+                    messageLength = (int)len;
+                    return messageLength > 0;
+                }
+                finally
+                {
+                    handle.Free();
+                }
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Platform-safe wrapper for clearing messages
+        /// </summary>
+        public static void ClearMessages()
+        {
+            try
+            {
+                if (IsWindows)
+                    CallClearMessagesWindows();
+                else
+                    CallClearMessagesLinux();
+            }
+            catch
+            {
+                // Ignore cleanup errors
+            }
+        }
+
+        /// <summary>
+        /// Platform-safe wrapper for enqueuing messages
+        /// </summary>
+        private static unsafe void EnqueueMessage(string message)
+        {
+            try
+            {
+                byte[] messageBytes = Encoding.UTF8.GetBytes(message);
+                fixed (byte* messagePtr = messageBytes)
+                {
+                    if (IsWindows)
+                        CallEnqueueMessageWindows((IntPtr)messagePtr);
+                    else
+                        CallEnqueueMessageLinux((IntPtr)messagePtr);
+                }
+            }
+            catch
+            {
+                // Ignore enqueue errors
+            }
+        }
+
+        /// <summary>
+        /// Platform-safe wrapper for registering text callbacks
+        /// </summary>
+        private static void RegisterTextCallback(NativeProgressCallback callback, IntPtr user_data)
+        {
+            try
+            {
+                IntPtr callbackPtr = callback != null ? Marshal.GetFunctionPointerForDelegate(callback) : IntPtr.Zero;
+                if (IsWindows)
+                    CallRegisterTextCallbackWindows(callbackPtr, user_data);
+                else
+                    CallRegisterTextCallbackLinux(callbackPtr, user_data);
+            }
+            catch
+            {
+                // Ignore registration errors
+            }
+        }
+
         #endregion
 
         #region Private Fields
@@ -605,8 +1004,12 @@ namespace PacMAPSharp
         private PacMAPModelInfo? _modelInfo = null;
         private ProgressCallback? _managedCallback = null;
 
+        // Thread-safe callback support
+        private ThreadSafeProgressCallbackManager? _callbackManager = null;
+        private bool _useThreadSafeCallbacks = true; // Default to thread-safe mode
+
         // Expected DLL version - must match Rust pacmap_enhanced version
-        private const string EXPECTED_DLL_VERSION = "0.4.0";
+        private const string EXPECTED_DLL_VERSION = "0.4.1";
 
         #endregion
 
@@ -631,6 +1034,31 @@ namespace PacMAPSharp
             }
         }
 
+        /// <summary>
+        /// Gets or sets whether to use thread-safe callback system (recommended)
+        /// When true, uses queue+poll pattern for multi-threaded safety
+        /// When false, uses legacy direct callbacks (not recommended for multi-threaded applications)
+        /// </summary>
+        public bool UseThreadSafeCallbacks
+        {
+            get => _useThreadSafeCallbacks;
+            set => _useThreadSafeCallbacks = value;
+        }
+
+        /// <summary>
+        /// Gets the thread-safe callback manager for accessing progress events
+        /// Only available when UseThreadSafeCallbacks is true
+        /// </summary>
+        public ThreadSafeProgressCallbackManager ThreadSafeCallbackManager
+        {
+            get
+            {
+                if (!_useThreadSafeCallbacks)
+                    throw new InvalidOperationException("Thread-safe callbacks are disabled. Set UseThreadSafeCallbacks to true.");
+                return _callbackManager ?? throw new InvalidOperationException("Callback manager not initialized.");
+            }
+        }
+
         #endregion
 
         #region Constructor and Factory Methods
@@ -641,6 +1069,7 @@ namespace PacMAPSharp
         public PacMAPModel()
         {
             // Model will be created when Fit is called
+            _callbackManager = new ThreadSafeProgressCallbackManager();
         }
 
         /// <summary>
@@ -801,51 +1230,54 @@ namespace PacMAPSharp
             if (_nativeModel == IntPtr.Zero)
                 throw new InvalidOperationException("Native model is null");
 
-            unsafe
-            {
-                int nSamples, nFeatures, embeddingDim, normalizationMode;
-                int hnswM, hnswEfConstruction, hnswEfSearch;
-                bool usedHnsw, quantizeOnSave;
-                double learningRate;
-                int nEpochs, seed;
-                double midNearRatio, farPairRatio;
-                uint hnswIndexCrc32, embeddingHnswIndexCrc32;
+                unsafe
+                {
+                    int nSamples, nFeatures, embeddingDim;
+                    int hnswM, hnswEfConstruction, hnswEfSearch;
+                    int nNeighbors, metric, hnswMaxM0, hnswMaxLayer, hnswTotalElements;
+                    long hnswSeed;
+                    float midNearRatio, farPairRatio;
+                    uint hnswIndexCrc32, embeddingHnswIndexCrc32;
 
-                // Extract model info from native model
-                if (IsWindows)
-                {
-                    CallGetModelInfoWindows(_nativeModel, out nSamples, out nFeatures, out embeddingDim, out normalizationMode,
-                        out hnswM, out hnswEfConstruction, out hnswEfSearch, out usedHnsw, out learningRate,
-                        out nEpochs, out midNearRatio, out farPairRatio, out seed, out quantizeOnSave, out hnswIndexCrc32, out embeddingHnswIndexCrc32);
-                }
-                else
-                {
-                    CallGetModelInfoLinux(_nativeModel, out nSamples, out nFeatures, out embeddingDim, out normalizationMode,
-                        out hnswM, out hnswEfConstruction, out hnswEfSearch, out usedHnsw, out learningRate,
-                        out nEpochs, out midNearRatio, out farPairRatio, out seed, out quantizeOnSave, out hnswIndexCrc32, out embeddingHnswIndexCrc32);
-                }
+                    // Extract model info from native model
+                    if (IsWindows)
+                    {
+                        CallGetModelInfoWindows(_nativeModel, out nSamples, out nFeatures, out embeddingDim, out nNeighbors,
+                            out midNearRatio, out farPairRatio, out metric, out hnswM, out hnswEfConstruction, out hnswEfSearch,
+                            out hnswMaxM0, out hnswSeed, out hnswMaxLayer, out hnswTotalElements, out hnswIndexCrc32, out embeddingHnswIndexCrc32);
+                    }
+                    else
+                    {
+                        CallGetModelInfoLinux(_nativeModel, out nSamples, out nFeatures, out embeddingDim, out nNeighbors,
+                            out midNearRatio, out farPairRatio, out metric, out hnswM, out hnswEfConstruction, out hnswEfSearch,
+                            out hnswMaxM0, out hnswSeed, out hnswMaxLayer, out hnswTotalElements, out hnswIndexCrc32, out embeddingHnswIndexCrc32);
+                    }
 
                 // Create model info object
                 _modelInfo = new PacMAPModelInfo(
                     trainingSamples: nSamples,
                     inputDimension: nFeatures,
                     outputDimension: embeddingDim,
-                    neighbors: 15, // Default value - not stored in native model
-                    metric: DistanceMetric.Euclidean, // Default value - not stored in native model
-                    normalization: (NormalizationMode)normalizationMode,
-                    usedHnsw: usedHnsw,
+                    neighbors: nNeighbors, // Use actual neighbors from FFI
+                    metric: (DistanceMetric)metric, // Use actual metric from FFI
+                    normalization: NormalizationMode.ZScore, // Default - not returned by new FFI
+                    usedHnsw: hnswM > 0, // Determine HNSW usage from M parameter
                     hnswRecall: 100.0f, // Default value for loaded models
-                    discoveredHnswM: usedHnsw ? hnswM : null,
-                    discoveredHnswEfConstruction: usedHnsw ? hnswEfConstruction : null,
-                    discoveredHnswEfSearch: usedHnsw ? hnswEfSearch : null,
-                    learningRate: learningRate,
-                    nEpochs: nEpochs,
+                    discoveredHnswM: hnswM > 0 ? hnswM : null,
+                    discoveredHnswEfConstruction: hnswM > 0 ? hnswEfConstruction : null,
+                    discoveredHnswEfSearch: hnswM > 0 ? hnswEfSearch : null,
+                    hnswMaxM0: hnswM > 0 ? hnswMaxM0 : null,
+                    hnswSeed: hnswM > 0 ? hnswSeed : null,
+                    hnswMaxLayer: hnswM > 0 ? hnswMaxLayer : null,
+                    hnswTotalElements: hnswM > 0 ? hnswTotalElements : null,
+                    learningRate: 0.0, // Default - not returned by new FFI
+                    nEpochs: 450, // Default - not returned by new FFI
                     midNearRatio: midNearRatio,
                     farPairRatio: farPairRatio,
-                    seed: seed,
-                    quantizeOnSave: quantizeOnSave,
-                    hnswIndexCrc32: hnswIndexCrc32 != 0 ? hnswIndexCrc32 : null,
-                    embeddingHnswIndexCrc32: embeddingHnswIndexCrc32 != 0 ? embeddingHnswIndexCrc32 : null,
+                    seed: (int)hnswSeed, // Use HNSW seed as general seed
+                    quantizeOnSave: false, // Default - not returned by new FFI
+                    hnswIndexCrc32: hnswIndexCrc32 != 0 ? hnswIndexCrc32 : null, // Use actual CRC if non-zero
+                    embeddingHnswIndexCrc32: embeddingHnswIndexCrc32 != 0 ? embeddingHnswIndexCrc32 : null, // Use actual CRC if non-zero
                     filePath: _filePath
                 );
             }
@@ -949,11 +1381,9 @@ namespace PacMAPSharp
                         var distanceStats = (mean, p95, max);
 
                         // Get ALL model parameters from the native library (complete serialization metadata)
-                        int infoResult = CallGetModelInfoWindows(_nativeModel, out int actualSamples, out int actualFeatures, out int actualEmbedDim, out int actualNormMode,
-                                                               out int hnswM, out int hnswEfConstruction, out int hnswEfSearch, out bool actualUsedHnsw,
-                                                               out double actualLearningRate, out int actualNEpochs,
-                                                               out double actualMidNearRatio, out double actualFarPairRatio, out int actualSeed, out bool actualQuantizeOnSave,
-                                                               out uint hnswIndexCrc32, out uint embeddingHnswIndexCrc32);
+                        int infoResult = CallGetModelInfoWindows(_nativeModel, out int actualSamples, out int actualFeatures, out int actualEmbedDim, out int actualNeighbors,
+                                                               out float actualMidNearRatio, out float actualFarPairRatio, out int actualMetric, out int hnswM, out int hnswEfConstruction, out int hnswEfSearch,
+                                                               out int hnswMaxM0, out long hnswSeed, out int hnswMaxLayer, out int hnswTotalElements, out uint hnswIndexCrc32, out uint embeddingHnswIndexCrc32);
 
                         if (infoResult != 0)
                         {
@@ -961,16 +1391,21 @@ namespace PacMAPSharp
                         }
 
                         // Store complete model info with ALL discovered parameters
+                        bool actualUsedHnsw = hnswM > 0;
                         int? discoveredM = actualUsedHnsw ? hnswM : null;
                         int? discoveredEfConstruction = actualUsedHnsw ? hnswEfConstruction : null;
                         int? discoveredEfSearch = actualUsedHnsw ? hnswEfSearch : null;
                         uint? crc1 = hnswIndexCrc32 != 0 ? hnswIndexCrc32 : null;
                         uint? crc2 = embeddingHnswIndexCrc32 != 0 ? embeddingHnswIndexCrc32 : null;
+
+                        // Use the input configuration parameters since they're not returned by FFI
                         _modelInfo = new PacMAPModelInfo(actualSamples, actualFeatures, actualEmbedDim, neighbors,
-                                                       metric, (NormalizationMode)actualNormMode, actualUsedHnsw, 100.0f,
+                                                       metric, normalization, actualUsedHnsw, 100.0f,
                                                        discoveredM, discoveredEfConstruction, discoveredEfSearch,
-                                                       actualLearningRate, actualNEpochs, actualMidNearRatio,
-                                                       actualFarPairRatio, actualSeed, actualQuantizeOnSave, crc1, crc2, _filePath);
+                                                       hnswM > 0 ? hnswMaxM0 : null, hnswM > 0 ? hnswSeed : null,
+                                                       hnswM > 0 ? hnswMaxLayer : null, hnswM > 0 ? hnswTotalElements : null,
+                                                       learningRate, nEpochs, actualMidNearRatio,
+                                                       actualFarPairRatio, (int)seed, false, crc1, crc2, _filePath);
 
                         // Convert double array to float array for API consistency
                         var floatEmbedding = new float[embedding.Length];
@@ -991,11 +1426,9 @@ namespace PacMAPSharp
                         var distanceStats = (mean, p95, max);
 
                         // Get ALL model parameters from the native library (complete serialization metadata)
-                        int infoResult = CallGetModelInfoLinux(_nativeModel, out int actualSamples, out int actualFeatures, out int actualEmbedDim, out int actualNormMode,
-                                                             out int hnswM, out int hnswEfConstruction, out int hnswEfSearch, out bool actualUsedHnsw,
-                                                             out double actualLearningRate, out int actualNEpochs,
-                                                             out double actualMidNearRatio, out double actualFarPairRatio, out int actualSeed, out bool actualQuantizeOnSave,
-                                                             out uint hnswIndexCrc32, out uint embeddingHnswIndexCrc32);
+                        int infoResult = CallGetModelInfoLinux(_nativeModel, out int actualSamples, out int actualFeatures, out int actualEmbedDim, out int actualNeighbors,
+                                                             out float actualMidNearRatio, out float actualFarPairRatio, out int actualMetric, out int hnswM, out int hnswEfConstruction, out int hnswEfSearch,
+                                                             out int hnswMaxM0, out long hnswSeed, out int hnswMaxLayer, out int hnswTotalElements, out uint hnswIndexCrc32, out uint embeddingHnswIndexCrc32);
 
                         if (infoResult != 0)
                         {
@@ -1003,16 +1436,21 @@ namespace PacMAPSharp
                         }
 
                         // Store complete model info with ALL discovered parameters
+                        bool actualUsedHnsw = hnswM > 0;
                         int? discoveredM = actualUsedHnsw ? hnswM : null;
                         int? discoveredEfConstruction = actualUsedHnsw ? hnswEfConstruction : null;
                         int? discoveredEfSearch = actualUsedHnsw ? hnswEfSearch : null;
                         uint? crc1 = hnswIndexCrc32 != 0 ? hnswIndexCrc32 : null;
                         uint? crc2 = embeddingHnswIndexCrc32 != 0 ? embeddingHnswIndexCrc32 : null;
+
+                        // Use the input configuration parameters since they're not returned by FFI
                         _modelInfo = new PacMAPModelInfo(actualSamples, actualFeatures, actualEmbedDim, neighbors,
-                                                       metric, (NormalizationMode)actualNormMode, actualUsedHnsw, 100.0f,
+                                                       metric, normalization, actualUsedHnsw, 100.0f,
                                                        discoveredM, discoveredEfConstruction, discoveredEfSearch,
-                                                       actualLearningRate, actualNEpochs, actualMidNearRatio,
-                                                       actualFarPairRatio, actualSeed, actualQuantizeOnSave, crc1, crc2, _filePath);
+                                                       hnswM > 0 ? hnswMaxM0 : null, hnswM > 0 ? hnswSeed : null,
+                                                       hnswM > 0 ? hnswMaxLayer : null, hnswM > 0 ? hnswTotalElements : null,
+                                                       learningRate, nEpochs, actualMidNearRatio,
+                                                       actualFarPairRatio, (int)seed, false, crc1, crc2, _filePath);
 
                         // Convert double array to float array for API consistency
                         var floatEmbedding = new float[embedding.Length];
@@ -1148,6 +1586,7 @@ namespace PacMAPSharp
                                                        info.Neighbors, info.Metric, info.Normalization,
                                                        info.UsedHNSW, info.HnswRecall,
                                                        info.DiscoveredHnswM, info.DiscoveredHnswEfConstruction, info.DiscoveredHnswEfSearch,
+                                                       info.HnswMaxM0, info.HnswSeed, info.HnswMaxLayer, info.HnswTotalElements,
                                                        info.LearningRate, info.NEpochs,
                                                        info.MidNearRatio, info.FarPairRatio, info.Seed, info.QuantizeOnSave,
                                                        info.HnswIndexCrc32, info.EmbeddingHnswIndexCrc32, _filePath);
@@ -1160,13 +1599,44 @@ namespace PacMAPSharp
 
         #region Helper Methods
 
-        private void NativeProgressHandler(IntPtr phasePtr, int current, int total, float percent, IntPtr messagePtr)
+        private void NativeProgressHandler(IntPtr userData, IntPtr dataPtr, UIntPtr len)
         {
             try
             {
-                var phase = Marshal.PtrToStringUTF8(phasePtr) ?? "Unknown";
-                var message = Marshal.PtrToStringUTF8(messagePtr);
-                _managedCallback?.Invoke(phase, current, total, percent, message);
+                // Copy bytes immediately into managed buffer
+                int length = (int)len;
+                if (length == 0) return;
+
+                byte[] buffer = new byte[length];
+                Marshal.Copy(dataPtr, buffer, 0, length);
+
+                // Decode UTF-8 string
+                string fullMessage = Encoding.UTF8.GetString(buffer);
+
+                // Parse the formatted message: "[Phase] Message (percent%)"
+                // Expected format: "[Phase] Message (95.0%)"
+                int startBracket = fullMessage.IndexOf('[');
+                int endBracket = fullMessage.IndexOf(']');
+                int startParen = fullMessage.LastIndexOf('(');
+                int endParen = fullMessage.LastIndexOf(')');
+
+                if (startBracket >= 0 && endBracket > startBracket &&
+                    startParen > endBracket && endParen > startParen)
+                {
+                    string phase = fullMessage.Substring(startBracket + 1, endBracket - startBracket - 1);
+                    string message = fullMessage.Substring(endBracket + 2, startParen - endBracket - 2).Trim();
+                    string percentStr = fullMessage.Substring(startParen + 1, endParen - startParen - 1);
+
+                    if (float.TryParse(percentStr.TrimEnd('%'), out float percent))
+                    {
+                        _managedCallback?.Invoke(phase, 0, 100, percent, message);
+                    }
+                }
+                else
+                {
+                    // Fallback: treat as simple progress message
+                    _managedCallback?.Invoke("Progress", 0, 100, 0.0f, fullMessage);
+                }
             }
             catch
             {
@@ -1225,6 +1695,13 @@ namespace PacMAPSharp
                         CallFreeModelLinux(_nativeModel);
 
                     _nativeModel = IntPtr.Zero;
+                }
+
+                // Clean up thread-safe callback manager
+                if (_callbackManager != null)
+                {
+                    _callbackManager.Dispose();
+                    _callbackManager = null;
                 }
 
                 _disposed = true;

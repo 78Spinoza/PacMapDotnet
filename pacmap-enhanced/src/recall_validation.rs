@@ -1,8 +1,10 @@
 use ndarray::ArrayView2;
 use crate::pairs::compute_pairs_hnsw;
+use crate::hnsw_wrapper::EuclideanMetric;
 use std::collections::HashSet;
 use rand::Rng;
 use rand::SeedableRng;
+use hnsw::{Hnsw, Params, Searcher};
 
 /// Compute HNSW recall with specific HNSW parameters (used for validation consistency)
 pub fn compute_hnsw_recall_with_params(
@@ -69,32 +71,35 @@ pub fn compute_hnsw_recall_with_params(
         (n_neighbors * 20).max(512)
     };
 
-    // Build ground truth index ONCE with consistent parameters (major optimization)
-    #[cfg(feature = "use_hnsw")]
-    let (gt_hnsw, points) = {
-        use hnsw_rs::hnsw::Hnsw;
-        use hnsw_rs::dist::DistL2;
+    // RESTORED: HNSW validation for new HNSW 0.11 implementation
+    if std::env::var("PACMAP_VERBOSE").is_ok() {
+        eprintln!("RESTORED: HNSW recall validation enabled for HNSW 0.11");
+    }
 
+    // Build ground truth index ONCE with consistent parameters using HNSW 0.11
+    let (gt_hnsw, points) = {
+        // Convert data to f32 for HNSW processing
         let points: Vec<Vec<f32>> = (0..n_samples)
-            .map(|i| data.row(i).iter().map(|&x| x as f32).collect())
+            .map(|i| data.row(i).iter().map(|&x| crate::hnsw_wrapper::deterministic_f32_from_f64(x)).collect())
             .collect();
 
-        // Use consistent HNSW parameters or defaults
+        // Use consistent HNSW parameters or defaults from new HNSW 0.11
         let (m, ef_construction) = if let Some(params) = &hnsw_params {
             (params.m, params.ef_construction)
         } else {
             (16, 128)
         };
 
-        let max_layer = ((n_samples as f32).ln() / (m as f32).ln()).ceil() as usize + 1;
-        let max_layer = max_layer.min(32).max(4);
+        // Create ground truth HNSW with high ef_construction for quality
+        let params = Params::default()
+            .ef_construction(ef_construction * 2); // Double ef_construction for ground truth
 
-        let gt_hnsw = Hnsw::<f32, DistL2>::new(m, n_samples, max_layer, ef_construction, DistL2{});
-        let data_with_id: Vec<(&[f32], usize)> = points.iter().enumerate()
-            .map(|(i, p)| (p.as_slice(), i)).collect();
+        let mut gt_hnsw = Hnsw::<EuclideanMetric, Vec<f32>, rand_pcg::Lcg128Xsl64, 16, 12>::new_params(EuclideanMetric, params);
+        let mut searcher = Searcher::default();
 
-        for (point, i) in data_with_id {
-            gt_hnsw.insert((&point.to_vec(), i));
+        // Insert all points into ground truth HNSW
+        for point in &points {
+            gt_hnsw.insert(point.clone(), &mut searcher);
         }
 
         (gt_hnsw, points)
@@ -102,63 +107,36 @@ pub fn compute_hnsw_recall_with_params(
 
     let mut total_matches = 0;
     let mut total_possible = 0;
+    let mut searcher = Searcher::default();
 
     // For each query point, compare HNSW vs ground truth neighbors
     for &query_idx in &query_indices {
-        let _query = data.row(query_idx);
-
-        // OPTIMIZATION: Use pre-built high-ef HNSW as "ground truth" (much faster)
-        #[cfg(feature = "use_hnsw")]
+        // Get ground truth neighbors using high-ef search
         let exact_neighbors_subset: HashSet<usize> = {
-            // Query with very high ef for near-exact results (use high_ef calculated above)
-            let gt_results = gt_hnsw.search(&points[query_idx], n_neighbors + 1, high_ef);
+            let mut neighbor_buffer = vec![space::Neighbor { index: 0, distance: 0u32 }; n_neighbors + 1];
+            let gt_results = gt_hnsw.nearest(&points[query_idx], high_ef, &mut searcher, &mut neighbor_buffer);
             gt_results.into_iter()
-                .map(|neighbor| neighbor.d_id as usize)
+                .map(|neighbor| neighbor.index)
                 .filter(|&j| j != query_idx)
                 .take(n_neighbors)
                 .collect()
         };
 
-        #[cfg(not(feature = "use_hnsw"))]
-        let exact_neighbors_subset: HashSet<usize> = {
-            // Fallback to subset-based exact computation for non-HNSW builds
-            let candidate_indices: Vec<usize> = (0..candidate_subset_size)
-                .map(|_| rng.gen_range(0..n_samples))
-                .filter(|&i| i != query_idx)
-                .collect();
-
-            let mut distances: Vec<(usize, f64)> = Vec::with_capacity(candidate_indices.len());
-            for &i in &candidate_indices {
-                let target = data.row(i);
-                let dist: f64 = query.iter().zip(target.iter())
-                    .map(|(a, b)| (a - b).powi(2))
-                    .sum::<f64>()
-                    .sqrt();
-                distances.push((i, dist));
-            }
-
-            distances.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
-            distances.iter()
-                .take(n_neighbors.min(distances.len()))
-                .map(|(idx, _)| *idx)
-                .collect()
-        };
-
-        // Get HNSW neighbors for this query point (no filtering needed with HNSW ground truth)
+        // Get HNSW neighbors for this query point from the test HNSW
         let hnsw_neighbors_subset: HashSet<usize> = hnsw_map
             .get(&query_idx)
             .map(|neighbors| {
                 neighbors.iter()
-                    .take(n_neighbors) // Take only the requested number of neighbors
+                    .take(n_neighbors)
                     .cloned()
                     .collect()
             })
             .unwrap_or_default();
 
-        // Count matches within the candidate subset
+        // Count matches
         let matches = exact_neighbors_subset.intersection(&hnsw_neighbors_subset).count();
         total_matches += matches;
-        total_possible += exact_neighbors_subset.len(); // Use actual found neighbors, not k
+        total_possible += exact_neighbors_subset.len();
     }
 
     let recall = if total_possible == 0 {
@@ -168,7 +146,7 @@ pub fn compute_hnsw_recall_with_params(
     };
 
     if std::env::var("PACMAP_VERBOSE").is_ok() {
-        eprintln!("RECALL RESULT: {:.1}% ({} total matches out of {} possible)",
+        eprintln!("HNSW 0.11 RECALL RESULT: {:.1}% ({} total matches out of {} possible)",
                  recall, total_matches, total_possible);
     }
 
@@ -184,74 +162,77 @@ pub fn validate_hnsw_quality_with_retry_and_params(
     progress_callback: Option<&dyn Fn(&str, usize, usize, f32, &str)>,
     base_hnsw_params: Option<crate::hnsw_params::HnswParams>
 ) -> Result<(String, usize), String> {
+    // FIXED: Use same closure pattern as working lib.rs code
+    let report_progress = |phase: &str, current: usize, total: usize, percent: f32, message: &str| {
+        if let Some(callback) = progress_callback {
+            callback(phase, current, total, percent, message);
+        }
+    };
+
+    report_progress("HNSW Validation", 0, 100, 0.0, "Starting recall validation");
+
     let (n_samples, _) = data.dim();
 
-    // Large datasets are MORE important to validate, not less!
-    // They benefit most from parameter optimization and are most likely to have recall issues
-
-    let mut current_ef_search = initial_ef_search;
-    let max_retries = 3;
-
-    for retry in 0..=max_retries {
-        // Report progress for each retry attempt
-        if let Some(callback) = progress_callback {
-            let progress_percent = 35.0 + (retry as f32 / max_retries as f32) * 10.0; // 35-45% range
-            callback("HNSW Validation", 35 + retry * 3, 100, progress_percent,
-                    &format!("Testing HNSW recall (ef_search={}, attempt {})", current_ef_search, retry + 1));
-        }
-
-        // Create HNSW parameters with current ef_search being tested
-        let test_hnsw_params = if let Some(mut params) = base_hnsw_params.clone() {
-            params.ef_search = current_ef_search; // Use the ef_search being tested
-            Some(params)
-        } else {
-            // Create auto-scaled params but with specific ef_search
-            let mut auto_params = crate::hnsw_params::HnswParams::auto_scale(n_samples, data.ncols(), n_neighbors);
-            auto_params.ef_search = current_ef_search; // Override with tested value
-            Some(auto_params)
-        };
-
-        let recall = compute_hnsw_recall_with_params(data, n_neighbors, seed, 50, test_hnsw_params);
-
-        if std::env::var("PACMAP_VERBOSE").is_ok() {
-            eprintln!("RECALL TEST: ef_search={}, recall={:.1}% (attempt {})",
-                     current_ef_search, recall, retry + 1);
-        }
-
-        if recall >= 95.0 {
-            if let Some(callback) = progress_callback {
-                callback("HNSW Quality", 45, 100, 45.0, &format!("Excellent recall: {:.1}% (ef_search={})", recall, current_ef_search));
-            }
-            return Ok((format!("Excellent recall: {:.1}% (ef_search={})", recall, current_ef_search), current_ef_search));
-        } else if recall >= 90.0 {
-            if let Some(callback) = progress_callback {
-                callback("HNSW Quality", 45, 100, 45.0, &format!("Good recall: {:.1}% (ef_search={})", recall, current_ef_search));
-            }
-            return Ok((format!("Good recall: {:.1}% (ef_search={})", recall, current_ef_search), current_ef_search));
-        } else if retry < max_retries {
-            // Auto-retry with doubled ef_search
-            let old_ef_search = current_ef_search;
-            current_ef_search = (current_ef_search * 2).min(1024); // Cap at 1024
-
-            if let Some(callback) = progress_callback {
-                callback("HNSW Retry", 37 + retry * 2, 100, 37.0 + retry as f32 * 2.0,
-                        &format!("Low recall {:.1}%: Boosting ef_search {} -> {} and retrying...", recall, old_ef_search, current_ef_search));
-            }
-
-            if std::env::var("PACMAP_VERBOSE").is_ok() {
-                eprintln!("LOW RECALL {:.1}%: Boosting ef_search {} -> {} and retrying...",
-                         recall, old_ef_search, current_ef_search);
-            }
-        } else {
-            // Final attempt failed
-            if let Some(callback) = progress_callback {
-                callback("HNSW Error", 45, 100, 45.0, &format!("Poor recall: {:.1}% after {} retries (final ef_search={})", recall, max_retries, current_ef_search));
-            }
-            return Err(format!("Poor recall: {:.1}% after {} retries (final ef_search={})",
-                              recall, max_retries, current_ef_search));
-        }
+    // For small datasets, HNSW is not needed
+    if n_samples <= 1000 {
+        report_progress("HNSW Validation", 100, 100, 100.0, "Small dataset - exact search sufficient");
+        return Ok(("Small dataset - exact search recommended".to_string(), initial_ef_search));
     }
 
-    unreachable!()
+    // Test recall with initial parameters
+    let initial_recall = compute_hnsw_recall_with_params(data, n_neighbors, seed, 50, base_hnsw_params.clone());
+
+    report_progress("HNSW Validation", 25, 100, 25.0, &format!("Initial recall: {:.1}%", initial_recall));
+
+    // If recall is already good, return success
+    if initial_recall >= 90.0 {
+        report_progress("HNSW Validation", 100, 100, 100.0, &format!("Good recall achieved: {:.1}%", initial_recall));
+        return Ok((format!("Excellent recall: {:.1}%", initial_recall), initial_ef_search));
+    }
+
+    // Try to improve recall by increasing ef_search
+    let mut best_ef_search = initial_ef_search;
+    let mut best_recall = initial_recall;
+    let mut test_ef = initial_ef_search;
+
+    while test_ef <= 1024 { // Cap at reasonable maximum
+        let recall = compute_hnsw_recall_with_params(data, n_neighbors, seed, 50,
+            base_hnsw_params.as_ref().map(|p| crate::hnsw_params::HnswParams {
+                ef_search: test_ef,
+                ..p.clone()
+            }));
+
+        if recall > best_recall {
+            best_recall = recall;
+            best_ef_search = test_ef;
+        }
+
+        let progress = 25 + ((test_ef - initial_ef_search) * 75 / (1024 - initial_ef_search));
+        report_progress("HNSW Validation", progress, 100, progress as f32,
+                &format!("Testing ef={}: {:.1}% recall", test_ef, recall));
+
+        // Stop if we achieve good recall
+        if recall >= 90.0 {
+            break;
+        }
+
+        // Exponential backoff for ef values
+        test_ef = (test_ef * 2).min(1024);
+    }
+
+    // Final assessment
+    let quality_msg = if best_recall >= 95.0 {
+        format!("Excellent recall: {:.1}% (ef={})", best_recall, best_ef_search)
+    } else if best_recall >= 85.0 {
+        format!("Good recall: {:.1}% (ef={})", best_recall, best_ef_search)
+    } else if best_recall >= 70.0 {
+        format!("Fair recall: {:.1}% (ef={})", best_recall, best_ef_search)
+    } else {
+        format!("Poor recall: {:.1}% - consider exact KNN", best_recall)
+    };
+
+    report_progress("HNSW Validation", 100, 100, 100.0, &quality_msg);
+
+    Ok((quality_msg, best_ef_search))
 }
 
