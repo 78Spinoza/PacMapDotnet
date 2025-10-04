@@ -25,3 +25,30 @@ Thumbs.db
 *.dll
 *.so
 *.dylib
+
+# NuGet packages
+*.nupkg
+*.snupkg
+nupkg/
+
+# Cache and dependency files
+*.cache
+project.assets.json
+project.lock.json
+
+# Runtime and specific build folders
+runtimes/
+*/runtimes/
+
+# Large data files that shouldn't be in repo
+*.csv
+*.png
+*.jpg
+*.jpeg
+*.bin
+
+# C# specific build artifacts
+*.deps.json
+*.runtimeconfig.json
+*.pdb
+*.xml
