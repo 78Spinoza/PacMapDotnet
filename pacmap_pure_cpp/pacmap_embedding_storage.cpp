@@ -1,10 +1,16 @@
 #include "pacmap_embedding_storage.h"
+#include "lz4.h"
 #include <iostream>
 #include <vector>
 #include <random>
 #include <cmath>
 #include <algorithm>
 #include <fstream>
+#include <cstring>
+
+// Forward declarations for compression functions
+std::vector<char> compress_data(const char* data, size_t size);
+std::vector<char> decompress_data(const char* compressed_data, size_t compressed_size, size_t original_size);
 
 extern "C" {
 
@@ -338,7 +344,7 @@ PACMAP_API int pacmap_transform_detailed(PacMapModel* model,
     return PACMAP_SUCCESS;
 }
 
-// Enhanced save function with conditional data storage
+// Enhanced save function with conditional data storage and compression
 PACMAP_API int pacmap_save_model(PacMapModel* model, const char* filename) {
     if (!model || !filename) {
         return PACMAP_ERROR_INVALID_PARAMS;
@@ -379,23 +385,52 @@ PACMAP_API int pacmap_save_model(PacMapModel* model, const char* filename) {
 
     // 🎯 CONDITIONAL SAVE: Only save raw data if NOT using HNSW
     if (!model->uses_hnsw && !model->training_data.empty()) {
-        size_t training_data_size = model->training_data.size();
-        file.write(reinterpret_cast<const char*>(&training_data_size), sizeof(size_t));
-        file.write(reinterpret_cast<const char*>(model->training_data.data()),
-                  training_data_size * sizeof(float));
-        std::cout << "Saved raw training data (exact KNN mode)" << std::endl;
+        size_t training_data_size = model->training_data.size() * sizeof(float);
+
+        // Compress the training data
+        auto compressed_data = compress_data(
+            reinterpret_cast<const char*>(model->training_data.data()),
+            training_data_size
+        );
+
+        size_t compressed_size = compressed_data.size();
+        file.write(reinterpret_cast<const char*>(&training_data_size), sizeof(size_t)); // Original size
+        file.write(reinterpret_cast<const char*>(&compressed_size), sizeof(size_t));   // Compressed size
+        file.write(compressed_data.data(), compressed_size);
+
+        float compression_ratio = (float)compressed_size / training_data_size;
+        std::cout << "Saved compressed raw training data (exact KNN mode): "
+                  << training_data_size << " -> " << compressed_size
+                  << " bytes (ratio: " << compression_ratio << ")" << std::endl;
     } else {
         size_t zero_size = 0;
-        file.write(reinterpret_cast<const char*>(&zero_size), sizeof(size_t));
+        file.write(reinterpret_cast<const char*>(&zero_size), sizeof(size_t)); // Original size
+        file.write(reinterpret_cast<const char*>(&zero_size), sizeof(size_t)); // Compressed size
         std::cout << "No raw training data saved (HNSW mode - memory efficient)" << std::endl;
     }
 
-    // Always save training embedding
-    size_t training_embedding_size = model->training_embedding.size();
-    file.write(reinterpret_cast<const char*>(&training_embedding_size), sizeof(size_t));
+    // Always save training embedding with compression
+    size_t training_embedding_size = model->training_embedding.size() * sizeof(float);
     if (training_embedding_size > 0) {
-        file.write(reinterpret_cast<const char*>(model->training_embedding.data()),
-                  training_embedding_size * sizeof(float));
+        // Compress the embedding data
+        auto compressed_embedding = compress_data(
+            reinterpret_cast<const char*>(model->training_embedding.data()),
+            training_embedding_size
+        );
+
+        size_t compressed_size = compressed_embedding.size();
+        file.write(reinterpret_cast<const char*>(&training_embedding_size), sizeof(size_t)); // Original size
+        file.write(reinterpret_cast<const char*>(&compressed_size), sizeof(size_t));   // Compressed size
+        file.write(compressed_embedding.data(), compressed_size);
+
+        float compression_ratio = (float)compressed_size / training_embedding_size;
+        std::cout << "Saved compressed training embedding: "
+                  << training_embedding_size << " -> " << compressed_size
+                  << " bytes (ratio: " << compression_ratio << ")" << std::endl;
+    } else {
+        size_t zero_size = 0;
+        file.write(reinterpret_cast<const char*>(&zero_size), sizeof(size_t)); // Original size
+        file.write(reinterpret_cast<const char*>(&zero_size), sizeof(size_t)); // Compressed size
     }
 
     file.close();
@@ -452,21 +487,67 @@ PACMAP_API PacMapModel* pacmap_load_model(const char* filename) {
         size_t training_data_size;
         file.read(reinterpret_cast<char*>(&training_data_size), sizeof(size_t));
         if (training_data_size > 0) {
-            model->training_data.resize(training_data_size);
-            file.read(reinterpret_cast<char*>(model->training_data.data()),
-                     training_data_size * sizeof(float));
-            std::cout << "Loaded raw training data (exact KNN mode)" << std::endl;
+            size_t compressed_size;
+            file.read(reinterpret_cast<char*>(&compressed_size), sizeof(size_t));
+
+            // Read compressed data
+            std::vector<char> compressed_data(compressed_size);
+            file.read(compressed_data.data(), compressed_size);
+
+            // Decompress data
+            auto decompressed_data = decompress_data(compressed_data.data(), compressed_size, training_data_size);
+            if (decompressed_data.empty()) {
+                std::cerr << "Error: Failed to decompress training data" << std::endl;
+                delete model;
+                return nullptr;
+            }
+
+            // Convert to float vector
+            model->training_data.resize(training_data_size / sizeof(float));
+            std::memcpy(model->training_data.data(), decompressed_data.data(), training_data_size);
+
+            float compression_ratio = (float)compressed_size / training_data_size;
+            std::cout << "Loaded compressed raw training data (exact KNN mode): "
+                      << compressed_size << " -> " << training_data_size
+                      << " bytes (ratio: " << compression_ratio << ")" << std::endl;
         } else {
+            // Skip compressed size for consistency
+            size_t skip_size;
+            file.read(reinterpret_cast<char*>(&skip_size), sizeof(size_t));
             std::cout << "No raw training data to load (HNSW mode)" << std::endl;
         }
 
-        // Always load training embedding
+        // Always load training embedding with compression
         size_t training_embedding_size;
         file.read(reinterpret_cast<char*>(&training_embedding_size), sizeof(size_t));
         if (training_embedding_size > 0) {
-            model->training_embedding.resize(training_embedding_size);
-            file.read(reinterpret_cast<char*>(model->training_embedding.data()),
-                     training_embedding_size * sizeof(float));
+            size_t compressed_size;
+            file.read(reinterpret_cast<char*>(&compressed_size), sizeof(size_t));
+
+            // Read compressed embedding
+            std::vector<char> compressed_embedding(compressed_size);
+            file.read(compressed_embedding.data(), compressed_size);
+
+            // Decompress embedding
+            auto decompressed_embedding = decompress_data(compressed_embedding.data(), compressed_size, training_embedding_size);
+            if (decompressed_embedding.empty()) {
+                std::cerr << "Error: Failed to decompress training embedding" << std::endl;
+                delete model;
+                return nullptr;
+            }
+
+            // Convert to float vector
+            model->training_embedding.resize(training_embedding_size / sizeof(float));
+            std::memcpy(model->training_embedding.data(), decompressed_embedding.data(), training_embedding_size);
+
+            float compression_ratio = (float)compressed_size / training_embedding_size;
+            std::cout << "Loaded compressed training embedding: "
+                      << compressed_size << " -> " << training_embedding_size
+                      << " bytes (ratio: " << compression_ratio << ")" << std::endl;
+        } else {
+            // Skip compressed size for consistency
+            size_t skip_size;
+            file.read(reinterpret_cast<char*>(&skip_size), sizeof(size_t));
         }
 
         file.close();
@@ -575,3 +656,40 @@ PACMAP_API void pacmap_clear_global_callback() {
 }
 
 } // extern "C"
+
+// Compression helper functions for efficient serialization
+std::vector<char> compress_data(const char* data, size_t size) {
+    if (size == 0) return {};
+
+    int max_compressed_size = LZ4_compressBound(static_cast<int>(size));
+    std::vector<char> compressed(max_compressed_size);
+
+    int compressed_size = LZ4_compress_default(data, compressed.data(),
+                                              static_cast<int>(size), max_compressed_size);
+
+    if (compressed_size <= 0) {
+        // Compression failed, return uncompressed data
+        compressed.assign(data, data + size);
+        return compressed;
+    }
+
+    compressed.resize(compressed_size);
+    return compressed;
+}
+
+std::vector<char> decompress_data(const char* compressed_data, size_t compressed_size, size_t original_size) {
+    if (compressed_size == 0 || original_size == 0) return {};
+
+    std::vector<char> decompressed(original_size);
+
+    int result = LZ4_decompress_safe(compressed_data, decompressed.data(),
+                                     static_cast<int>(compressed_size),
+                                     static_cast<int>(original_size));
+
+    if (result < 0) {
+        // Decompression failed
+        return {};
+    }
+
+    return decompressed;
+}
