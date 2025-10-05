@@ -512,13 +512,18 @@ enum SamplingStrategy {
 - [x] **NEW**: Complete migration status analysis
 - [x] **NEW**: Identify critical KNN performance optimization requirements
 
-### Week 2: Core C++ Implementation + KNN Optimization (CURRENT)
-- [ ] **CRITICAL**: Replace UMAP algorithm with PACMAP in C++ files
-- [ ] **CRITICAL**: Implement HNSW-optimized triplet sampling for all three pair types
-- [ ] Implement three-phase weight schedule optimization
-- [ ] Implement PACMAP-specific gradient computation
-- [ ] **PERFORMANCE FOCUS**: Ensure PACMAP KNN faster than UMAP KNN
-- [ ] Create unit tests for all core PACMAP functions
+### Week 2-3: C++ Source Implementation (CURRENT CRITICAL PHASE)
+- [ ] **CRITICAL**: Implement 11 C++ source files for designed headers
+- [ ] **CRITICAL**: pacmap_model.cpp - Core data structures
+- [ ] **CRITICAL**: pacmap_triplet_sampling.cpp - HNSW-optimized triplet sampling
+- [ ] **CRITICAL**: pacmap_gradient.cpp - Adam optimizer implementation
+- [ ] **CRITICAL**: pacmap_optimization.cpp - Three-phase optimization loop
+- [ ] pacmap_transform.cpp - New data point transformation
+- [ ] pacmap_persistence.cpp - Model save/load functionality
+- [ ] pacmap_utils.cpp - Parameter validation and error handling
+- [ ] pacmap_distance.cpp - Distance metric computations
+- [ ] pacmap_crc32.cpp - Model integrity validation
+- [ ] pacmap_simple_wrapper.cpp - C API for C# integration
 
 ### Week 3: C# API Migration and Integration
 - [ ] **HIGH PRIORITY**: Replace UMapModel with PacMapModel in C#
@@ -527,11 +532,13 @@ enum SamplingStrategy {
 - [ ] Implement optimization loop with three-phase weights
 - [ ] Test HNSW optimization with PACMAP triplet sampling
 
-### Week 4: Performance Optimization and Validation
+### Week 4: Testing and Validation
+- [ ] Create comprehensive test suite for all PACMAP functions
 - [ ] Benchmark PACMAP vs UMAP performance across datasets
 - [ ] Validate embeddings against Python reference implementation
-- [ ] Optimize KNN performance to exceed UMAP speed
 - [ ] Cross-platform testing and final validation
+
+**ESTIMATED COMPLETION: 2-3 weeks for working PACMAP implementation**
 
 ## Success Criteria
 
