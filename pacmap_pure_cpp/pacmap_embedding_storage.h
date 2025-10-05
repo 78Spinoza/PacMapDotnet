@@ -3,6 +3,16 @@
 #include <vector>
 #include <memory>
 
+#ifdef _WIN32
+    #ifdef PACMAP_EXPORTS
+        #define PACMAP_API __declspec(dllexport)
+    #else
+        #define PACMAP_API __declspec(dllimport)
+    #endif
+#else
+    #define PACMAP_API
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -89,10 +99,17 @@ struct PacMapModel {
 };
 
 // Core functions
-PacMapModel* pacmap_create();
-void pacmap_destroy(PacMapModel* model);
+PACMAP_API PacMapModel* pacmap_create();
+PACMAP_API void pacmap_destroy(PacMapModel* model);
 
-int pacmap_fit_with_progress_v2(PacMapModel* model,
+PACMAP_API int pacmap_fit(PacMapModel* model,
+    float* data, int n_obs, int n_dim, int embedding_dim,
+    int n_neighbors, float MN_ratio, float FP_ratio,
+    float learning_rate, int n_iters, int phase1_iters, int phase2_iters, int phase3_iters,
+    PacMapMetric metric, float* embedding, int force_exact_knn, int M, int ef_construction, int ef_search,
+    int use_quantization, int random_seed, int autoHNSWParam);
+
+PACMAP_API int pacmap_fit_with_progress_v2(PacMapModel* model,
     float* data, int n_obs, int n_dim, int embedding_dim,
     int n_neighbors, float MN_ratio, float FP_ratio,
     float learning_rate, int n_iters, int phase1_iters, int phase2_iters, int phase3_iters,
@@ -100,29 +117,37 @@ int pacmap_fit_with_progress_v2(PacMapModel* model,
     int force_exact_knn, int M, int ef_construction, int ef_search,
     int use_quantization, int random_seed, int autoHNSWParam);
 
-int pacmap_transform(PacMapModel* model,
+PACMAP_API int pacmap_transform(PacMapModel* model,
     float* new_data, int n_new_obs, int n_dim, float* embedding);
 
-int pacmap_save_model(PacMapModel* model, const char* filename);
-PacMapModel* pacmap_load_model(const char* filename);
+PACMAP_API int pacmap_transform_detailed(PacMapModel* model,
+    float* new_data, int n_new_obs, int n_dim, float* embedding,
+    float* distances, int* indices, int n_neighbors);
 
-int pacmap_get_model_info_simple(PacMapModel* model,
+PACMAP_API int pacmap_save_model(PacMapModel* model, const char* filename);
+PACMAP_API PacMapModel* pacmap_load_model(const char* filename);
+
+PACMAP_API int pacmap_get_model_info_simple(PacMapModel* model,
     int* n_samples, int* n_features, int* n_components, int* n_neighbors,
     float* MN_ratio, float* FP_ratio, PacMapMetric* metric,
     int* hnsw_M, int* hnsw_ef_construction, int* hnsw_ef_search);
 
-int pacmap_get_n_components(PacMapModel* model);
-int pacmap_get_n_samples(PacMapModel* model);
-int pacmap_get_n_features(PacMapModel* model);
-int pacmap_get_n_neighbors(PacMapModel* model);
-float pacmap_get_mn_ratio(PacMapModel* model);
-float pacmap_get_fp_ratio(PacMapModel* model);
-PacMapMetric pacmap_get_metric(PacMapModel* model);
-int pacmap_is_fitted(PacMapModel* model);
+PACMAP_API int pacmap_get_n_components(PacMapModel* model);
+PACMAP_API int pacmap_get_n_samples(PacMapModel* model);
+PACMAP_API int pacmap_get_n_features(PacMapModel* model);
+PACMAP_API int pacmap_get_n_neighbors(PacMapModel* model);
+PACMAP_API float pacmap_get_mn_ratio(PacMapModel* model);
+PACMAP_API float pacmap_get_fp_ratio(PacMapModel* model);
+PACMAP_API PacMapMetric pacmap_get_metric(PacMapModel* model);
+PACMAP_API int pacmap_is_fitted(PacMapModel* model);
 
-const char* pacmap_get_error_message(int error_code);
-const char* pacmap_get_metric_name(PacMapMetric metric);
-const char* pacmap_get_version();
+PACMAP_API const char* pacmap_get_error_message(int error_code);
+PACMAP_API const char* pacmap_get_metric_name(PacMapMetric metric);
+PACMAP_API const char* pacmap_get_version();
+
+// Global callback management
+PACMAP_API void pacmap_set_global_callback(pacmap_progress_callback_v2 callback);
+PACMAP_API void pacmap_clear_global_callback();
 
 #ifdef __cplusplus
 }

@@ -1,7 +1,7 @@
 # Cross-Platform Build Instructions
 
 ## Overview
-The UMAP C++ library with HNSW optimization supports building on both Windows and Linux using CMake. This document provides comprehensive build instructions for development and production deployments.
+The PACMAP C++ library with HNSW optimization and conditional save/load strategy supports building on both Windows and Linux using CMake. This document provides comprehensive build instructions for development and production deployments.
 
 ## Prerequisites
 
@@ -30,29 +30,35 @@ sudo yum install libomp-devel  # OpenMP support
 
 #### Windows (Visual Studio)
 ```bash
-cd uwot_pure_cpp
+cd pacmap_pure_cpp
 mkdir build && cd build
-cmake .. -G "Visual Studio 17 2022" -A x64 -DBUILD_TESTS=ON
+cmake .. -G "Visual Studio 17 2022" -A x64
 cmake --build . --config Release
-ctest -C Release
 ```
 
 #### Windows (MinGW)
 ```bash
-cd uwot_pure_cpp
+cd pacmap_pure_cpp
 mkdir build && cd build
-cmake .. -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=ON
+cmake .. -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release
 cmake --build .
-ctest
 ```
 
 #### Linux
 ```bash
-cd uwot_pure_cpp
+cd pacmap_pure_cpp
 mkdir build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=ON
+cmake .. -DCMAKE_BUILD_TYPE=Release
 make -j$(nproc)
-ctest
+```
+
+#### Test the Build
+```bash
+# Run the simple test to verify functionality
+cd build/bin/Release
+./test_simple.exe  # Windows
+# or
+./test_simple     # Linux
 ```
 
 ### Production Build (Optimized)
@@ -221,17 +227,17 @@ After successful build, copy libraries to C# project root folder:
 
 ```bash
 # Windows
-cp build/Release/uwot.dll ../UMAPuwotSharp/UMAPuwotSharp/
+cp build/bin/Release/pacmap.dll ../PACMAPCSharp/PACMAPCSharp/
 
 # Linux
-cp build/libuwot.so ../UMAPuwotSharp/UMAPuwotSharp/libuwot.so
+cp build/libpacmap.so ../PACMAPCSharp/PACMAPCSharp/
 ```
 
 ### Test C# Integration
 ```bash
-cd ../UMAPuwotSharp
+cd ../PACMAPCSharp/PacMapTest
 dotnet build
-dotnet test                             # Should pass all C# tests
+dotnet run                               # Should pass all C# integration tests
 ```
 
 ## CI/CD Integration

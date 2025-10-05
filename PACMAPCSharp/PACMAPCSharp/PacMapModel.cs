@@ -37,140 +37,37 @@ namespace UMAPuwotSharp
     }
 
     /// <summary>
-    /// Outlier severity levels for Enhanced UMAP safety analysis
+    /// Outlier detection levels for safety analysis
     /// </summary>
     public enum OutlierLevel
     {
         /// <summary>
-        /// Normal data point - within 95th percentile of training data distances
+        /// Normal data point within expected distribution
         /// </summary>
         Normal = 0,
 
         /// <summary>
-        /// Unusual data point - between 95th and 99th percentile of training data distances
+        /// Mild outlier - slightly outside expected range
         /// </summary>
-        Unusual = 1,
+        Mild = 1,
 
         /// <summary>
-        /// Mild outlier - between 99th percentile and 2.5 standard deviations from mean
+        /// Moderate outlier - clearly outside expected range
         /// </summary>
-        Mild = 2,
+        Moderate = 2,
 
         /// <summary>
-        /// Extreme outlier - between 2.5 and 4.0 standard deviations from mean
+        /// Severe outlier - very far from expected distribution
         /// </summary>
-        Extreme = 3,
+        Severe = 3,
 
         /// <summary>
-        /// No man's land - beyond 4.0 standard deviations from training data
-        /// Projection may be unreliable
+        /// Extreme outlier - potentially anomalous or erroneous data
         /// </summary>
-        NoMansLand = 4
+        Extreme = 4
     }
 
-    /// <summary>
-    /// Enhanced transform result with comprehensive safety metrics and outlier detection
-    /// Available only with HNSW-optimized models for production safety
-    /// </summary>
-    public class TransformResult
-    {
-        /// <summary>
-        /// Gets the projected coordinates in the embedding space (1-50D)
-        /// </summary>
-        public float[] ProjectionCoordinates { get; }
-
-        /// <summary>
-        /// Gets the indices of nearest neighbors in the original training data
-        /// </summary>
-        public int[] NearestNeighborIndices { get; }
-
-        /// <summary>
-        /// Gets the distances to nearest neighbors in the original feature space
-        /// </summary>
-        public float[] NearestNeighborDistances { get; }
-
-        /// <summary>
-        /// Gets the confidence score for the projection (0.0 - 1.0)
-        /// Higher values indicate the point is similar to training data
-        /// </summary>
-        public float ConfidenceScore { get; }
-
-        /// <summary>
-        /// Gets the outlier severity level based on distance from training data
-        /// </summary>
-        public OutlierLevel Severity { get; }
-
-        /// <summary>
-        /// Gets the percentile rank of the point's distance (0-100)
-        /// Lower percentiles indicate similarity to training data
-        /// </summary>
-        public float PercentileRank { get; }
-
-        /// <summary>
-        /// Gets the Z-score relative to training data neighbor distances
-        /// Values beyond ±2.5 indicate potential outliers
-        /// </summary>
-        public float ZScore { get; }
-
-        /// <summary>
-        /// Gets the dimensionality of the projection coordinates
-        /// </summary>
-        public int EmbeddingDimension => ProjectionCoordinates?.Length ?? 0;
-
-        /// <summary>
-        /// Gets the number of nearest neighbors analyzed
-        /// </summary>
-        public int NeighborCount => NearestNeighborIndices?.Length ?? 0;
-
-        /// <summary>
-        /// Gets whether the projection is considered reliable for production use
-        /// Based on comprehensive safety analysis
-        /// </summary>
-        public bool IsReliable => Severity <= OutlierLevel.Unusual && ConfidenceScore >= 0.3f;
-
-        /// <summary>
-        /// Gets a human-readable interpretation of the result quality
-        /// </summary>
-        public string QualityAssessment => Severity switch
-        {
-            OutlierLevel.Normal => "Excellent - Very similar to training data",
-            OutlierLevel.Unusual => "Good - Somewhat similar to training data",
-            OutlierLevel.Mild => "Caution - Mild outlier, projection may be less accurate",
-            OutlierLevel.Extreme => "Warning - Extreme outlier, projection unreliable",
-            OutlierLevel.NoMansLand => "Critical - Far from training data, projection highly unreliable",
-            _ => "Unknown"
-        };
-
-        internal TransformResult(float[] projectionCoordinates,
-                               int[] nearestNeighborIndices,
-                               float[] nearestNeighborDistances,
-                               float confidenceScore,
-                               OutlierLevel severity,
-                               float percentileRank,
-                               float zScore)
-        {
-            ProjectionCoordinates = projectionCoordinates ?? throw new ArgumentNullException(nameof(projectionCoordinates));
-            NearestNeighborIndices = nearestNeighborIndices ?? throw new ArgumentNullException(nameof(nearestNeighborIndices));
-            NearestNeighborDistances = nearestNeighborDistances ?? throw new ArgumentNullException(nameof(nearestNeighborDistances));
-            ConfidenceScore = Math.Max(0f, Math.Min(1f, confidenceScore)); // Clamp to [0,1]
-            Severity = severity;
-            PercentileRank = Math.Max(0f, Math.Min(100f, percentileRank)); // Clamp to [0,100]
-            ZScore = zScore;
-        }
-
-        /// <summary>
-        /// Returns a comprehensive string representation of the transform result
-        /// </summary>
-        /// <returns>A formatted string with key safety metrics</returns>
-        public override string ToString()
-        {
-            return $"TransformResult: {EmbeddingDimension}D embedding, " +
-                   $"Confidence={ConfidenceScore:F3}, Severity={Severity}, " +
-                   $"Percentile={PercentileRank:F1}%, Z-Score={ZScore:F2}, " +
-                   $"Quality={QualityAssessment}";
-        }
-    }
-
+    
     /// <summary>
     /// Enhanced progress callback delegate for training progress reporting with phase information and loss values
     /// </summary>
@@ -182,23 +79,75 @@ namespace UMAPuwotSharp
     public delegate void ProgressCallback(string phase, int current, int total, float percent, string? message);
 
     /// <summary>
-    /// Enhanced cross-platform C# wrapper for UMAP dimensionality reduction
-    /// Based on the proven uwot R package with enhanced features:
-    /// - Arbitrary embedding dimensions (1D to 50D, including 27D)
+    /// Enhanced cross-platform C# wrapper for PACMAP dimensionality reduction
+    /// Based on PACMAP algorithm with HNSW optimization:
+    /// - Arbitrary embedding dimensions (1D to 50D)
     /// - Multiple distance metrics (Euclidean, Cosine, Manhattan, Correlation, Hamming)
-    /// - Complete model save/load functionality
+    /// - Complete model save/load functionality with conditional storage
     /// - True out-of-sample projection (transform new data)
     /// - Progress reporting with callback support
+    /// - HNSW mode: Memory efficient (saves indices, not raw data)
+    /// - Exact KNN mode: Saves raw training data for exact neighbor search
     /// </summary>
-    public class UMapModel : IDisposable
+    public class TransformResult
+    {
+        /// <summary>
+        /// Embedding coordinates for this sample
+        /// </summary>
+        public float[] Embedding { get; }
+
+        /// <summary>
+        /// Indices of nearest neighbors
+        /// </summary>
+        public int[] NearestIndices { get; }
+
+        /// <summary>
+        /// Distances to nearest neighbors
+        /// </summary>
+        public float[] NearestDistances { get; }
+
+        /// <summary>
+        /// Confidence score (0-1, higher = more confident)
+        /// </summary>
+        public float Confidence { get; }
+
+        /// <summary>
+        /// Outlier level classification
+        /// </summary>
+        public OutlierLevel OutlierLevel { get; }
+
+        /// <summary>
+        /// Percentile rank among training data
+        /// </summary>
+        public float PercentileRank { get; }
+
+        /// <summary>
+        /// Z-score indicating how many standard deviations from mean
+        /// </summary>
+        public float ZScore { get; }
+
+        public TransformResult(float[] embedding, int[] nearestIndices, float[] nearestDistances,
+            float confidence, OutlierLevel outlierLevel, float percentileRank, float zScore)
+        {
+            Embedding = embedding;
+            NearestIndices = nearestIndices;
+            NearestDistances = nearestDistances;
+            Confidence = confidence;
+            OutlierLevel = outlierLevel;
+            PercentileRank = percentileRank;
+            ZScore = zScore;
+        }
+    }
+
+    public class PacMapModel : IDisposable
     {
         #region Platform Detection and DLL Imports
 
         private static readonly bool IsWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
         private static readonly bool IsLinux = RuntimeInformation.IsOSPlatform(OSPlatform.Linux);
 
-        private const string WindowsDll = "uwot.dll";
-        private const string LinuxDll = "libuwot.so";
+        private const string WindowsDll = "pacmap.dll";
+        private const string LinuxDll = "libpacmap.so";
 
         // Enhanced native progress callback delegate with phase information and loss values
         private delegate void NativeProgressCallbackV2(
@@ -210,115 +159,116 @@ namespace UMAPuwotSharp
         );
 
         // Windows P/Invoke declarations
-        [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "uwot_create")]
+        [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_create")]
         private static extern IntPtr WindowsCreate();
 
-        [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "uwot_fit")]
-        private static extern int WindowsFit(IntPtr model, float[] data, int nObs, int nDim, int embeddingDim, int nNeighbors, float minDist, float spread, int nEpochs, DistanceMetric metric, float[] embedding, int forceExactKnn);
+        [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_fit")]
+        private static extern int WindowsFit(IntPtr model, float[] data, int nObs, int nDim, int embeddingDim, int nNeighbors, float mnRatio, float fpRatio, float learningRate, int nIters, int phase1Iters, int phase2Iters, int phase3Iters, DistanceMetric metric, float[] embedding, int forceExactKnn);
 
-        [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "uwot_fit_with_progress_v2")]
-        private static extern int WindowsFitWithProgressV2(IntPtr model, float[] data, int nObs, int nDim, int embeddingDim, int nNeighbors, float minDist, float spread, int nEpochs, DistanceMetric metric, float[] embedding, NativeProgressCallbackV2 progressCallback, int forceExactKnn, int M, int efConstruction, int efSearch, int useQuantization, int randomSeed = -1, int autoHNSWParam = 1);
+        [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_fit_with_progress_v2")]
+        private static extern int WindowsFitWithProgressV2(IntPtr model, float[] data, int nObs, int nDim, int embeddingDim, int nNeighbors, float mnRatio, float fpRatio, float learningRate, int nIters, int phase1Iters, int phase2Iters, int phase3Iters, DistanceMetric metric, float[] embedding, NativeProgressCallbackV2 progressCallback, int forceExactKnn, int M, int efConstruction, int efSearch, int useQuantization, int randomSeed = -1, int autoHNSWParam = 1);
 
-        [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "uwot_transform")]
+        [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_transform")]
         private static extern int WindowsTransform(IntPtr model, float[] newData, int nNewObs, int nDim, float[] embedding);
 
-        [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "uwot_transform_detailed")]
+        [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_transform_detailed")]
         private static extern int WindowsTransformDetailed(IntPtr model, float[] newData, int nNewObs, int nDim, float[] embedding, int[] nnIndices, float[] nnDistances, float[] confidenceScore, int[] outlierLevel, float[] percentileRank, float[] zScore);
 
-        [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "uwot_save_model")]
+        [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_save_model")]
         private static extern int WindowsSaveModel(IntPtr model, [MarshalAs(UnmanagedType.LPStr)] string filename);
 
-        [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "uwot_load_model")]
+        [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_load_model")]
         private static extern IntPtr WindowsLoadModel([MarshalAs(UnmanagedType.LPStr)] string filename);
 
-        [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "uwot_destroy")]
+        [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_destroy")]
         private static extern void WindowsDestroy(IntPtr model);
 
-        [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "uwot_get_error_message")]
+        [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_get_error_message")]
         private static extern IntPtr WindowsGetErrorMessage(int errorCode);
 
-        [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "uwot_get_model_info")]
-        private static extern int WindowsGetModelInfo(IntPtr model, out int nVertices, out int nDim, out int embeddingDim, out int nNeighbors, out float minDist, out float spread, out DistanceMetric metric, out int hnswM, out int hnswEfConstruction, out int hnswEfSearch);
+        [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_get_model_info_simple")]
+        private static extern int WindowsGetModelInfo(IntPtr model, out int nSamples, out int nFeatures, out int nComponents, out int nNeighbors, out float mnRatio, out float fpRatio, out DistanceMetric metric, out int hnswM, out int hnswEfConstruction, out int hnswEfSearch);
 
-        [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "uwot_is_fitted")]
+        [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_is_fitted")]
         private static extern int WindowsIsFitted(IntPtr model);
 
-        [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "uwot_get_metric_name")]
+        [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_get_metric_name")]
         private static extern IntPtr WindowsGetMetricName(DistanceMetric metric);
 
-        [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "uwot_set_global_callback")]
+        [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_set_global_callback")]
         private static extern void WindowsSetGlobalCallback(NativeProgressCallbackV2 callback);
 
-        [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "uwot_clear_global_callback")]
+        [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_clear_global_callback")]
         private static extern void WindowsClearGlobalCallback();
 
-        [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "uwot_get_version")]
+        [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_get_version")]
         private static extern IntPtr WindowsGetVersion();
 
         // Linux P/Invoke declarations
-        [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "uwot_create")]
+        [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_create")]
         private static extern IntPtr LinuxCreate();
 
-        [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "uwot_fit")]
-        private static extern int LinuxFit(IntPtr model, float[] data, int nObs, int nDim, int embeddingDim, int nNeighbors, float minDist, float spread, int nEpochs, DistanceMetric metric, float[] embedding, int forceExactKnn);
+        [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_fit")]
+        private static extern int LinuxFit(IntPtr model, float[] data, int nObs, int nDim, int embeddingDim, int nNeighbors, float mnRatio, float fpRatio, float learningRate, int nIters, int phase1Iters, int phase2Iters, int phase3Iters, DistanceMetric metric, float[] embedding, int forceExactKnn);
 
-        [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "uwot_fit_with_progress_v2")]
-        private static extern int LinuxFitWithProgressV2(IntPtr model, float[] data, int nObs, int nDim, int embeddingDim, int nNeighbors, float minDist, float spread, int nEpochs, DistanceMetric metric, float[] embedding, NativeProgressCallbackV2 progressCallback, int forceExactKnn, int M, int efConstruction, int efSearch, int useQuantization, int randomSeed = -1, int autoHNSWParam = 1);
+        [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_fit_with_progress_v2")]
+        private static extern int LinuxFitWithProgressV2(IntPtr model, float[] data, int nObs, int nDim, int embeddingDim, int nNeighbors, float mnRatio, float fpRatio, float learningRate, int nIters, int phase1Iters, int phase2Iters, int phase3Iters, DistanceMetric metric, float[] embedding, NativeProgressCallbackV2 progressCallback, int forceExactKnn, int M, int efConstruction, int efSearch, int useQuantization, int randomSeed = -1, int autoHNSWParam = 1);
 
-        [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "uwot_transform")]
+        [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_transform")]
         private static extern int LinuxTransform(IntPtr model, float[] newData, int nNewObs, int nDim, float[] embedding);
 
-        [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "uwot_transform_detailed")]
+        [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_transform_detailed")]
         private static extern int LinuxTransformDetailed(IntPtr model, float[] newData, int nNewObs, int nDim, float[] embedding, int[] nnIndices, float[] nnDistances, float[] confidenceScore, int[] outlierLevel, float[] percentileRank, float[] zScore);
 
-        [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "uwot_save_model")]
+        [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_save_model")]
         private static extern int LinuxSaveModel(IntPtr model, [MarshalAs(UnmanagedType.LPStr)] string filename);
 
-        [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "uwot_load_model")]
+        [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_load_model")]
         private static extern IntPtr LinuxLoadModel([MarshalAs(UnmanagedType.LPStr)] string filename);
 
-        [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "uwot_destroy")]
+        [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_destroy")]
         private static extern void LinuxDestroy(IntPtr model);
 
-        [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "uwot_get_error_message")]
+        [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_get_error_message")]
         private static extern IntPtr LinuxGetErrorMessage(int errorCode);
 
-        [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "uwot_get_model_info")]
-        private static extern int LinuxGetModelInfo(IntPtr model, out int nVertices, out int nDim, out int embeddingDim, out int nNeighbors, out float minDist, out float spread, out DistanceMetric metric, out int hnswM, out int hnswEfConstruction, out int hnswEfSearch);
+        [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_get_model_info_simple")]
+        private static extern int LinuxGetModelInfo(IntPtr model, out int nSamples, out int nFeatures, out int nComponents, out int nNeighbors, out float mnRatio, out float fpRatio, out DistanceMetric metric, out int hnswM, out int hnswEfConstruction, out int hnswEfSearch);
 
-        [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "uwot_is_fitted")]
+        [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_is_fitted")]
         private static extern int LinuxIsFitted(IntPtr model);
 
-        [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "uwot_get_metric_name")]
+        [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_get_metric_name")]
         private static extern IntPtr LinuxGetMetricName(DistanceMetric metric);
 
-        [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "uwot_set_global_callback")]
+        [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_set_global_callback")]
         private static extern void LinuxSetGlobalCallback(NativeProgressCallbackV2 callback);
 
-        [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "uwot_clear_global_callback")]
+        [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_clear_global_callback")]
         private static extern void LinuxClearGlobalCallback();
 
-        [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "uwot_get_version")]
+        [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_get_version")]
         private static extern IntPtr LinuxGetVersion();
 
         #endregion
 
         #region Constants
 
-        // Expected DLL version - must match C++ UWOT_WRAPPER_VERSION_STRING
-        private const string EXPECTED_DLL_VERSION = "3.17.0";
+        // Expected DLL version - must match C++ PACMAP version
+        private const string EXPECTED_DLL_VERSION = "1.0.0-PACMAP-HNSW-Optimized";
 
         #endregion
 
         #region Error Codes
 
-        private const int UWOT_SUCCESS = 0;
-        private const int UWOT_ERROR_INVALID_PARAMS = -1;
-        private const int UWOT_ERROR_MEMORY = -2;
-        private const int UWOT_ERROR_NOT_IMPLEMENTED = -3;
-        private const int UWOT_ERROR_FILE_IO = -4;
-        private const int UWOT_ERROR_MODEL_NOT_FITTED = -5;
-        private const int UWOT_ERROR_INVALID_MODEL_FILE = -6;
+        private const int PACMAP_SUCCESS = 0;
+        private const int PACMAP_ERROR_INVALID_PARAMS = -1;
+        private const int PACMAP_ERROR_MEMORY = -2;
+        private const int PACMAP_ERROR_NOT_IMPLEMENTED = -3;
+        private const int PACMAP_ERROR_FILE_IO = -4;
+        private const int PACMAP_ERROR_MODEL_NOT_FITTED = -5;
+        private const int PACMAP_ERROR_INVALID_MODEL_FILE = -6;
+        private const int PACMAP_ERROR_CRC_MISMATCH = -7;
 
         #endregion
 
@@ -339,17 +289,17 @@ namespace UMAPuwotSharp
         /// <summary>
         /// Gets comprehensive information about the fitted model
         /// </summary>
-        public UMapModelInfo ModelInfo
+        public PacMapModelInfo ModelInfo
         {
             get
             {
                 if (!IsFitted)
                     throw new InvalidOperationException("Model must be fitted before accessing model info");
 
-                var result = CallGetModelInfo(_nativeModel, out var nVertices, out var nDim, out var embeddingDim, out var nNeighbors, out var minDist, out var spread, out var metric, out var hnswM, out var hnswEfConstruction, out var hnswEfSearch);
+                var result = CallGetModelInfo(_nativeModel, out var nSamples, out var nFeatures, out var nComponents, out var nNeighbors, out var mnRatio, out var fpRatio, out var metric, out var hnswM, out var hnswEfConstruction, out var hnswEfSearch);
                 ThrowIfError(result);
 
-                return new UMapModelInfo(nVertices, nDim, embeddingDim, nNeighbors, minDist, spread, metric, hnswM, hnswEfConstruction, hnswEfSearch);
+                return new PacMapModelInfo(nSamples, nFeatures, nComponents, nNeighbors, mnRatio, fpRatio, metric, hnswM, hnswEfConstruction, hnswEfSearch);
             }
         }
 
@@ -358,27 +308,27 @@ namespace UMAPuwotSharp
         #region Constructors
 
         /// <summary>
-        /// Creates a new Enhanced UMAP model instance
+        /// Creates a new Enhanced PACMAP model instance
         /// </summary>
-        public UMapModel()
+        public PacMapModel()
         {
             // CRITICAL: Verify DLL version before any native calls to prevent binary mismatches
             VerifyDllVersion();
 
             _nativeModel = CallCreate();
             if (_nativeModel == IntPtr.Zero)
-                throw new OutOfMemoryException("Failed to create Enhanced UMAP model");
+                throw new OutOfMemoryException("Failed to create Enhanced PACMAP model");
         }
 
         /// <summary>
-        /// Loads an Enhanced UMAP model from a file
+        /// Loads an Enhanced PACMAP model from a file
         /// </summary>
         /// <param name="filename">Path to the model file</param>
-        /// <returns>A new UMapModel instance loaded from the specified file</returns>
+        /// <returns>A new PacMapModel instance loaded from the specified file</returns>
         /// <exception cref="ArgumentException">Thrown when filename is null or empty</exception>
         /// <exception cref="FileNotFoundException">Thrown when the specified file does not exist</exception>
         /// <exception cref="InvalidDataException">Thrown when the file cannot be loaded as a valid model</exception>
-        public static UMapModel Load(string filename)
+        public static PacMapModel Load(string filename)
         {
             if (string.IsNullOrEmpty(filename))
                 throw new ArgumentException("Filename cannot be null or empty", nameof(filename));
@@ -386,7 +336,7 @@ namespace UMAPuwotSharp
             if (!File.Exists(filename))
                 throw new FileNotFoundException($"Model file not found: {filename}");
 
-            var model = new UMapModel();
+            var model = new PacMapModel();
             model._nativeModel = CallLoadModel(filename);
 
             if (model._nativeModel == IntPtr.Zero)
@@ -402,84 +352,41 @@ namespace UMAPuwotSharp
 
         #region Public Methods
 
+        
         /// <summary>
-        /// Calculates optimal spread parameter based on embedding dimensions
-        /// Research-based defaults for different dimensional use cases
-        /// </summary>
-        /// <param name="embeddingDimension">Target embedding dimension</param>
-        /// <returns>Optimal spread value</returns>
-        private static float CalculateOptimalSpread(int embeddingDimension)
-        {
-            return embeddingDimension switch
-            {
-                1 => 4.0f,              // 1D: space-filling line
-                2 => 5.0f,              // 2D visualization: t-SNE-like space-filling (your optimal finding)
-                >= 3 and <= 5 => 3.0f,  // Low dimensions: moderate separation
-                >= 6 and <= 10 => 2.0f, // Medium dimensions: balanced
-                >= 11 and <= 20 => 1.5f, // Higher dimensions: tighter manifold
-                >= 21 => 1.0f,          // Very high dimensions: preserve cluster structure
-                _ => 1.0f               // Fallback to UMAP default
-            };
-        }
-
-        /// <summary>
-        /// Calculates optimal min_dist parameter based on embedding dimensions
-        /// </summary>
-        /// <param name="embeddingDimension">Target embedding dimension</param>
-        /// <returns>Optimal min_dist value</returns>
-        private static float CalculateOptimalMinDist(int embeddingDimension)
-        {
-            return embeddingDimension switch
-            {
-                2 => 0.35f,             // 2D visualization: your optimal finding
-                >= 3 and <= 10 => 0.25f, // Low-medium dimensions: moderate clustering
-                >= 11 and <= 20 => 0.15f, // Higher dimensions: allow closer points
-                >= 21 => 0.1f,          // Very high dimensions: tight clusters
-                _ => 0.1f               // Fallback to UMAP default
-            };
-        }
-
-        /// <summary>
-        /// Calculates optimal n_neighbors parameter based on embedding dimensions
-        /// </summary>
-        /// <param name="embeddingDimension">Target embedding dimension</param>
-        /// <returns>Optimal n_neighbors value</returns>
-        private static int CalculateOptimalNeighbors(int embeddingDimension)
-        {
-            return embeddingDimension switch
-            {
-                2 => 25,                // 2D visualization: your optimal finding
-                >= 3 and <= 10 => 20,   // Low-medium dimensions: good connectivity
-                >= 11 and <= 20 => 15,  // Higher dimensions: standard connectivity
-                >= 21 => 10,            // Very high dimensions: preserve local structure
-                _ => 15                 // Fallback to UMAP default
-            };
-        }
-
-        /// <summary>
-        /// Fits the Enhanced UMAP model to training data with full customization
+        /// Fits the Enhanced PACMAP model to training data with full customization
         /// </summary>
         /// <param name="data">Training data as 2D array [samples, features]</param>
-        /// <param name="embeddingDimension">Target embedding dimension (1-50, default: 2). Supports 27D!</param>
-        /// <param name="nNeighbors">Number of nearest neighbors (default: auto-optimized based on dimension)</param>
-        /// <param name="minDist">Minimum distance between points in embedding (default: auto-optimized based on dimension)</param>
-        /// <param name="spread">Global scale parameter controlling embedding spread (default: auto-optimized based on dimension)</param>
-        /// <param name="nEpochs">Number of optimization epochs (default: 300)</param>
+        /// <param name="embeddingDimension">Target embedding dimension (1-50, default: 2)</param>
+        /// <param name="nNeighbors">Number of nearest neighbors (default: 10)</param>
+        /// <param name="MNRatio">Medium-near pair ratio (default: 2.0)</param>
+        /// <param name="FPRatio">Far-pair ratio (default: 1.0)</param>
+        /// <param name="learningRate">Learning rate for optimization (default: 1.0)</param>
+        /// <param name="nIters">Number of optimization iterations (default: 100)</param>
+        /// <param name="phase1Iters">Phase 1 iterations (default: 100)</param>
+        /// <param name="phase2Iters">Phase 2 iterations (default: 100)</param>
+        /// <param name="phase3Iters">Phase 3 iterations (default: 100)</param>
         /// <param name="metric">Distance metric to use (default: Euclidean)</param>
         /// <param name="forceExactKnn">Force exact brute-force k-NN instead of HNSW approximation (default: false). Use for validation or small datasets.</param>
         /// <param name="hnswM">HNSW graph degree parameter. -1 = auto-scale based on data size (default: -1)</param>
         /// <param name="hnswEfConstruction">HNSW build quality parameter. -1 = auto-scale (default: -1)</param>
         /// <param name="hnswEfSearch">HNSW query quality parameter. -1 = auto-scale (default: -1)</param>
-        /// <param name="useQuantization">Enable 16-bit quantization for memory reduction (default: false). Provides 85-95% file size reduction with minimal accuracy loss.</param>
+        /// <param name="useQuantization">Enable 16-bit quantization for memory reduction (default: false)</param>
+        /// <param name="randomSeed">Random seed for reproducibility (default: -1 for random)</param>
+        /// <param name="autoHNSWParam">Auto-tune HNSW parameters (default: true)</param>
         /// <returns>Embedding coordinates [samples, embeddingDimension]</returns>
         /// <exception cref="ArgumentNullException">Thrown when data is null</exception>
         /// <exception cref="ArgumentException">Thrown when parameters are invalid</exception>
         public float[,] Fit(float[,] data,
                           int embeddingDimension = 2,
-                          int? nNeighbors = null,
-                          float? minDist = null,
-                          float? spread = null,
-                          int nEpochs = 300,
+                          int nNeighbors = 10,
+                          float MNRatio = 2.0f,
+                          float FPRatio = 1.0f,
+                          float learningRate = 1.0f,
+                          int nIters = 100,
+                          int phase1Iters = 100,
+                          int phase2Iters = 100,
+                          int phase3Iters = 100,
                           DistanceMetric metric = DistanceMetric.Euclidean,
                           bool forceExactKnn = false,
                           int hnswM = -1,
@@ -489,37 +396,45 @@ namespace UMAPuwotSharp
                           int randomSeed = -1,
                           bool autoHNSWParam = true)
         {
-            // Use smart defaults based on embedding dimension
-            int actualNeighbors = nNeighbors ?? CalculateOptimalNeighbors(embeddingDimension);
-            float actualMinDist = minDist ?? CalculateOptimalMinDist(embeddingDimension);
-            float actualSpread = spread ?? CalculateOptimalSpread(embeddingDimension);
-
-            return FitInternal(data, embeddingDimension, actualNeighbors, actualMinDist, actualSpread, nEpochs, metric, forceExactKnn, progressCallback: null, hnswM, hnswEfConstruction, hnswEfSearch, useQuantization, randomSeed, autoHNSWParam);
+            return FitInternal(data, embeddingDimension, nNeighbors, MNRatio, FPRatio, learningRate,
+                             nIters, phase1Iters, phase2Iters, phase3Iters, metric, forceExactKnn,
+                             progressCallback: null, hnswM, hnswEfConstruction, hnswEfSearch,
+                             useQuantization, randomSeed, autoHNSWParam);
         }
 
         /// <summary>
-        /// Fits the Enhanced UMAP model to training data with progress reporting
+        /// Fits the Enhanced PACMAP model to training data with progress reporting
         /// </summary>
         /// <param name="data">Training data as 2D array [samples, features]</param>
         /// <param name="progressCallback">Callback function to report training progress</param>
-        /// <param name="embeddingDimension">Target embedding dimension (1-50, default: 2). Supports 27D!</param>
-        /// <param name="nNeighbors">Number of nearest neighbors (default: auto-optimized based on dimension)</param>
-        /// <param name="minDist">Minimum distance between points in embedding (default: auto-optimized based on dimension)</param>
-        /// <param name="spread">Global scale parameter controlling embedding spread (default: auto-optimized based on dimension)</param>
-        /// <param name="nEpochs">Number of optimization epochs (default: 300)</param>
+        /// <param name="embeddingDimension">Target embedding dimension (1-50, default: 2)</param>
+        /// <param name="nNeighbors">Number of nearest neighbors (default: 10)</param>
+        /// <param name="MNRatio">Medium-near pair ratio (default: 2.0)</param>
+        /// <param name="FPRatio">Far-pair ratio (default: 1.0)</param>
+        /// <param name="learningRate">Learning rate for optimization (default: 1.0)</param>
+        /// <param name="nIters">Number of optimization iterations (default: 100)</param>
+        /// <param name="phase1Iters">Phase 1 iterations (default: 100)</param>
+        /// <param name="phase2Iters">Phase 2 iterations (default: 100)</param>
+        /// <param name="phase3Iters">Phase 3 iterations (default: 100)</param>
         /// <param name="metric">Distance metric to use (default: Euclidean)</param>
-        /// <param name="forceExactKnn">Force exact brute-force k-NN instead of HNSW approximation (default: false). Use for validation or small datasets.</param>
-        /// <param name="useQuantization">Enable 16-bit quantization for memory reduction (default: false). Provides 85-95% file size reduction with minimal accuracy loss.</param>
+        /// <param name="forceExactKnn">Force exact brute-force k-NN instead of HNSW approximation (default: false)</param>
+        /// <param name="useQuantization">Enable 16-bit quantization for memory reduction (default: false)</param>
+        /// <param name="randomSeed">Random seed for reproducibility (default: -1 for random)</param>
+        /// <param name="autoHNSWParam">Auto-tune HNSW parameters (default: true)</param>
         /// <returns>Embedding coordinates [samples, embeddingDimension]</returns>
         /// <exception cref="ArgumentNullException">Thrown when data or progressCallback is null</exception>
         /// <exception cref="ArgumentException">Thrown when parameters are invalid</exception>
         public float[,] FitWithProgress(float[,] data,
                                       ProgressCallback progressCallback,
                                       int embeddingDimension = 2,
-                                      int? nNeighbors = null,
-                                      float? minDist = null,
-                                      float? spread = null,
-                                      int nEpochs = 300,
+                                      int nNeighbors = 10,
+                                      float MNRatio = 2.0f,
+                                      float FPRatio = 1.0f,
+                                      float learningRate = 1.0f,
+                                      int nIters = 100,
+                                      int phase1Iters = 100,
+                                      int phase2Iters = 100,
+                                      int phase3Iters = 100,
                                       DistanceMetric metric = DistanceMetric.Euclidean,
                                       bool forceExactKnn = false,
                                       bool useQuantization = false,
@@ -529,12 +444,10 @@ namespace UMAPuwotSharp
             if (progressCallback == null)
                 throw new ArgumentNullException(nameof(progressCallback));
 
-            // Use smart defaults based on embedding dimension
-            int actualNeighbors = nNeighbors ?? CalculateOptimalNeighbors(embeddingDimension);
-            float actualMinDist = minDist ?? CalculateOptimalMinDist(embeddingDimension);
-            float actualSpread = spread ?? CalculateOptimalSpread(embeddingDimension);
-
-            return FitInternal(data, embeddingDimension, actualNeighbors, actualMinDist, actualSpread, nEpochs, metric, forceExactKnn, progressCallback, hnswM: -1, hnswEfConstruction: -1, hnswEfSearch: -1, useQuantization, randomSeed, autoHNSWParam);
+            return FitInternal(data, embeddingDimension, nNeighbors, MNRatio, FPRatio, learningRate,
+                             nIters, phase1Iters, phase2Iters, phase3Iters, metric, forceExactKnn,
+                             progressCallback, hnswM: -1, hnswEfConstruction: -1, hnswEfSearch: -1,
+                             useQuantization, randomSeed, autoHNSWParam);
         }
 
         /// <summary>
@@ -581,7 +494,7 @@ namespace UMAPuwotSharp
             var result = CallTransform(_nativeModel, flatNewData, nNewSamples, nFeatures, embedding);
 
             // CRITICAL: Check for error BEFORE processing results
-            if (result != UWOT_SUCCESS)
+            if (result != PACMAP_SUCCESS)
             {
                 var errorMessage = CallGetErrorMessage(result);
                 throw new InvalidOperationException($"Transform failed with error {result}: {errorMessage}. This usually indicates normalization parameter mismatch between fit/save and load operations.");
@@ -644,7 +557,7 @@ namespace UMAPuwotSharp
                                              outlierLevels, percentileRanks, zScores);
 
             // CRITICAL: Check for error BEFORE processing results
-            if (result != UWOT_SUCCESS)
+            if (result != PACMAP_SUCCESS)
             {
                 var errorMessage = CallGetErrorMessage(result);
                 throw new InvalidOperationException($"Transform failed with error {result}: {errorMessage}. This usually indicates normalization parameter mismatch between fit/save and load operations.");
@@ -684,6 +597,7 @@ namespace UMAPuwotSharp
             return results;
         }
 
+        
         /// <summary>
         /// Saves the fitted model to a file
         /// </summary>
@@ -726,9 +640,13 @@ namespace UMAPuwotSharp
         private float[,] FitInternal(float[,] data,
                                    int embeddingDimension,
                                    int nNeighbors,
-                                   float minDist,
-                                   float spread,
-                                   int nEpochs,
+                                   float mnRatio,
+                                   float fpRatio,
+                                   float learningRate,
+                                   int nIters,
+                                   int phase1Iters,
+                                   int phase2Iters,
+                                   int phase3Iters,
                                    DistanceMetric metric,
                                    bool forceExactKnn,
                                    ProgressCallback? progressCallback,
@@ -754,11 +672,20 @@ namespace UMAPuwotSharp
             if (nNeighbors <= 0 || nNeighbors >= nSamples)
                 throw new ArgumentException("Number of neighbors must be positive and less than number of samples");
 
-            if (minDist <= 0)
-                throw new ArgumentException("Minimum distance must be positive");
+            if (mnRatio <= 0)
+                throw new ArgumentException("MN ratio must be positive");
 
-            if (nEpochs <= 0)
-                throw new ArgumentException("Number of epochs must be positive");
+            if (fpRatio <= 0)
+                throw new ArgumentException("FP ratio must be positive");
+
+            if (learningRate <= 0)
+                throw new ArgumentException("Learning rate must be positive");
+
+            if (nIters <= 0)
+                throw new ArgumentException("Number of iterations must be positive");
+
+            if (phase1Iters <= 0 || phase2Iters <= 0 || phase3Iters <= 0)
+                throw new ArgumentException("Phase iterations must be positive");
 
             // Flatten the input data
             var flatData = new float[nSamples * nFeatures];
@@ -790,13 +717,12 @@ namespace UMAPuwotSharp
                     }
                 };
 
-                result = CallFitWithProgressV2(_nativeModel, flatData, nSamples, nFeatures, embeddingDimension, nNeighbors, minDist, spread, nEpochs, metric, embedding, nativeCallback, forceExactKnn ? 1 : 0, hnswM, hnswEfConstruction, hnswEfSearch, useQuantization ? 1 : 0, randomSeed, autoHNSWParam ? 1 : 0);
+                result = CallFitWithProgressV2(_nativeModel, flatData, nSamples, nFeatures, embeddingDimension, nNeighbors, mnRatio, fpRatio, learningRate, nIters, phase1Iters, phase2Iters, phase3Iters, metric, embedding, nativeCallback, forceExactKnn ? 1 : 0, hnswM, hnswEfConstruction, hnswEfSearch, useQuantization ? 1 : 0, randomSeed, autoHNSWParam ? 1 : 0);
             }
             else
             {
-                // CRITICAL FIX: Always use unified pipeline function (even without progress callback)
-                // to ensure HNSW and exact use same normalized data - prevents MSE ~74 issue
-                result = CallFitWithProgressV2(_nativeModel, flatData, nSamples, nFeatures, embeddingDimension, nNeighbors, minDist, spread, nEpochs, metric, embedding, null, forceExactKnn ? 1 : 0, hnswM, hnswEfConstruction, hnswEfSearch, useQuantization ? 1 : 0, randomSeed, autoHNSWParam ? 1 : 0);
+                // Always use the unified PACMAP function (even without progress callback)
+                result = CallFitWithProgressV2(_nativeModel, flatData, nSamples, nFeatures, embeddingDimension, nNeighbors, mnRatio, fpRatio, learningRate, nIters, phase1Iters, phase2Iters, phase3Iters, metric, embedding, null, forceExactKnn ? 1 : 0, hnswM, hnswEfConstruction, hnswEfSearch, useQuantization ? 1 : 0, randomSeed, autoHNSWParam ? 1 : 0);
             }
 
             ThrowIfError(result);
@@ -816,19 +742,19 @@ namespace UMAPuwotSharp
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static int CallFit(IntPtr model, float[] data, int nObs, int nDim, int embeddingDim, int nNeighbors, float minDist, float spread, int nEpochs, DistanceMetric metric, float[] embedding, int forceExactKnn)
+        private static int CallFit(IntPtr model, float[] data, int nObs, int nDim, int embeddingDim, int nNeighbors, float mnRatio, float fpRatio, float learningRate, int nIters, int phase1Iters, int phase2Iters, int phase3Iters, DistanceMetric metric, float[] embedding, int forceExactKnn)
         {
-            return IsWindows ? WindowsFit(model, data, nObs, nDim, embeddingDim, nNeighbors, minDist, spread, nEpochs, metric, embedding, forceExactKnn)
-                             : LinuxFit(model, data, nObs, nDim, embeddingDim, nNeighbors, minDist, spread, nEpochs, metric, embedding, forceExactKnn);
+            return IsWindows ? WindowsFit(model, data, nObs, nDim, embeddingDim, nNeighbors, mnRatio, fpRatio, learningRate, nIters, phase1Iters, phase2Iters, phase3Iters, metric, embedding, forceExactKnn)
+                             : LinuxFit(model, data, nObs, nDim, embeddingDim, nNeighbors, mnRatio, fpRatio, learningRate, nIters, phase1Iters, phase2Iters, phase3Iters, metric, embedding, forceExactKnn);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static int CallFitWithProgressV2(IntPtr model, float[] data, int nObs, int nDim, int embeddingDim, int nNeighbors, float minDist, float spread, int nEpochs, DistanceMetric metric, float[] embedding, NativeProgressCallbackV2? progressCallback, int forceExactKnn, int M, int efConstruction, int efSearch, int useQuantization, int randomSeed = -1, int autoHNSWParam = 1)
+        private static int CallFitWithProgressV2(IntPtr model, float[] data, int nObs, int nDim, int embeddingDim, int nNeighbors, float mnRatio, float fpRatio, float learningRate, int nIters, int phase1Iters, int phase2Iters, int phase3Iters, DistanceMetric metric, float[] embedding, NativeProgressCallbackV2? progressCallback, int forceExactKnn, int M, int efConstruction, int efSearch, int useQuantization, int randomSeed = -1, int autoHNSWParam = 1)
         {
             // Use null-coalescing to provide a default no-op callback if progressCallback is null
             var callback = progressCallback ?? ((phase, current, total, percent, message) => { });
-            return IsWindows ? WindowsFitWithProgressV2(model, data, nObs, nDim, embeddingDim, nNeighbors, minDist, spread, nEpochs, metric, embedding, callback, forceExactKnn, M, efConstruction, efSearch, useQuantization, randomSeed, autoHNSWParam)
-                             : LinuxFitWithProgressV2(model, data, nObs, nDim, embeddingDim, nNeighbors, minDist, spread, nEpochs, metric, embedding, callback, forceExactKnn, M, efConstruction, efSearch, useQuantization, randomSeed, autoHNSWParam);
+            return IsWindows ? WindowsFitWithProgressV2(model, data, nObs, nDim, embeddingDim, nNeighbors, mnRatio, fpRatio, learningRate, nIters, phase1Iters, phase2Iters, phase3Iters, metric, embedding, callback, forceExactKnn, M, efConstruction, efSearch, useQuantization, randomSeed, autoHNSWParam)
+                             : LinuxFitWithProgressV2(model, data, nObs, nDim, embeddingDim, nNeighbors, mnRatio, fpRatio, learningRate, nIters, phase1Iters, phase2Iters, phase3Iters, metric, embedding, callback, forceExactKnn, M, efConstruction, efSearch, useQuantization, randomSeed, autoHNSWParam);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -872,10 +798,10 @@ namespace UMAPuwotSharp
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static int CallGetModelInfo(IntPtr model, out int nVertices, out int nDim, out int embeddingDim, out int nNeighbors, out float minDist, out float spread, out DistanceMetric metric, out int hnswM, out int hnswEfConstruction, out int hnswEfSearch)
+        private static int CallGetModelInfo(IntPtr model, out int nSamples, out int nFeatures, out int nComponents, out int nNeighbors, out float mnRatio, out float fpRatio, out DistanceMetric metric, out int hnswM, out int hnswEfConstruction, out int hnswEfSearch)
         {
-            return IsWindows ? WindowsGetModelInfo(model, out nVertices, out nDim, out embeddingDim, out nNeighbors, out minDist, out spread, out metric, out hnswM, out hnswEfConstruction, out hnswEfSearch)
-                             : LinuxGetModelInfo(model, out nVertices, out nDim, out embeddingDim, out nNeighbors, out minDist, out spread, out metric, out hnswM, out hnswEfConstruction, out hnswEfSearch);
+            return IsWindows ? WindowsGetModelInfo(model, out nSamples, out nFeatures, out nComponents, out nNeighbors, out mnRatio, out fpRatio, out metric, out hnswM, out hnswEfConstruction, out hnswEfSearch)
+                             : LinuxGetModelInfo(model, out nSamples, out nFeatures, out nComponents, out nNeighbors, out mnRatio, out fpRatio, out metric, out hnswM, out hnswEfConstruction, out hnswEfSearch);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -910,19 +836,20 @@ namespace UMAPuwotSharp
 
         private static void ThrowIfError(int errorCode)
         {
-            if (errorCode == UWOT_SUCCESS) return;
+            if (errorCode == PACMAP_SUCCESS) return;
 
             var message = CallGetErrorMessage(errorCode);
 
             throw errorCode switch
             {
-                UWOT_ERROR_INVALID_PARAMS => new ArgumentException(message),
-                UWOT_ERROR_MEMORY => new OutOfMemoryException(message),
-                UWOT_ERROR_NOT_IMPLEMENTED => new NotImplementedException(message),
-                UWOT_ERROR_FILE_IO => new IOException(message),
-                UWOT_ERROR_MODEL_NOT_FITTED => new InvalidOperationException(message),
-                UWOT_ERROR_INVALID_MODEL_FILE => new InvalidDataException(message),
-                _ => new Exception($"UMAP Error ({errorCode}): {message}")
+                PACMAP_ERROR_INVALID_PARAMS => new ArgumentException(message),
+                PACMAP_ERROR_MEMORY => new OutOfMemoryException(message),
+                PACMAP_ERROR_NOT_IMPLEMENTED => new NotImplementedException(message),
+                PACMAP_ERROR_FILE_IO => new IOException(message),
+                PACMAP_ERROR_MODEL_NOT_FITTED => new InvalidOperationException(message),
+                PACMAP_ERROR_INVALID_MODEL_FILE => new InvalidDataException(message),
+                PACMAP_ERROR_CRC_MISMATCH => new InvalidDataException(message),
+                _ => new Exception($"PACMAP Error ({errorCode}): {message}")
             };
         }
 
@@ -944,7 +871,7 @@ namespace UMAPuwotSharp
                     throw new InvalidOperationException(
                         $"❌ CRITICAL: Failed to get DLL version. This indicates a binary mismatch or corrupted DLL.\n" +
                         $"Expected version: {EXPECTED_DLL_VERSION}\n" +
-                        $"Please ensure the correct uwot.dll/libuwot.so is in the application directory.");
+                        $"Please ensure the correct pacmap.dll/libpacmap.so is in the application directory.");
                 }
 
                 string actualVersion = Marshal.PtrToStringAnsi(versionPtr) ?? "unknown";
@@ -971,8 +898,8 @@ namespace UMAPuwotSharp
             catch (DllNotFoundException ex)
             {
                 throw new DllNotFoundException(
-                    $"❌ CRITICAL: Native UMAP library not found!\n" +
-                    $"Expected: {(RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "uwot.dll" : "libuwot.so")}\n" +
+                    $"❌ CRITICAL: Native PACMAP library not found!\n" +
+                    $"Expected: {(RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "pacmap.dll" : "libpacmap.so")}\n" +
                     $"Platform: {RuntimeInformation.OSArchitecture} on {RuntimeInformation.OSDescription}\n" +
                     $"Ensure the native library is in the application directory.\n" +
                     $"Original error: {ex.Message}");
@@ -1077,7 +1004,7 @@ namespace UMAPuwotSharp
         /// <summary>
         /// Finalizer for UMapModel to ensure native resources are cleaned up
         /// </summary>
-        ~UMapModel()
+        ~PacMapModel()
         {
             Dispose(false);
         }
@@ -1086,9 +1013,9 @@ namespace UMAPuwotSharp
     }
 
     /// <summary>
-    /// Comprehensive information about a fitted Enhanced UMAP model
+    /// Comprehensive information about a fitted Enhanced PACMAP model
     /// </summary>
-    public readonly struct UMapModelInfo
+    public readonly struct PacMapModelInfo
     {
         /// <summary>
         /// Gets the number of training samples used to fit this model
@@ -1101,7 +1028,7 @@ namespace UMAPuwotSharp
         public int InputDimension { get; }
 
         /// <summary>
-        /// Gets the dimensionality of the output embedding (1-50D supported, including 27D)
+        /// Gets the dimensionality of the output embedding (1-50D supported)
         /// </summary>
         public int OutputDimension { get; }
 
@@ -1111,20 +1038,19 @@ namespace UMAPuwotSharp
         public int Neighbors { get; }
 
         /// <summary>
-        /// Gets the minimum distance parameter used during training
+        /// Gets the medium-near pair ratio used during training
         /// </summary>
-        public float MinimumDistance { get; }
+        public float MnRatio { get; }
 
         /// <summary>
-        /// Gets the spread parameter used during training (controls global scale)
+        /// Gets the far-pair ratio used during training
         /// </summary>
-        public float Spread { get; }
+        public float FpRatio { get; }
 
         /// <summary>
         /// Gets the distance metric used during training
         /// </summary>
         public DistanceMetric Metric { get; }
-
 
         /// <summary>
         /// Gets the HNSW graph degree parameter (controls connectivity)
@@ -1144,16 +1070,16 @@ namespace UMAPuwotSharp
         /// <summary>
         /// Gets the human-readable name of the distance metric
         /// </summary>
-        public string MetricName => UMapModel.GetMetricName(Metric);
+        public string MetricName => PacMapModel.GetMetricName(Metric);
 
-        internal UMapModelInfo(int trainingSamples, int inputDimension, int outputDimension, int neighbors, float minimumDistance, float spread, DistanceMetric metric, int hnswM, int hnswEfConstruction, int hnswEfSearch)
+        internal PacMapModelInfo(int trainingSamples, int inputDimension, int outputDimension, int neighbors, float mnRatio, float fpRatio, DistanceMetric metric, int hnswM, int hnswEfConstruction, int hnswEfSearch)
         {
             TrainingSamples = trainingSamples;
             InputDimension = inputDimension;
             OutputDimension = outputDimension;
             Neighbors = neighbors;
-            MinimumDistance = minimumDistance;
-            Spread = spread;
+            MnRatio = mnRatio;
+            FpRatio = fpRatio;
             Metric = metric;
             HnswM = hnswM;
             HnswEfConstruction = hnswEfConstruction;
@@ -1166,8 +1092,8 @@ namespace UMAPuwotSharp
         /// <returns>A formatted string describing all model parameters</returns>
         public override string ToString()
         {
-            return $"Enhanced UMAP Model: {TrainingSamples} samples, {InputDimension}D → {OutputDimension}D, " +
-                   $"k={Neighbors}, min_dist={MinimumDistance:F3}, spread={Spread:F3}, metric={MetricName}, " +
+            return $"Enhanced PACMAP Model: {TrainingSamples} samples, {InputDimension}D → {OutputDimension}D, " +
+                   $"k={Neighbors}, MN_ratio={MnRatio:F3}, FP_ratio={FpRatio:F3}, metric={MetricName}, " +
                    $"HNSW(M={HnswM}, ef_c={HnswEfConstruction}, ef_s={HnswEfSearch})";
         }
     }

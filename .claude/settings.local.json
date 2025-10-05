@@ -60,7 +60,11 @@
       "Bash(dotnet run:*)",
       "Bash(copy:*)",
       "Bash(.test_basic_integration.exe)",
-      "Bash(./test_basic_integration.exe:*)"
+      "Bash(./test_basic_integration.exe:*)",
+      "Bash(.test_simple.exe)",
+      "Bash(./test_simple.exe:*)",
+      "Bash(dotnet new:*)",
+      "Bash(./PacMapTest.exe:*)"
     ],
     "deny": [],
     "ask": []
