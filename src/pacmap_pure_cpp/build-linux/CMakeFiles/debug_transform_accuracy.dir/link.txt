@@ -1,1 +1,0 @@
-/usr/bin/c++ -O3 -DNDEBUG CMakeFiles/debug_transform_accuracy.dir/debug_transform_accuracy.cpp.o -o debug_transform_accuracy  -Wl,-rpath,/src/build-linux libuwot.so.3.5.0 /usr/lib/gcc/x86_64-linux-gnu/11/libgomp.so /usr/lib/x86_64-linux-gnu/libpthread.a 

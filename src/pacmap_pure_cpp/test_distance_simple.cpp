@@ -32,7 +32,7 @@ void test_distance_helper_compilation() {
     std::vector<std::pair<float, int>> neighbors;
     const float* query_point = &data[0]; // Point 0 as query
 
-    distance_metrics::find_knn_exact(query_point, data, n_obs, n_dim, UWOT_METRIC_EUCLIDEAN, 3, neighbors, 0);
+    distance_metrics::find_knn_exact(query_point, data, n_obs, n_dim, PACMAP_METRIC_EUCLIDEAN, 3, neighbors, 0);
 
     std::cout << "3 nearest neighbors to point [0,0]:" << std::endl;
     for (size_t i = 0; i < neighbors.size(); i++) {
@@ -57,7 +57,7 @@ void test_distance_helper_compilation() {
     };
     float distance_matrix[small_n_obs * small_n_obs];
 
-    distance_metrics::build_distance_matrix(small_data, small_n_obs, 2, UWOT_METRIC_EUCLIDEAN, distance_matrix);
+    distance_metrics::build_distance_matrix(small_data, small_n_obs, 2, PACMAP_METRIC_EUCLIDEAN, distance_matrix);
 
     std::cout << "3x3 distance matrix:" << std::endl;
     for (int i = 0; i < small_n_obs; i++) {

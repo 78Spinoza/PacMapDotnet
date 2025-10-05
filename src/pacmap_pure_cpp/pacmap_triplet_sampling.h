@@ -48,3 +48,6 @@ extern void batch_distance_computation(const std::vector<float>& data,
 extern float assess_triplet_quality(const std::vector<Triplet>& triplets,
                                    const std::vector<float>& data, int n_features);
 extern void print_sampling_statistics(const std::vector<Triplet>& triplets);
+
+// Distance computation helper
+extern float compute_sampling_distance(const float* x, const float* y, int n_features, PacMapMetric metric);

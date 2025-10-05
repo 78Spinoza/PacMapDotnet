@@ -1,1 +1,0 @@
-/usr/bin/c++ -O3 -DNDEBUG CMakeFiles/test_standard_comprehensive.dir/test_standard_comprehensive.cpp.o -o test_standard_comprehensive  -Wl,-rpath,/src/build-linux libuwot.so.3.5.0 /usr/lib/gcc/x86_64-linux-gnu/11/libgomp.so /usr/lib/x86_64-linux-gnu/libpthread.a 

@@ -26,7 +26,7 @@ int main() {
     }
 
     // Create model
-    UwotModel* model = uwot_create();
+    PacMapModel* model = uwot_create();
     if (!model) {
         std::cout << "❌ Failed to create model" << std::endl;
         return -1;
@@ -46,7 +46,7 @@ int main() {
         0.1f,  // min_dist
         1.0f,  // spread
         50,  // n_epochs
-        UWOT_METRIC_EUCLIDEAN,
+        PACMAP_METRIC_EUCLIDEAN,
         embedding.data(),
         progress_callback,
         0,  // force_exact_knn
@@ -87,7 +87,7 @@ int main() {
 
     // Load model
     std::cout << "📂 Loading model from " << filename << "..." << std::endl;
-    UwotModel* loaded_model = uwot_load_model(filename);
+    PacMapModel* loaded_model = uwot_load_model(filename);
     if (!loaded_model) {
         std::cout << "❌ Load failed: null model returned" << std::endl;
         return -1;

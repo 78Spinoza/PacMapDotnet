@@ -201,7 +201,7 @@ bool test_embedding_dimension(int embedding_dim, TestResults& results) {
 
     // Step 1: Train model
     std::cout << "📚 Step 1: Training UMAP model..." << std::endl;
-    UwotModel* model = uwot_create();
+    PacMapModel* model = uwot_create();
     if (!model) {
         std::cout << "❌ Failed to create model" << std::endl;
         return false;
@@ -213,10 +213,10 @@ bool test_embedding_dimension(int embedding_dim, TestResults& results) {
     g_loss_history.clear();
 
     int result = uwot_fit_with_progress_v2(model, data.data(), N_SAMPLES, N_DIM, embedding_dim,
-        N_NEIGHBORS, MIN_DIST, SPREAD, N_EPOCHS, UWOT_METRIC_EUCLIDEAN,
+        N_NEIGHBORS, MIN_DIST, SPREAD, N_EPOCHS, PACMAP_METRIC_EUCLIDEAN,
         fit_embedding.data(), loss_tracking_callback, 1, -1, -1, -1, 0, 42, 1);
 
-    if (result != UWOT_SUCCESS) {
+    if (result != PACMAP_SUCCESS) {
         std::cout << "❌ Training failed: " << result << std::endl;
         uwot_destroy(model);
         return false;
@@ -233,7 +233,7 @@ bool test_embedding_dimension(int embedding_dim, TestResults& results) {
     result = uwot_transform_detailed(model, data.data(), N_SAMPLES, N_DIM,
         transform_embedding.data(), nullptr, nullptr, nullptr, nullptr, nullptr, nullptr);
 
-    if (result != UWOT_SUCCESS) {
+    if (result != PACMAP_SUCCESS) {
         std::cout << "❌ Transform failed: " << result << std::endl;
         uwot_destroy(model);
         return false;
@@ -255,7 +255,7 @@ bool test_embedding_dimension(int embedding_dim, TestResults& results) {
     std::string model_file = "test_standard_" + std::to_string(embedding_dim) + "d.umap";
 
     result = uwot_save_model(model, model_file.c_str());
-    if (result != UWOT_SUCCESS) {
+    if (result != PACMAP_SUCCESS) {
         std::cout << "❌ Save failed: " << result << std::endl;
         uwot_destroy(model);
         return false;
@@ -263,7 +263,7 @@ bool test_embedding_dimension(int embedding_dim, TestResults& results) {
 
     // Step 5: Load model and transform again
     uwot_destroy(model);
-    UwotModel* loaded_model = uwot_load_model(model_file.c_str());
+    PacMapModel* loaded_model = uwot_load_model(model_file.c_str());
     if (!loaded_model) {
         std::cout << "❌ Load failed" << std::endl;
         return false;
@@ -274,7 +274,7 @@ bool test_embedding_dimension(int embedding_dim, TestResults& results) {
     result = uwot_transform_detailed(loaded_model, data.data(), N_SAMPLES, N_DIM,
         loaded_transform_embedding.data(), nullptr, nullptr, nullptr, nullptr, nullptr, nullptr);
 
-    if (result != UWOT_SUCCESS) {
+    if (result != PACMAP_SUCCESS) {
         std::cout << "❌ Loaded model transform failed: " << result << std::endl;
         uwot_destroy(loaded_model);
         return false;

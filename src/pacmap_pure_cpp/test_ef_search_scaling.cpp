@@ -44,7 +44,7 @@ void test_ef_search_scaling_for_sizes() {
         }
 
         // Create model with auto-scaling
-        UwotModel* model = uwot_create();
+        PacMapModel* model = uwot_create();
         if (!model) {
             std::cout << "❌ Failed to create model" << std::endl;
             continue;
@@ -63,7 +63,7 @@ void test_ef_search_scaling_for_sizes() {
             0.1f,  // min_dist
             1.0f,  // spread
             5,   // n_epochs (very reduced for testing)
-            UWOT_METRIC_EUCLIDEAN,
+            PACMAP_METRIC_EUCLIDEAN,
             embedding.data(),
             progress_callback,
             0,  // force_exact_knn
@@ -80,7 +80,7 @@ void test_ef_search_scaling_for_sizes() {
             int n_vertices, n_dim_check, embedding_dim_check, n_neighbors;
             int hnsw_M, hnsw_ef_construction, hnsw_ef_search;
             float min_dist, spread;
-            UwotMetric metric;
+            PacMapMetric metric;
             uwot_get_model_info(model, &n_vertices, &n_dim_check, &embedding_dim_check, &n_neighbors,
                               &min_dist, &spread, &metric, &hnsw_M, &hnsw_ef_construction, &hnsw_ef_search);
 
@@ -137,7 +137,7 @@ void test_explicit_ef_search_limits() {
     const int high_ef_search = 1500;
     std::cout << "🚀 Testing with explicit ef_search = " << high_ef_search << std::endl;
 
-    UwotModel* model = uwot_create();
+    PacMapModel* model = uwot_create();
     if (!model) {
         std::cout << "❌ Failed to create model" << std::endl;
         return;
@@ -155,7 +155,7 @@ void test_explicit_ef_search_limits() {
         0.1f,  // min_dist
         1.0f,  // spread
         5,   // n_epochs (reduced for testing)
-        UWOT_METRIC_EUCLIDEAN,
+        PACMAP_METRIC_EUCLIDEAN,
         embedding.data(),
         progress_callback,
         0,  // force_exact_knn
@@ -170,7 +170,7 @@ void test_explicit_ef_search_limits() {
     if (result == 0) {
         int hnsw_M, hnsw_ef_construction, hnsw_ef_search;
         float min_dist, spread;
-        UwotMetric metric;
+        PacMapMetric metric;
         uwot_get_model_info(model, nullptr, nullptr, nullptr, nullptr,
                           &min_dist, &spread, &metric, &hnsw_M, &hnsw_ef_construction, &hnsw_ef_search);
 

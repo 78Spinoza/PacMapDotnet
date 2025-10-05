@@ -17,11 +17,11 @@ int main() {
     }
 
     // Create and train model
-    UwotModel* model = uwot_create();
+    PacMapModel* model = uwot_create();
     std::vector<float> embedding(50 * 2);
 
     int result = uwot_fit_with_progress_v2(model, data.data(), 50, 5,
-        2, 10, 0.1f, 1.0f, 30, UWOT_METRIC_EUCLIDEAN,
+        2, 10, 0.1f, 1.0f, 30, PACMAP_METRIC_EUCLIDEAN,
         embedding.data(), nullptr, 0, 32, 128, 64, 0);
 
     if (result != 0) {
@@ -56,7 +56,7 @@ int main() {
     std::cout << "Model saved" << std::endl;
 
     // Load model
-    UwotModel* loaded_model = uwot_load_model("simple_test.umap");
+    PacMapModel* loaded_model = uwot_load_model("simple_test.umap");
     if (!loaded_model) {
         std::cout << "Load failed" << std::endl;
         return 1;

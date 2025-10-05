@@ -5,6 +5,7 @@
 #include <random>
 #include <string>
 #include <cstdint>
+#include <chrono>
 #include "hnswlib.h"
 
 #include "pacmap_simple_wrapper.h"
@@ -39,6 +40,17 @@ struct PerformanceStats {
     int total_triplets = 0;
     float final_loss = 0.0f;
     int iterations_completed = 0;
+
+    // Performance tracking fields
+    std::chrono::high_resolution_clock::time_point start_time;
+
+    // Operation history tracking
+    struct OperationRecord {
+        std::string operation;
+        double duration_ms;
+        int64_t timestamp;
+    };
+    std::vector<OperationRecord> operation_history;
 };
 
 // Enhanced PACMAP Model Structure (review-optimized)
@@ -88,6 +100,14 @@ struct PacMapModel {
     std::vector<double> nn_distances;
     std::vector<double> nn_weights;
 
+    // Data preprocessing fields for transform consistency
+    std::vector<float> feature_means;
+    std::vector<float> feature_stds;
+
+    // Quantization fields (for future implementation)
+    std::vector<float> pq_centroids;
+    int pq_m = 0;
+
     // Unified triplet storage (review optimization)
     std::vector<Triplet> triplets;
 
@@ -95,6 +115,8 @@ struct PacMapModel {
     std::vector<float> training_data;
     std::vector<float> embedding;
     std::unique_ptr<hnswlib::HierarchicalNSW<float>> original_space_index;
+    std::unique_ptr<hnswlib::HierarchicalNSW<float>> embedding_space_index;
+    float median_original_distance = 0.0f;
 
     // Safety statistics (review addition)
     float min_embedding_dist = 0.0f;
@@ -131,4 +153,18 @@ extern const char* get_last_error_message(const PacMapModel* model);
 namespace model_utils {
     PacMapModel* create_model();
     void destroy_model(PacMapModel* model);
+    int get_model_info(PacMapModel* model, int* n_vertices, int* n_dim, int* embedding_dim,
+        int* n_neighbors, float* min_dist, float* spread, PacMapMetric* metric,
+        int* hnsw_M, int* hnsw_ef_construction, int* hnsw_ef_search);
+    int get_model_info_v2(PacMapModel* model, int* n_vertices, int* n_dim, int* embedding_dim,
+        int* n_neighbors, float* min_dist, float* spread, PacMapMetric* metric,
+        int* hnsw_M, int* hnsw_ef_construction, int* hnsw_ef_search,
+        uint32_t* original_crc, uint32_t* embedding_crc, uint32_t* version_crc,
+        float* hnsw_recall_percentage);
+    int get_embedding_dim(PacMapModel* model);
+    int get_n_vertices(PacMapModel* model);
+    int is_fitted(PacMapModel* model);
+    const char* get_error_message(int error_code);
+    const char* get_metric_name(PacMapMetric metric);
+    const char* get_version();
 }

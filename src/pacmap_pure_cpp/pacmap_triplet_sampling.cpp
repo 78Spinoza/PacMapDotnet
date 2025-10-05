@@ -75,13 +75,21 @@ void sample_neighbors_pair(PacMapModel* model, const std::vector<float>& normali
     // Parallel neighbor sampling using HNSW (review optimization)
     #pragma omp parallel for
     for (int i = 0; i < model->n_samples; ++i) {
-        auto knn = model->original_space_index->searchKnn(
+        auto knn_results = model->original_space_index->searchKnn(
             normalized_data.data() + i * model->n_features,
             model->n_neighbors + 1);
 
+        // Convert priority_queue to vector for access
+        std::vector<std::pair<float, int>> knn;
+        while (!knn_results.empty()) {
+            knn.push_back(knn_results.top());
+            knn_results.pop();
+        }
+        std::reverse(knn.begin(), knn.end());  // Since priority_queue gives max first
+
         std::vector<Triplet> local_triplets;
         for (size_t j = 1; j < knn.size(); ++j) {  // Skip self (first result)
-            local_triplets.emplace_back(Triplet{i, static_cast<int>(knn[j].second), NEIGHBOR});
+            local_triplets.emplace_back(i, static_cast<int>(knn[j].second), NEIGHBOR);
         }
 
         // Merge results safely
@@ -254,16 +262,7 @@ void deduplicate_triplets(std::vector<Triplet>& triplets) {
 }
 
 float compute_sampling_distance(const float* x, const float* y, int n_features, PacMapMetric metric) {
-    switch (metric) {
-        case PACMAP_METRIC_EUCLIDEAN:
-            return euclid_dist(x, y, n_features);
-        case PACMAP_METRIC_COSINE:
-            return angular_dist(x, y, n_features);
-        case PACMAP_METRIC_MANHATTAN:
-            return manhattan_dist(x, y, n_features);
-        default:
-            return euclid_dist(x, y, n_features);
-    }
+    return distance_metrics::compute_distance(x, y, n_features, metric);
 }
 
 void print_sampling_statistics(const std::vector<Triplet>& triplets) {

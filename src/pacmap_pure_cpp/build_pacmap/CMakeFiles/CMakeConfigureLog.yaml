@@ -1,0 +1,504 @@
+
+---
+events:
+  -
+    kind: "message-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-3.29/Modules/CMakeDetermineSystem.cmake:205 (message)"
+      - "CMakeLists.txt:2 (project)"
+    message: |
+      The system is: Windows - 10.0.19045 - AMD64
+  -
+    kind: "message-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-3.29/Modules/CMakeDetermineCompilerId.cmake:17 (message)"
+      - "C:/Program Files/CMake/share/cmake-3.29/Modules/CMakeDetermineCompilerId.cmake:64 (__determine_compiler_id_test)"
+      - "C:/Program Files/CMake/share/cmake-3.29/Modules/CMakeDetermineCCompiler.cmake:123 (CMAKE_DETERMINE_COMPILER_ID)"
+      - "CMakeLists.txt:2 (project)"
+    message: |
+      Compiling the C compiler identification source file "CMakeCCompilerId.c" succeeded.
+      Compiler:  
+      Build flags: 
+      Id flags:  
+      
+      The output was:
+      0
+      MSBuild version 17.14.10+8b8e13593 for .NET Framework
+      Build started 2025-10-05 16:53:54.
+      
+      Project "C:\\PacMapDotnet\\src\\pacmap_pure_cpp\\build_pacmap\\CMakeFiles\\3.29.5\\CompilerIdC\\CompilerIdC.vcxproj" on node 1 (default targets).
+      PrepareForBuild:
+        Creating directory "Debug\\".
+        Structured output is enabled. The formatting of compiler diagnostics will reflect the error hierarchy. See https://aka.ms/cpp/structured-output for more details.
+        Creating directory "Debug\\CompilerIdC.tlog\\".
+      InitializeBuildStatus:
+        Creating "Debug\\CompilerIdC.tlog\\unsuccessfulbuild" because "AlwaysCreate" was specified.
+        Touching "Debug\\CompilerIdC.tlog\\unsuccessfulbuild".
+      ClCompile:
+        C:\\Program Files\\Microsoft Visual Studio\\2022\\Professional\\VC\\Tools\\MSVC\\14.44.35207\\bin\\HostX64\\x64\\CL.exe /c /nologo /W0 /WX- /diagnostics:column /Od /D _MBCS /Gm- /EHsc /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /Fo"Debug\\\\" /Fd"Debug\\vc143.pdb" /external:W0 /Gd /TC /FC /errorReport:queue CMakeCCompilerId.c
+        CMakeCCompilerId.c
+      Link:
+        C:\\Program Files\\Microsoft Visual Studio\\2022\\Professional\\VC\\Tools\\MSVC\\14.44.35207\\bin\\HostX64\\x64\\link.exe /ERRORREPORT:QUEUE /OUT:".\\CompilerIdC.exe" /INCREMENTAL:NO /NOLOGO kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib /MANIFEST /MANIFESTUAC:"level='asInvoker' uiAccess='false'" /manifest:embed /PDB:".\\CompilerIdC.pdb" /SUBSYSTEM:CONSOLE /TLBID:1 /DYNAMICBASE /NXCOMPAT /IMPLIB:".\\CompilerIdC.lib" /MACHINE:X64 Debug\\CMakeCCompilerId.obj
+        CompilerIdC.vcxproj -> C:\\PacMapDotnet\\src\\pacmap_pure_cpp\\build_pacmap\\CMakeFiles\\3.29.5\\CompilerIdC\\CompilerIdC.exe
+      PostBuildEvent:
+        for %%i in (cl.exe) do @echo CMAKE_C_COMPILER=%%~$PATH:i
+        :VCEnd
+        CMAKE_C_COMPILER=C:\\Program Files\\Microsoft Visual Studio\\2022\\Professional\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe
+      FinalizeBuildStatus:
+        Deleting file "Debug\\CompilerIdC.tlog\\unsuccessfulbuild".
+        Touching "Debug\\CompilerIdC.tlog\\CompilerIdC.lastbuildstate".
+      Done Building Project "C:\\PacMapDotnet\\src\\pacmap_pure_cpp\\build_pacmap\\CMakeFiles\\3.29.5\\CompilerIdC\\CompilerIdC.vcxproj" (default targets).
+      
+      Build succeeded.
+          0 Warning(s)
+          0 Error(s)
+      
+      Time Elapsed 00:00:01.31
+      
+      
+      Compilation of the C compiler identification source "CMakeCCompilerId.c" produced "CompilerIdC.exe"
+      
+      Compilation of the C compiler identification source "CMakeCCompilerId.c" produced "CompilerIdC.vcxproj"
+      
+      The C compiler identification is MSVC, found in:
+        C:/PacMapDotnet/src/pacmap_pure_cpp/build_pacmap/CMakeFiles/3.29.5/CompilerIdC/CompilerIdC.exe
+      
+  -
+    kind: "message-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-3.29/Modules/CMakeDetermineCompilerId.cmake:17 (message)"
+      - "C:/Program Files/CMake/share/cmake-3.29/Modules/CMakeDetermineCompilerId.cmake:64 (__determine_compiler_id_test)"
+      - "C:/Program Files/CMake/share/cmake-3.29/Modules/CMakeDetermineCXXCompiler.cmake:126 (CMAKE_DETERMINE_COMPILER_ID)"
+      - "CMakeLists.txt:2 (project)"
+    message: |
+      Compiling the CXX compiler identification source file "CMakeCXXCompilerId.cpp" succeeded.
+      Compiler:  
+      Build flags: 
+      Id flags:  
+      
+      The output was:
+      0
+      MSBuild version 17.14.10+8b8e13593 for .NET Framework
+      Build started 2025-10-05 16:53:56.
+      
+      Project "C:\\PacMapDotnet\\src\\pacmap_pure_cpp\\build_pacmap\\CMakeFiles\\3.29.5\\CompilerIdCXX\\CompilerIdCXX.vcxproj" on node 1 (default targets).
+      PrepareForBuild:
+        Creating directory "Debug\\".
+        Structured output is enabled. The formatting of compiler diagnostics will reflect the error hierarchy. See https://aka.ms/cpp/structured-output for more details.
+        Creating directory "Debug\\CompilerIdCXX.tlog\\".
+      InitializeBuildStatus:
+        Creating "Debug\\CompilerIdCXX.tlog\\unsuccessfulbuild" because "AlwaysCreate" was specified.
+        Touching "Debug\\CompilerIdCXX.tlog\\unsuccessfulbuild".
+      ClCompile:
+        C:\\Program Files\\Microsoft Visual Studio\\2022\\Professional\\VC\\Tools\\MSVC\\14.44.35207\\bin\\HostX64\\x64\\CL.exe /c /nologo /W0 /WX- /diagnostics:column /Od /D _MBCS /Gm- /EHsc /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /Fo"Debug\\\\" /Fd"Debug\\vc143.pdb" /external:W0 /Gd /TP /FC /errorReport:queue CMakeCXXCompilerId.cpp
+        CMakeCXXCompilerId.cpp
+      Link:
+        C:\\Program Files\\Microsoft Visual Studio\\2022\\Professional\\VC\\Tools\\MSVC\\14.44.35207\\bin\\HostX64\\x64\\link.exe /ERRORREPORT:QUEUE /OUT:".\\CompilerIdCXX.exe" /INCREMENTAL:NO /NOLOGO kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib /MANIFEST /MANIFESTUAC:"level='asInvoker' uiAccess='false'" /manifest:embed /PDB:".\\CompilerIdCXX.pdb" /SUBSYSTEM:CONSOLE /TLBID:1 /DYNAMICBASE /NXCOMPAT /IMPLIB:".\\CompilerIdCXX.lib" /MACHINE:X64 Debug\\CMakeCXXCompilerId.obj
+        CompilerIdCXX.vcxproj -> C:\\PacMapDotnet\\src\\pacmap_pure_cpp\\build_pacmap\\CMakeFiles\\3.29.5\\CompilerIdCXX\\CompilerIdCXX.exe
+      PostBuildEvent:
+        for %%i in (cl.exe) do @echo CMAKE_CXX_COMPILER=%%~$PATH:i
+        :VCEnd
+        CMAKE_CXX_COMPILER=C:\\Program Files\\Microsoft Visual Studio\\2022\\Professional\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe
+      FinalizeBuildStatus:
+        Deleting file "Debug\\CompilerIdCXX.tlog\\unsuccessfulbuild".
+        Touching "Debug\\CompilerIdCXX.tlog\\CompilerIdCXX.lastbuildstate".
+      Done Building Project "C:\\PacMapDotnet\\src\\pacmap_pure_cpp\\build_pacmap\\CMakeFiles\\3.29.5\\CompilerIdCXX\\CompilerIdCXX.vcxproj" (default targets).
+      
+      Build succeeded.
+          0 Warning(s)
+          0 Error(s)
+      
+      Time Elapsed 00:00:00.85
+      
+      
+      Compilation of the CXX compiler identification source "CMakeCXXCompilerId.cpp" produced "CompilerIdCXX.exe"
+      
+      Compilation of the CXX compiler identification source "CMakeCXXCompilerId.cpp" produced "CompilerIdCXX.vcxproj"
+      
+      The CXX compiler identification is MSVC, found in:
+        C:/PacMapDotnet/src/pacmap_pure_cpp/build_pacmap/CMakeFiles/3.29.5/CompilerIdCXX/CompilerIdCXX.exe
+      
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-3.29/Modules/CMakeDetermineCompilerABI.cmake:67 (try_compile)"
+      - "C:/Program Files/CMake/share/cmake-3.29/Modules/CMakeTestCCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:2 (project)"
+    checks:
+      - "Detecting C compiler ABI info"
+    directories:
+      source: "C:/PacMapDotnet/src/pacmap_pure_cpp/build_pacmap/CMakeFiles/CMakeScratch/TryCompile-j0pgty"
+      binary: "C:/PacMapDotnet/src/pacmap_pure_cpp/build_pacmap/CMakeFiles/CMakeScratch/TryCompile-j0pgty"
+    cmakeVariables:
+      CMAKE_C_FLAGS: "/DWIN32 /D_WINDOWS /W3"
+      CMAKE_C_FLAGS_DEBUG: "/MDd /Zi /Ob0 /Od /RTC1"
+      CMAKE_EXE_LINKER_FLAGS: "/machine:x64"
+    buildResult:
+      variable: "CMAKE_C_ABI_COMPILED"
+      cached: true
+      stdout: |
+        Change Dir: 'C:/PacMapDotnet/src/pacmap_pure_cpp/build_pacmap/CMakeFiles/CMakeScratch/TryCompile-j0pgty'
+        
+        Run Build Command(s): "C:/Program Files/Microsoft Visual Studio/2022/Professional/MSBuild/Current/Bin/amd64/MSBuild.exe" cmTC_55c56.vcxproj /p:Configuration=Debug /p:Platform=x64 /p:VisualStudioVersion=17.0 /v:n
+        MSBuild version 17.14.10+8b8e13593 for .NET Framework
+        Build started 2025-10-05 16:53:57.
+        
+        Project "C:\\PacMapDotnet\\src\\pacmap_pure_cpp\\build_pacmap\\CMakeFiles\\CMakeScratch\\TryCompile-j0pgty\\cmTC_55c56.vcxproj" on node 1 (default targets).
+        PrepareForBuild:
+          Creating directory "cmTC_55c56.dir\\Debug\\".
+          Structured output is enabled. The formatting of compiler diagnostics will reflect the error hierarchy. See https://aka.ms/cpp/structured-output for more details.
+          Creating directory "C:\\PacMapDotnet\\src\\pacmap_pure_cpp\\build_pacmap\\CMakeFiles\\CMakeScratch\\TryCompile-j0pgty\\Debug\\".
+          Creating directory "cmTC_55c56.dir\\Debug\\cmTC_55c56.tlog\\".
+        InitializeBuildStatus:
+          Creating "cmTC_55c56.dir\\Debug\\cmTC_55c56.tlog\\unsuccessfulbuild" because "AlwaysCreate" was specified.
+          Touching "cmTC_55c56.dir\\Debug\\cmTC_55c56.tlog\\unsuccessfulbuild".
+        ClCompile:
+          C:\\Program Files\\Microsoft Visual Studio\\2022\\Professional\\VC\\Tools\\MSVC\\14.44.35207\\bin\\HostX64\\x64\\CL.exe /c /Zi /W3 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D "CMAKE_INTDIR=\\"Debug\\"" /Gm- /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /Fo"cmTC_55c56.dir\\Debug\\\\" /Fd"cmTC_55c56.dir\\Debug\\vc143.pdb" /external:W3 /Gd /TC /errorReport:queue "C:\\Program Files\\CMake\\share\\cmake-3.29\\Modules\\CMakeCCompilerABI.c"
+          Microsoft (R) C/C++ Optimizing Compiler Version 19.44.35209 for x64
+          Copyright (C) Microsoft Corporation.  All rights reserved.
+          cl /c /Zi /W3 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D "CMAKE_INTDIR=\\"Debug\\"" /Gm- /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /Fo"cmTC_55c56.dir\\Debug\\\\" /Fd"cmTC_55c56.dir\\Debug\\vc143.pdb" /external:W3 /Gd /TC /errorReport:queue "C:\\Program Files\\CMake\\share\\cmake-3.29\\Modules\\CMakeCCompilerABI.c"
+          CMakeCCompilerABI.c
+        Link:
+          C:\\Program Files\\Microsoft Visual Studio\\2022\\Professional\\VC\\Tools\\MSVC\\14.44.35207\\bin\\HostX64\\x64\\link.exe /ERRORREPORT:QUEUE /OUT:"C:\\PacMapDotnet\\src\\pacmap_pure_cpp\\build_pacmap\\CMakeFiles\\CMakeScratch\\TryCompile-j0pgty\\Debug\\cmTC_55c56.exe" /INCREMENTAL /ILK:"cmTC_55c56.dir\\Debug\\cmTC_55c56.ilk" /NOLOGO kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib /MANIFEST /MANIFESTUAC:"level='asInvoker' uiAccess='false'" /manifest:embed /DEBUG /PDB:"C:/PacMapDotnet/src/pacmap_pure_cpp/build_pacmap/CMakeFiles/CMakeScratch/TryCompile-j0pgty/Debug/cmTC_55c56.pdb" /SUBSYSTEM:CONSOLE /TLBID:1 /DYNAMICBASE /NXCOMPAT /IMPLIB:"C:/PacMapDotnet/src/pacmap_pure_cpp/build_pacmap/CMakeFiles/CMakeScratch/TryCompile-j0pgty/Debug/cmTC_55c56.lib" /MACHINE:X64  /machine:x64 cmTC_55c56.dir\\Debug\\CMakeCCompilerABI.obj
+          cmTC_55c56.vcxproj -> C:\\PacMapDotnet\\src\\pacmap_pure_cpp\\build_pacmap\\CMakeFiles\\CMakeScratch\\TryCompile-j0pgty\\Debug\\cmTC_55c56.exe
+        FinalizeBuildStatus:
+          Deleting file "cmTC_55c56.dir\\Debug\\cmTC_55c56.tlog\\unsuccessfulbuild".
+          Touching "cmTC_55c56.dir\\Debug\\cmTC_55c56.tlog\\cmTC_55c56.lastbuildstate".
+        Done Building Project "C:\\PacMapDotnet\\src\\pacmap_pure_cpp\\build_pacmap\\CMakeFiles\\CMakeScratch\\TryCompile-j0pgty\\cmTC_55c56.vcxproj" (default targets).
+        
+        Build succeeded.
+            0 Warning(s)
+            0 Error(s)
+        
+        Time Elapsed 00:00:00.85
+        
+      exitCode: 0
+  -
+    kind: "message-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-3.29/Modules/CMakeDetermineCompilerABI.cmake:173 (message)"
+      - "C:/Program Files/CMake/share/cmake-3.29/Modules/CMakeTestCCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:2 (project)"
+    message: |
+      Parsed C implicit link information:
+        link line regex: [^( *|.*[/\\])(ld[0-9]*(\\.[a-z]+)?|link\\.exe|lld-link(\\.exe)?|CMAKE_LINK_STARTFILE-NOTFOUND|([^/\\]+-)?ld|collect2)[^/\\]*( |$)]
+        linker tool regex: [^[ 	]*(->|")?[ 	]*(([^"]*[/\\])?(ld[0-9]*(\\.[a-z]+)?|link\\.exe|lld-link(\\.exe)?))("|,| |$)]
+        linker tool for 'C': C:/Program Files/Microsoft Visual Studio/2022/Professional/VC/Tools/MSVC/14.44.35207/bin/HostX64/x64/link.exe
+        implicit libs: []
+        implicit objs: []
+        implicit dirs: []
+        implicit fwks: []
+      
+      
+  -
+    kind: "message-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-3.29/Modules/Internal/CMakeDetermineLinkerId.cmake:40 (message)"
+      - "C:/Program Files/CMake/share/cmake-3.29/Modules/CMakeDetermineCompilerABI.cmake:210 (cmake_determine_linker_id)"
+      - "C:/Program Files/CMake/share/cmake-3.29/Modules/CMakeTestCCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:2 (project)"
+    message: |
+      Running the C compiler's linker: "C:/Program Files/Microsoft Visual Studio/2022/Professional/VC/Tools/MSVC/14.44.35207/bin/HostX64/x64/link.exe" "-v"
+      Microsoft (R) Incremental Linker Version 14.44.35209.0
+      Copyright (C) Microsoft Corporation.  All rights reserved.
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-3.29/Modules/CMakeDetermineCompilerABI.cmake:67 (try_compile)"
+      - "C:/Program Files/CMake/share/cmake-3.29/Modules/CMakeTestCXXCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:2 (project)"
+    checks:
+      - "Detecting CXX compiler ABI info"
+    directories:
+      source: "C:/PacMapDotnet/src/pacmap_pure_cpp/build_pacmap/CMakeFiles/CMakeScratch/TryCompile-jk97vn"
+      binary: "C:/PacMapDotnet/src/pacmap_pure_cpp/build_pacmap/CMakeFiles/CMakeScratch/TryCompile-jk97vn"
+    cmakeVariables:
+      CMAKE_CXX_FLAGS: "/DWIN32 /D_WINDOWS /W3 /GR /EHsc"
+      CMAKE_CXX_FLAGS_DEBUG: "/MDd /Zi /Ob0 /Od /RTC1"
+      CMAKE_CXX_SCAN_FOR_MODULES: "OFF"
+      CMAKE_EXE_LINKER_FLAGS: "/machine:x64"
+    buildResult:
+      variable: "CMAKE_CXX_ABI_COMPILED"
+      cached: true
+      stdout: |
+        Change Dir: 'C:/PacMapDotnet/src/pacmap_pure_cpp/build_pacmap/CMakeFiles/CMakeScratch/TryCompile-jk97vn'
+        
+        Run Build Command(s): "C:/Program Files/Microsoft Visual Studio/2022/Professional/MSBuild/Current/Bin/amd64/MSBuild.exe" cmTC_2ca26.vcxproj /p:Configuration=Debug /p:Platform=x64 /p:VisualStudioVersion=17.0 /v:n
+        MSBuild version 17.14.10+8b8e13593 for .NET Framework
+        Build started 2025-10-05 16:53:58.
+        
+        Project "C:\\PacMapDotnet\\src\\pacmap_pure_cpp\\build_pacmap\\CMakeFiles\\CMakeScratch\\TryCompile-jk97vn\\cmTC_2ca26.vcxproj" on node 1 (default targets).
+        PrepareForBuild:
+          Creating directory "cmTC_2ca26.dir\\Debug\\".
+          Structured output is enabled. The formatting of compiler diagnostics will reflect the error hierarchy. See https://aka.ms/cpp/structured-output for more details.
+          Creating directory "C:\\PacMapDotnet\\src\\pacmap_pure_cpp\\build_pacmap\\CMakeFiles\\CMakeScratch\\TryCompile-jk97vn\\Debug\\".
+          Creating directory "cmTC_2ca26.dir\\Debug\\cmTC_2ca26.tlog\\".
+        InitializeBuildStatus:
+          Creating "cmTC_2ca26.dir\\Debug\\cmTC_2ca26.tlog\\unsuccessfulbuild" because "AlwaysCreate" was specified.
+          Touching "cmTC_2ca26.dir\\Debug\\cmTC_2ca26.tlog\\unsuccessfulbuild".
+        ClCompile:
+          C:\\Program Files\\Microsoft Visual Studio\\2022\\Professional\\VC\\Tools\\MSVC\\14.44.35207\\bin\\HostX64\\x64\\CL.exe /c /Zi /W3 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D "CMAKE_INTDIR=\\"Debug\\"" /Gm- /EHsc /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /GR /Fo"cmTC_2ca26.dir\\Debug\\\\" /Fd"cmTC_2ca26.dir\\Debug\\vc143.pdb" /external:W3 /Gd /TP /errorReport:queue "C:\\Program Files\\CMake\\share\\cmake-3.29\\Modules\\CMakeCXXCompilerABI.cpp"
+          Microsoft (R) C/C++ Optimizing Compiler Version 19.44.35209 for x64
+          Copyright (C) Microsoft Corporation.  All rights reserved.
+          cl /c /Zi /W3 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D "CMAKE_INTDIR=\\"Debug\\"" /Gm- /EHsc /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /GR /Fo"cmTC_2ca26.dir\\Debug\\\\" /Fd"cmTC_2ca26.dir\\Debug\\vc143.pdb" /external:W3 /Gd /TP /errorReport:queue "C:\\Program Files\\CMake\\share\\cmake-3.29\\Modules\\CMakeCXXCompilerABI.cpp"
+          CMakeCXXCompilerABI.cpp
+        Link:
+          C:\\Program Files\\Microsoft Visual Studio\\2022\\Professional\\VC\\Tools\\MSVC\\14.44.35207\\bin\\HostX64\\x64\\link.exe /ERRORREPORT:QUEUE /OUT:"C:\\PacMapDotnet\\src\\pacmap_pure_cpp\\build_pacmap\\CMakeFiles\\CMakeScratch\\TryCompile-jk97vn\\Debug\\cmTC_2ca26.exe" /INCREMENTAL /ILK:"cmTC_2ca26.dir\\Debug\\cmTC_2ca26.ilk" /NOLOGO kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib /MANIFEST /MANIFESTUAC:"level='asInvoker' uiAccess='false'" /manifest:embed /DEBUG /PDB:"C:/PacMapDotnet/src/pacmap_pure_cpp/build_pacmap/CMakeFiles/CMakeScratch/TryCompile-jk97vn/Debug/cmTC_2ca26.pdb" /SUBSYSTEM:CONSOLE /TLBID:1 /DYNAMICBASE /NXCOMPAT /IMPLIB:"C:/PacMapDotnet/src/pacmap_pure_cpp/build_pacmap/CMakeFiles/CMakeScratch/TryCompile-jk97vn/Debug/cmTC_2ca26.lib" /MACHINE:X64  /machine:x64 cmTC_2ca26.dir\\Debug\\CMakeCXXCompilerABI.obj
+          cmTC_2ca26.vcxproj -> C:\\PacMapDotnet\\src\\pacmap_pure_cpp\\build_pacmap\\CMakeFiles\\CMakeScratch\\TryCompile-jk97vn\\Debug\\cmTC_2ca26.exe
+        FinalizeBuildStatus:
+          Deleting file "cmTC_2ca26.dir\\Debug\\cmTC_2ca26.tlog\\unsuccessfulbuild".
+          Touching "cmTC_2ca26.dir\\Debug\\cmTC_2ca26.tlog\\cmTC_2ca26.lastbuildstate".
+        Done Building Project "C:\\PacMapDotnet\\src\\pacmap_pure_cpp\\build_pacmap\\CMakeFiles\\CMakeScratch\\TryCompile-jk97vn\\cmTC_2ca26.vcxproj" (default targets).
+        
+        Build succeeded.
+            0 Warning(s)
+            0 Error(s)
+        
+        Time Elapsed 00:00:00.86
+        
+      exitCode: 0
+  -
+    kind: "message-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-3.29/Modules/CMakeDetermineCompilerABI.cmake:173 (message)"
+      - "C:/Program Files/CMake/share/cmake-3.29/Modules/CMakeTestCXXCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:2 (project)"
+    message: |
+      Parsed CXX implicit link information:
+        link line regex: [^( *|.*[/\\])(ld[0-9]*(\\.[a-z]+)?|link\\.exe|lld-link(\\.exe)?|CMAKE_LINK_STARTFILE-NOTFOUND|([^/\\]+-)?ld|collect2)[^/\\]*( |$)]
+        linker tool regex: [^[ 	]*(->|")?[ 	]*(([^"]*[/\\])?(ld[0-9]*(\\.[a-z]+)?|link\\.exe|lld-link(\\.exe)?))("|,| |$)]
+        linker tool for 'CXX': C:/Program Files/Microsoft Visual Studio/2022/Professional/VC/Tools/MSVC/14.44.35207/bin/HostX64/x64/link.exe
+        implicit libs: []
+        implicit objs: []
+        implicit dirs: []
+        implicit fwks: []
+      
+      
+  -
+    kind: "message-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-3.29/Modules/Internal/CMakeDetermineLinkerId.cmake:40 (message)"
+      - "C:/Program Files/CMake/share/cmake-3.29/Modules/CMakeDetermineCompilerABI.cmake:210 (cmake_determine_linker_id)"
+      - "C:/Program Files/CMake/share/cmake-3.29/Modules/CMakeTestCXXCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:2 (project)"
+    message: |
+      Running the CXX compiler's linker: "C:/Program Files/Microsoft Visual Studio/2022/Professional/VC/Tools/MSVC/14.44.35207/bin/HostX64/x64/link.exe" "-v"
+      Microsoft (R) Incremental Linker Version 14.44.35209.0
+      Copyright (C) Microsoft Corporation.  All rights reserved.
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-3.29/Modules/FindOpenMP.cmake:219 (try_compile)"
+      - "C:/Program Files/CMake/share/cmake-3.29/Modules/FindOpenMP.cmake:487 (_OPENMP_GET_FLAGS)"
+      - "CMakeLists.txt:13 (find_package)"
+    description: "Detecting C OpenMP compiler info"
+    directories:
+      source: "C:/PacMapDotnet/src/pacmap_pure_cpp/build_pacmap/CMakeFiles/CMakeScratch/TryCompile-z04bv7"
+      binary: "C:/PacMapDotnet/src/pacmap_pure_cpp/build_pacmap/CMakeFiles/CMakeScratch/TryCompile-z04bv7"
+    cmakeVariables:
+      CMAKE_C_FLAGS: "/DWIN32 /D_WINDOWS /W3"
+      CMAKE_C_FLAGS_DEBUG: "/MDd /Zi /Ob0 /Od /RTC1"
+      CMAKE_EXE_LINKER_FLAGS: "/machine:x64"
+    buildResult:
+      variable: "OpenMP_COMPILE_RESULT_C_openmp"
+      cached: true
+      stdout: |
+        Change Dir: 'C:/PacMapDotnet/src/pacmap_pure_cpp/build_pacmap/CMakeFiles/CMakeScratch/TryCompile-z04bv7'
+        
+        Run Build Command(s): "C:/Program Files/Microsoft Visual Studio/2022/Professional/MSBuild/Current/Bin/amd64/MSBuild.exe" cmTC_fc689.vcxproj /p:Configuration=Debug /p:Platform=x64 /p:VisualStudioVersion=17.0 /v:n
+        MSBuild version 17.14.10+8b8e13593 for .NET Framework
+        Build started 2025-10-05 16:54:00.
+        
+        Project "C:\\PacMapDotnet\\src\\pacmap_pure_cpp\\build_pacmap\\CMakeFiles\\CMakeScratch\\TryCompile-z04bv7\\cmTC_fc689.vcxproj" on node 1 (default targets).
+        PrepareForBuild:
+          Creating directory "cmTC_fc689.dir\\Debug\\".
+          Structured output is enabled. The formatting of compiler diagnostics will reflect the error hierarchy. See https://aka.ms/cpp/structured-output for more details.
+          Creating directory "C:\\PacMapDotnet\\src\\pacmap_pure_cpp\\build_pacmap\\CMakeFiles\\CMakeScratch\\TryCompile-z04bv7\\Debug\\".
+          Creating directory "cmTC_fc689.dir\\Debug\\cmTC_fc689.tlog\\".
+        InitializeBuildStatus:
+          Creating "cmTC_fc689.dir\\Debug\\cmTC_fc689.tlog\\unsuccessfulbuild" because "AlwaysCreate" was specified.
+          Touching "cmTC_fc689.dir\\Debug\\cmTC_fc689.tlog\\unsuccessfulbuild".
+        ClCompile:
+          C:\\Program Files\\Microsoft Visual Studio\\2022\\Professional\\VC\\Tools\\MSVC\\14.44.35207\\bin\\HostX64\\x64\\CL.exe /c /Zi /W3 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D "CMAKE_INTDIR=\\"Debug\\"" /Gm- /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /openmp /Fo"cmTC_fc689.dir\\Debug\\\\" /Fd"cmTC_fc689.dir\\Debug\\vc143.pdb" /external:W3 /Gd /TC /errorReport:queue "C:\\PacMapDotnet\\src\\pacmap_pure_cpp\\build_pacmap\\CMakeFiles\\CMakeScratch\\TryCompile-z04bv7\\OpenMPTryFlag.c"
+          Microsoft (R) C/C++ Optimizing Compiler Version 19.44.35209 for x64
+          Copyright (C) Microsoft Corporation.  All rights reserved.
+          cl /c /Zi /W3 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D "CMAKE_INTDIR=\\"Debug\\"" /Gm- /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /openmp /Fo"cmTC_fc689.dir\\Debug\\\\" /Fd"cmTC_fc689.dir\\Debug\\vc143.pdb" /external:W3 /Gd /TC /errorReport:queue "C:\\PacMapDotnet\\src\\pacmap_pure_cpp\\build_pacmap\\CMakeFiles\\CMakeScratch\\TryCompile-z04bv7\\OpenMPTryFlag.c"
+          OpenMPTryFlag.c
+        Link:
+          C:\\Program Files\\Microsoft Visual Studio\\2022\\Professional\\VC\\Tools\\MSVC\\14.44.35207\\bin\\HostX64\\x64\\link.exe /ERRORREPORT:QUEUE /OUT:"C:\\PacMapDotnet\\src\\pacmap_pure_cpp\\build_pacmap\\CMakeFiles\\CMakeScratch\\TryCompile-z04bv7\\Debug\\cmTC_fc689.exe" /INCREMENTAL /ILK:"cmTC_fc689.dir\\Debug\\cmTC_fc689.ilk" /NOLOGO kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib /MANIFEST /MANIFESTUAC:"level='asInvoker' uiAccess='false'" /manifest:embed /DEBUG /PDB:"C:/PacMapDotnet/src/pacmap_pure_cpp/build_pacmap/CMakeFiles/CMakeScratch/TryCompile-z04bv7/Debug/cmTC_fc689.pdb" /SUBSYSTEM:CONSOLE /TLBID:1 /DYNAMICBASE /NXCOMPAT /IMPLIB:"C:/PacMapDotnet/src/pacmap_pure_cpp/build_pacmap/CMakeFiles/CMakeScratch/TryCompile-z04bv7/Debug/cmTC_fc689.lib" /MACHINE:X64  /machine:x64 cmTC_fc689.dir\\Debug\\OpenMPTryFlag.obj
+          cmTC_fc689.vcxproj -> C:\\PacMapDotnet\\src\\pacmap_pure_cpp\\build_pacmap\\CMakeFiles\\CMakeScratch\\TryCompile-z04bv7\\Debug\\cmTC_fc689.exe
+        FinalizeBuildStatus:
+          Deleting file "cmTC_fc689.dir\\Debug\\cmTC_fc689.tlog\\unsuccessfulbuild".
+          Touching "cmTC_fc689.dir\\Debug\\cmTC_fc689.tlog\\cmTC_fc689.lastbuildstate".
+        Done Building Project "C:\\PacMapDotnet\\src\\pacmap_pure_cpp\\build_pacmap\\CMakeFiles\\CMakeScratch\\TryCompile-z04bv7\\cmTC_fc689.vcxproj" (default targets).
+        
+        Build succeeded.
+            0 Warning(s)
+            0 Error(s)
+        
+        Time Elapsed 00:00:00.81
+        
+      exitCode: 0
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-3.29/Modules/FindOpenMP.cmake:219 (try_compile)"
+      - "C:/Program Files/CMake/share/cmake-3.29/Modules/FindOpenMP.cmake:487 (_OPENMP_GET_FLAGS)"
+      - "CMakeLists.txt:13 (find_package)"
+    description: "Detecting CXX OpenMP compiler info"
+    directories:
+      source: "C:/PacMapDotnet/src/pacmap_pure_cpp/build_pacmap/CMakeFiles/CMakeScratch/TryCompile-r4pfg0"
+      binary: "C:/PacMapDotnet/src/pacmap_pure_cpp/build_pacmap/CMakeFiles/CMakeScratch/TryCompile-r4pfg0"
+    cmakeVariables:
+      CMAKE_CXX_FLAGS: "/DWIN32 /D_WINDOWS /W3 /GR /EHsc"
+      CMAKE_CXX_FLAGS_DEBUG: "/MDd /Zi /Ob0 /Od /RTC1"
+      CMAKE_EXE_LINKER_FLAGS: "/machine:x64"
+    buildResult:
+      variable: "OpenMP_COMPILE_RESULT_CXX_openmp"
+      cached: true
+      stdout: |
+        Change Dir: 'C:/PacMapDotnet/src/pacmap_pure_cpp/build_pacmap/CMakeFiles/CMakeScratch/TryCompile-r4pfg0'
+        
+        Run Build Command(s): "C:/Program Files/Microsoft Visual Studio/2022/Professional/MSBuild/Current/Bin/amd64/MSBuild.exe" cmTC_b3e6d.vcxproj /p:Configuration=Debug /p:Platform=x64 /p:VisualStudioVersion=17.0 /v:n
+        MSBuild version 17.14.10+8b8e13593 for .NET Framework
+        Build started 2025-10-05 16:54:01.
+        
+        Project "C:\\PacMapDotnet\\src\\pacmap_pure_cpp\\build_pacmap\\CMakeFiles\\CMakeScratch\\TryCompile-r4pfg0\\cmTC_b3e6d.vcxproj" on node 1 (default targets).
+        PrepareForBuild:
+          Creating directory "cmTC_b3e6d.dir\\Debug\\".
+          Structured output is enabled. The formatting of compiler diagnostics will reflect the error hierarchy. See https://aka.ms/cpp/structured-output for more details.
+          Creating directory "C:\\PacMapDotnet\\src\\pacmap_pure_cpp\\build_pacmap\\CMakeFiles\\CMakeScratch\\TryCompile-r4pfg0\\Debug\\".
+          Creating directory "cmTC_b3e6d.dir\\Debug\\cmTC_b3e6d.tlog\\".
+        InitializeBuildStatus:
+          Creating "cmTC_b3e6d.dir\\Debug\\cmTC_b3e6d.tlog\\unsuccessfulbuild" because "AlwaysCreate" was specified.
+          Touching "cmTC_b3e6d.dir\\Debug\\cmTC_b3e6d.tlog\\unsuccessfulbuild".
+        ClCompile:
+          C:\\Program Files\\Microsoft Visual Studio\\2022\\Professional\\VC\\Tools\\MSVC\\14.44.35207\\bin\\HostX64\\x64\\CL.exe /c /Zi /W3 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D "CMAKE_INTDIR=\\"Debug\\"" /Gm- /EHsc /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /GR /openmp /std:c++17 /Fo"cmTC_b3e6d.dir\\Debug\\\\" /Fd"cmTC_b3e6d.dir\\Debug\\vc143.pdb" /external:W3 /Gd /TP /errorReport:queue "C:\\PacMapDotnet\\src\\pacmap_pure_cpp\\build_pacmap\\CMakeFiles\\CMakeScratch\\TryCompile-r4pfg0\\OpenMPTryFlag.cpp"
+          Microsoft (R) C/C++ Optimizing Compiler Version 19.44.35209 for x64
+          Copyright (C) Microsoft Corporation.  All rights reserved.
+          cl /c /Zi /W3 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D "CMAKE_INTDIR=\\"Debug\\"" /Gm- /EHsc /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /GR /openmp /std:c++17 /Fo"cmTC_b3e6d.dir\\Debug\\\\" /Fd"cmTC_b3e6d.dir\\Debug\\vc143.pdb" /external:W3 /Gd /TP /errorReport:queue "C:\\PacMapDotnet\\src\\pacmap_pure_cpp\\build_pacmap\\CMakeFiles\\CMakeScratch\\TryCompile-r4pfg0\\OpenMPTryFlag.cpp"
+          OpenMPTryFlag.cpp
+        Link:
+          C:\\Program Files\\Microsoft Visual Studio\\2022\\Professional\\VC\\Tools\\MSVC\\14.44.35207\\bin\\HostX64\\x64\\link.exe /ERRORREPORT:QUEUE /OUT:"C:\\PacMapDotnet\\src\\pacmap_pure_cpp\\build_pacmap\\CMakeFiles\\CMakeScratch\\TryCompile-r4pfg0\\Debug\\cmTC_b3e6d.exe" /INCREMENTAL /ILK:"cmTC_b3e6d.dir\\Debug\\cmTC_b3e6d.ilk" /NOLOGO kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib /MANIFEST /MANIFESTUAC:"level='asInvoker' uiAccess='false'" /manifest:embed /DEBUG /PDB:"C:/PacMapDotnet/src/pacmap_pure_cpp/build_pacmap/CMakeFiles/CMakeScratch/TryCompile-r4pfg0/Debug/cmTC_b3e6d.pdb" /SUBSYSTEM:CONSOLE /TLBID:1 /DYNAMICBASE /NXCOMPAT /IMPLIB:"C:/PacMapDotnet/src/pacmap_pure_cpp/build_pacmap/CMakeFiles/CMakeScratch/TryCompile-r4pfg0/Debug/cmTC_b3e6d.lib" /MACHINE:X64  /machine:x64 cmTC_b3e6d.dir\\Debug\\OpenMPTryFlag.obj
+          cmTC_b3e6d.vcxproj -> C:\\PacMapDotnet\\src\\pacmap_pure_cpp\\build_pacmap\\CMakeFiles\\CMakeScratch\\TryCompile-r4pfg0\\Debug\\cmTC_b3e6d.exe
+        FinalizeBuildStatus:
+          Deleting file "cmTC_b3e6d.dir\\Debug\\cmTC_b3e6d.tlog\\unsuccessfulbuild".
+          Touching "cmTC_b3e6d.dir\\Debug\\cmTC_b3e6d.tlog\\cmTC_b3e6d.lastbuildstate".
+        Done Building Project "C:\\PacMapDotnet\\src\\pacmap_pure_cpp\\build_pacmap\\CMakeFiles\\CMakeScratch\\TryCompile-r4pfg0\\cmTC_b3e6d.vcxproj" (default targets).
+        
+        Build succeeded.
+            0 Warning(s)
+            0 Error(s)
+        
+        Time Elapsed 00:00:00.83
+        
+      exitCode: 0
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-3.29/Modules/FindOpenMP.cmake:421 (try_compile)"
+      - "C:/Program Files/CMake/share/cmake-3.29/Modules/FindOpenMP.cmake:561 (_OPENMP_GET_SPEC_DATE)"
+      - "CMakeLists.txt:13 (find_package)"
+    description: "Detecting C OpenMP version"
+    directories:
+      source: "C:/PacMapDotnet/src/pacmap_pure_cpp/build_pacmap/CMakeFiles/CMakeScratch/TryCompile-nsg6e1"
+      binary: "C:/PacMapDotnet/src/pacmap_pure_cpp/build_pacmap/CMakeFiles/CMakeScratch/TryCompile-nsg6e1"
+    cmakeVariables:
+      CMAKE_C_FLAGS: "/DWIN32 /D_WINDOWS /W3"
+      CMAKE_C_FLAGS_DEBUG: "/MDd /Zi /Ob0 /Od /RTC1"
+      CMAKE_EXE_LINKER_FLAGS: "/machine:x64"
+    buildResult:
+      variable: "OpenMP_SPECTEST_C_"
+      cached: true
+      stdout: |
+        Change Dir: 'C:/PacMapDotnet/src/pacmap_pure_cpp/build_pacmap/CMakeFiles/CMakeScratch/TryCompile-nsg6e1'
+        
+        Run Build Command(s): "C:/Program Files/Microsoft Visual Studio/2022/Professional/MSBuild/Current/Bin/amd64/MSBuild.exe" cmTC_a7153.vcxproj /p:Configuration=Debug /p:Platform=x64 /p:VisualStudioVersion=17.0 /v:n
+        MSBuild version 17.14.10+8b8e13593 for .NET Framework
+        Build started 2025-10-05 16:54:02.
+        
+        Project "C:\\PacMapDotnet\\src\\pacmap_pure_cpp\\build_pacmap\\CMakeFiles\\CMakeScratch\\TryCompile-nsg6e1\\cmTC_a7153.vcxproj" on node 1 (default targets).
+        PrepareForBuild:
+          Creating directory "cmTC_a7153.dir\\Debug\\".
+          Structured output is enabled. The formatting of compiler diagnostics will reflect the error hierarchy. See https://aka.ms/cpp/structured-output for more details.
+          Creating directory "C:\\PacMapDotnet\\src\\pacmap_pure_cpp\\build_pacmap\\CMakeFiles\\CMakeScratch\\TryCompile-nsg6e1\\Debug\\".
+          Creating directory "cmTC_a7153.dir\\Debug\\cmTC_a7153.tlog\\".
+        InitializeBuildStatus:
+          Creating "cmTC_a7153.dir\\Debug\\cmTC_a7153.tlog\\unsuccessfulbuild" because "AlwaysCreate" was specified.
+          Touching "cmTC_a7153.dir\\Debug\\cmTC_a7153.tlog\\unsuccessfulbuild".
+        ClCompile:
+          C:\\Program Files\\Microsoft Visual Studio\\2022\\Professional\\VC\\Tools\\MSVC\\14.44.35207\\bin\\HostX64\\x64\\CL.exe /c /Zi /W3 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D "CMAKE_INTDIR=\\"Debug\\"" /Gm- /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /openmp /Fo"cmTC_a7153.dir\\Debug\\\\" /Fd"cmTC_a7153.dir\\Debug\\vc143.pdb" /external:W3 /Gd /TC /errorReport:queue "C:\\PacMapDotnet\\src\\pacmap_pure_cpp\\build_pacmap\\CMakeFiles\\CMakeScratch\\TryCompile-nsg6e1\\OpenMPCheckVersion.c"
+          Microsoft (R) C/C++ Optimizing Compiler Version 19.44.35209 for x64
+          Copyright (C) Microsoft Corporation.  All rights reserved.
+          cl /c /Zi /W3 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D "CMAKE_INTDIR=\\"Debug\\"" /Gm- /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /openmp /Fo"cmTC_a7153.dir\\Debug\\\\" /Fd"cmTC_a7153.dir\\Debug\\vc143.pdb" /external:W3 /Gd /TC /errorReport:queue "C:\\PacMapDotnet\\src\\pacmap_pure_cpp\\build_pacmap\\CMakeFiles\\CMakeScratch\\TryCompile-nsg6e1\\OpenMPCheckVersion.c"
+          OpenMPCheckVersion.c
+        Link:
+          C:\\Program Files\\Microsoft Visual Studio\\2022\\Professional\\VC\\Tools\\MSVC\\14.44.35207\\bin\\HostX64\\x64\\link.exe /ERRORREPORT:QUEUE /OUT:"C:\\PacMapDotnet\\src\\pacmap_pure_cpp\\build_pacmap\\CMakeFiles\\CMakeScratch\\TryCompile-nsg6e1\\Debug\\cmTC_a7153.exe" /INCREMENTAL /ILK:"cmTC_a7153.dir\\Debug\\cmTC_a7153.ilk" /NOLOGO kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib /MANIFEST /MANIFESTUAC:"level='asInvoker' uiAccess='false'" /manifest:embed /DEBUG /PDB:"C:/PacMapDotnet/src/pacmap_pure_cpp/build_pacmap/CMakeFiles/CMakeScratch/TryCompile-nsg6e1/Debug/cmTC_a7153.pdb" /SUBSYSTEM:CONSOLE /TLBID:1 /DYNAMICBASE /NXCOMPAT /IMPLIB:"C:/PacMapDotnet/src/pacmap_pure_cpp/build_pacmap/CMakeFiles/CMakeScratch/TryCompile-nsg6e1/Debug/cmTC_a7153.lib" /MACHINE:X64  /machine:x64 cmTC_a7153.dir\\Debug\\OpenMPCheckVersion.obj
+          cmTC_a7153.vcxproj -> C:\\PacMapDotnet\\src\\pacmap_pure_cpp\\build_pacmap\\CMakeFiles\\CMakeScratch\\TryCompile-nsg6e1\\Debug\\cmTC_a7153.exe
+        FinalizeBuildStatus:
+          Deleting file "cmTC_a7153.dir\\Debug\\cmTC_a7153.tlog\\unsuccessfulbuild".
+          Touching "cmTC_a7153.dir\\Debug\\cmTC_a7153.tlog\\cmTC_a7153.lastbuildstate".
+        Done Building Project "C:\\PacMapDotnet\\src\\pacmap_pure_cpp\\build_pacmap\\CMakeFiles\\CMakeScratch\\TryCompile-nsg6e1\\cmTC_a7153.vcxproj" (default targets).
+        
+        Build succeeded.
+            0 Warning(s)
+            0 Error(s)
+        
+        Time Elapsed 00:00:00.83
+        
+      exitCode: 0
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-3.29/Modules/FindOpenMP.cmake:421 (try_compile)"
+      - "C:/Program Files/CMake/share/cmake-3.29/Modules/FindOpenMP.cmake:561 (_OPENMP_GET_SPEC_DATE)"
+      - "CMakeLists.txt:13 (find_package)"
+    description: "Detecting CXX OpenMP version"
+    directories:
+      source: "C:/PacMapDotnet/src/pacmap_pure_cpp/build_pacmap/CMakeFiles/CMakeScratch/TryCompile-xav4r7"
+      binary: "C:/PacMapDotnet/src/pacmap_pure_cpp/build_pacmap/CMakeFiles/CMakeScratch/TryCompile-xav4r7"
+    cmakeVariables:
+      CMAKE_CXX_FLAGS: "/DWIN32 /D_WINDOWS /W3 /GR /EHsc"
+      CMAKE_CXX_FLAGS_DEBUG: "/MDd /Zi /Ob0 /Od /RTC1"
+      CMAKE_EXE_LINKER_FLAGS: "/machine:x64"
+    buildResult:
+      variable: "OpenMP_SPECTEST_CXX_"
+      cached: true
+      stdout: |
+        Change Dir: 'C:/PacMapDotnet/src/pacmap_pure_cpp/build_pacmap/CMakeFiles/CMakeScratch/TryCompile-xav4r7'
+        
+        Run Build Command(s): "C:/Program Files/Microsoft Visual Studio/2022/Professional/MSBuild/Current/Bin/amd64/MSBuild.exe" cmTC_a2298.vcxproj /p:Configuration=Debug /p:Platform=x64 /p:VisualStudioVersion=17.0 /v:n
+        MSBuild version 17.14.10+8b8e13593 for .NET Framework
+        Build started 2025-10-05 16:54:03.
+        
+        Project "C:\\PacMapDotnet\\src\\pacmap_pure_cpp\\build_pacmap\\CMakeFiles\\CMakeScratch\\TryCompile-xav4r7\\cmTC_a2298.vcxproj" on node 1 (default targets).
+        PrepareForBuild:
+          Creating directory "cmTC_a2298.dir\\Debug\\".
+          Structured output is enabled. The formatting of compiler diagnostics will reflect the error hierarchy. See https://aka.ms/cpp/structured-output for more details.
+          Creating directory "C:\\PacMapDotnet\\src\\pacmap_pure_cpp\\build_pacmap\\CMakeFiles\\CMakeScratch\\TryCompile-xav4r7\\Debug\\".
+          Creating directory "cmTC_a2298.dir\\Debug\\cmTC_a2298.tlog\\".
+        InitializeBuildStatus:
+          Creating "cmTC_a2298.dir\\Debug\\cmTC_a2298.tlog\\unsuccessfulbuild" because "AlwaysCreate" was specified.
+          Touching "cmTC_a2298.dir\\Debug\\cmTC_a2298.tlog\\unsuccessfulbuild".
+        ClCompile:
+          C:\\Program Files\\Microsoft Visual Studio\\2022\\Professional\\VC\\Tools\\MSVC\\14.44.35207\\bin\\HostX64\\x64\\CL.exe /c /Zi /W3 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D "CMAKE_INTDIR=\\"Debug\\"" /Gm- /EHsc /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /GR /openmp /std:c++17 /Fo"cmTC_a2298.dir\\Debug\\\\" /Fd"cmTC_a2298.dir\\Debug\\vc143.pdb" /external:W3 /Gd /TP /errorReport:queue "C:\\PacMapDotnet\\src\\pacmap_pure_cpp\\build_pacmap\\CMakeFiles\\CMakeScratch\\TryCompile-xav4r7\\OpenMPCheckVersion.cpp"
+          Microsoft (R) C/C++ Optimizing Compiler Version 19.44.35209 for x64
+          Copyright (C) Microsoft Corporation.  All rights reserved.
+          cl /c /Zi /W3 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D "CMAKE_INTDIR=\\"Debug\\"" /Gm- /EHsc /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /GR /openmp /std:c++17 /Fo"cmTC_a2298.dir\\Debug\\\\" /Fd"cmTC_a2298.dir\\Debug\\vc143.pdb" /external:W3 /Gd /TP /errorReport:queue "C:\\PacMapDotnet\\src\\pacmap_pure_cpp\\build_pacmap\\CMakeFiles\\CMakeScratch\\TryCompile-xav4r7\\OpenMPCheckVersion.cpp"
+          OpenMPCheckVersion.cpp
+        Link:
+          C:\\Program Files\\Microsoft Visual Studio\\2022\\Professional\\VC\\Tools\\MSVC\\14.44.35207\\bin\\HostX64\\x64\\link.exe /ERRORREPORT:QUEUE /OUT:"C:\\PacMapDotnet\\src\\pacmap_pure_cpp\\build_pacmap\\CMakeFiles\\CMakeScratch\\TryCompile-xav4r7\\Debug\\cmTC_a2298.exe" /INCREMENTAL /ILK:"cmTC_a2298.dir\\Debug\\cmTC_a2298.ilk" /NOLOGO kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib /MANIFEST /MANIFESTUAC:"level='asInvoker' uiAccess='false'" /manifest:embed /DEBUG /PDB:"C:/PacMapDotnet/src/pacmap_pure_cpp/build_pacmap/CMakeFiles/CMakeScratch/TryCompile-xav4r7/Debug/cmTC_a2298.pdb" /SUBSYSTEM:CONSOLE /TLBID:1 /DYNAMICBASE /NXCOMPAT /IMPLIB:"C:/PacMapDotnet/src/pacmap_pure_cpp/build_pacmap/CMakeFiles/CMakeScratch/TryCompile-xav4r7/Debug/cmTC_a2298.lib" /MACHINE:X64  /machine:x64 cmTC_a2298.dir\\Debug\\OpenMPCheckVersion.obj
+          cmTC_a2298.vcxproj -> C:\\PacMapDotnet\\src\\pacmap_pure_cpp\\build_pacmap\\CMakeFiles\\CMakeScratch\\TryCompile-xav4r7\\Debug\\cmTC_a2298.exe
+        FinalizeBuildStatus:
+          Deleting file "cmTC_a2298.dir\\Debug\\cmTC_a2298.tlog\\unsuccessfulbuild".
+          Touching "cmTC_a2298.dir\\Debug\\cmTC_a2298.tlog\\cmTC_a2298.lastbuildstate".
+        Done Building Project "C:\\PacMapDotnet\\src\\pacmap_pure_cpp\\build_pacmap\\CMakeFiles\\CMakeScratch\\TryCompile-xav4r7\\cmTC_a2298.vcxproj" (default targets).
+        
+        Build succeeded.
+            0 Warning(s)
+            0 Error(s)
+        
+        Time Elapsed 00:00:00.88
+        
+      exitCode: 0
+...

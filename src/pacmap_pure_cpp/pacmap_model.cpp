@@ -93,6 +93,10 @@ namespace model_utils {
         return model->is_fitted ? 1 : 0;
     }
 
+    const char* get_version() {
+        return PACMAP_WRAPPER_VERSION_STRING;
+    }
+
     const char* get_error_message(int error_code) {
         switch (error_code) {
         case PACMAP_SUCCESS:
@@ -129,41 +133,6 @@ namespace model_utils {
         default:
             return "unknown";
         }
-    }
-
-    const char* get_version() {
-        return PACMAP_WRAPPER_VERSION_STRING;
-    }
-
-    // Additional functions needed by wrapper
-    int get_model_info_v2(PacMapModel* model, int* n_vertices, int* n_dim, int* embedding_dim,
-        int* n_neighbors, float* min_dist, float* spread, PacMapMetric* metric,
-        int* hnsw_M, int* hnsw_ef_construction, int* hnsw_ef_search,
-        uint32_t* original_crc, uint32_t* embedding_crc, uint32_t* version_crc,
-        float* hnsw_recall_percentage) {
-
-        if (!model) {
-            return PACMAP_ERROR_INVALID_PARAMS;
-        }
-
-        if (n_vertices) *n_vertices = model->n_vertices;
-        if (n_dim) *n_dim = model->n_dim;
-        if (embedding_dim) *embedding_dim = model->embedding_dim;
-        if (n_neighbors) *n_neighbors = model->n_neighbors;
-        if (min_dist) *min_dist = model->min_dist;
-        if (spread) *spread = model->spread;
-        if (metric) *metric = model->metric;
-        if (hnsw_M) *hnsw_M = model->hnsw_M;
-        if (hnsw_ef_construction) *hnsw_ef_construction = model->hnsw_ef_construction;
-        if (hnsw_ef_search) *hnsw_ef_search = model->hnsw_ef_search;
-
-        // New dual HNSW information
-        if (original_crc) *original_crc = model->original_space_crc;
-        if (embedding_crc) *embedding_crc = model->embedding_space_crc;
-        if (version_crc) *version_crc = model->model_version_crc;
-        if (hnsw_recall_percentage) *hnsw_recall_percentage = model->hnsw_recall_percentage;
-
-        return PACMAP_SUCCESS;
     }
 
   }

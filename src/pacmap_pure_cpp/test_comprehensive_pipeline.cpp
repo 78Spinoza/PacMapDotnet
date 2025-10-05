@@ -246,7 +246,7 @@ TestResult run_test_phase(const std::vector<float>& data, int embedding_dim, con
     std::cout << "\n📚 Step 1: Training UMAP model with uwot_fit_with_progress_v2..." << std::endl;
     std::cout << "   📝 Using v2 API for enhanced loss reporting and phase information" << std::endl;
 
-    UwotModel* original_model = uwot_create(); // Original model for training
+    PacMapModel* original_model = uwot_create(); // Original model for training
     if (!original_model) {
         std::cout << "❌ Failed to create original training model" << std::endl;
         result.fit_vs_transform_mse = -1.0;
@@ -258,11 +258,11 @@ TestResult run_test_phase(const std::vector<float>& data, int embedding_dim, con
     // ONLY use uwot_fit_with_progress_v2 (enhanced callbacks with loss reporting)
     int fit_result = uwot_fit_with_progress_v2(
         original_model, const_cast<float*>(data.data()), N_SAMPLES, N_DIM, embedding_dim, N_NEIGHBORS,
-        MIN_DIST, SPREAD, N_EPOCHS, UWOT_METRIC_EUCLIDEAN,
+        MIN_DIST, SPREAD, N_EPOCHS, PACMAP_METRIC_EUCLIDEAN,
         result.original_projection.data(), progress_callback_v2, 0, 16, 200, 200, 0, 42, 1
     );
 
-    if (fit_result != UWOT_SUCCESS) {
+    if (fit_result != PACMAP_SUCCESS) {
         std::cout << "❌ Training failed: " << uwot_get_error_message(fit_result) << std::endl;
         uwot_destroy(original_model);
         result.fit_vs_transform_mse = -1.0;
@@ -291,7 +291,7 @@ TestResult run_test_phase(const std::vector<float>& data, int embedding_dim, con
         confidence_scores.data(), outlier_levels.data(), percentile_ranks.data(), z_scores.data()
     );
 
-    if (transform_result != UWOT_SUCCESS) {
+    if (transform_result != PACMAP_SUCCESS) {
         std::cout << "❌ Transform failed: " << uwot_get_error_message(transform_result) << std::endl;
         uwot_destroy(original_model);
         result.fit_vs_transform_mse = -1.0;
@@ -352,7 +352,7 @@ TestResult run_test_phase(const std::vector<float>& data, int embedding_dim, con
 
     std::string filename = "test_model_" + std::to_string(embedding_dim) + "d.umap";
     int save_result = uwot_save_model(original_model, filename.c_str());
-    if (save_result != UWOT_SUCCESS) {
+    if (save_result != PACMAP_SUCCESS) {
         std::cout << "❌ Save failed: " << uwot_get_error_message(save_result) << std::endl;
         uwot_destroy(original_model);
         result.fit_vs_transform_mse = -1.0;
@@ -365,7 +365,7 @@ TestResult run_test_phase(const std::vector<float>& data, int embedding_dim, con
     std::cout << "   📝 uwot_load_model creates a completely separate UwotModel object" << std::endl;
     std::cout << "   📝 This ensures clean separation between original and loaded models" << std::endl;
 
-    UwotModel* loaded_model = uwot_load_model(filename.c_str()); // NEW model object
+    PacMapModel* loaded_model = uwot_load_model(filename.c_str()); // NEW model object
     if (!loaded_model) {
         std::cout << "❌ Failed to load model from " << filename << std::endl;
         uwot_destroy(original_model);
@@ -384,7 +384,7 @@ TestResult run_test_phase(const std::vector<float>& data, int embedding_dim, con
         confidence_scores.data(), outlier_levels.data(), percentile_ranks.data(), z_scores.data()
     );
 
-    if (loaded_transform_result != UWOT_SUCCESS) {
+    if (loaded_transform_result != PACMAP_SUCCESS) {
         std::cout << "❌ Loaded model transform failed: " << uwot_get_error_message(loaded_transform_result) << std::endl;
         uwot_destroy(original_model);
         uwot_destroy(loaded_model);
@@ -437,7 +437,7 @@ TestResult run_quantized_test_phase(const std::vector<float>& data, int embeddin
     // Step 1: Create and fit QUANTIZED model
     std::cout << "\n📚 Step 1: Training QUANTIZED UMAP model..." << std::endl;
 
-    UwotModel* original_model = uwot_create(); // Original model for training
+    PacMapModel* original_model = uwot_create(); // Original model for training
     if (!original_model) {
         std::cout << "❌ Failed to create quantized model" << std::endl;
         result.success = false;
@@ -457,7 +457,7 @@ TestResult run_quantized_test_phase(const std::vector<float>& data, int embeddin
         MIN_DIST,
         SPREAD,
         N_EPOCHS,
-        UWOT_METRIC_EUCLIDEAN,
+        PACMAP_METRIC_EUCLIDEAN,
         fit_embedding.data(),
         progress_callback_v2, // Add progress callback
         0, 16, 200, 200,      // HNSW parameters (force_exact_knn=0, M=16, ef_construction=200, ef_search=200)
@@ -466,7 +466,7 @@ TestResult run_quantized_test_phase(const std::vector<float>& data, int embeddin
         1                     // autoHNSWParam = 1 (ENABLED)
     );
 
-    if (fit_result != UWOT_SUCCESS) {
+    if (fit_result != PACMAP_SUCCESS) {
         std::cout << "❌ Quantized fit failed" << std::endl;
         uwot_destroy(original_model);
         result.success = false;
@@ -483,7 +483,7 @@ TestResult run_quantized_test_phase(const std::vector<float>& data, int embeddin
     int transform_result = uwot_transform(original_model, const_cast<float*>(data.data()),
                                         N_SAMPLES, N_DIM, transform_embedding.data());
 
-    if (transform_result != UWOT_SUCCESS) {
+    if (transform_result != PACMAP_SUCCESS) {
         std::cout << "❌ Transform failed" << std::endl;
         uwot_destroy(original_model);
         result.success = false;
@@ -501,7 +501,7 @@ TestResult run_quantized_test_phase(const std::vector<float>& data, int embeddin
     std::string save_file = "pipeline_quantized_" + std::to_string(embedding_dim) + "d.umap";
 
     int save_result = uwot_save_model(original_model, save_file.c_str());
-    if (save_result != UWOT_SUCCESS) {
+    if (save_result != PACMAP_SUCCESS) {
         std::cout << "❌ Save failed" << std::endl;
         uwot_destroy(original_model);
         result.success = false;
@@ -513,7 +513,7 @@ TestResult run_quantized_test_phase(const std::vector<float>& data, int embeddin
     // Step 4: Load into COMPLETELY NEW OBJECT (critical for testing HNSW reconstruction)
     std::cout << "\n🔄 Step 4: Load into NEW object (testing HNSW reconstruction from PQ codes)..." << std::endl;
 
-    UwotModel* loaded_model = uwot_load_model(save_file.c_str()); // NEW OBJECT
+    PacMapModel* loaded_model = uwot_load_model(save_file.c_str()); // NEW OBJECT
     if (!loaded_model) {
         std::cout << "❌ Load failed" << std::endl;
         uwot_destroy(original_model);
@@ -531,7 +531,7 @@ TestResult run_quantized_test_phase(const std::vector<float>& data, int embeddin
     transform_result = uwot_transform(loaded_model, const_cast<float*>(data.data()),
                                     N_SAMPLES, N_DIM, loaded_transform_embedding.data());
 
-    if (transform_result != UWOT_SUCCESS) {
+    if (transform_result != PACMAP_SUCCESS) {
         std::cout << "❌ Transform with loaded model failed - HNSW reconstruction issue!" << std::endl;
         uwot_destroy(original_model);
         uwot_destroy(loaded_model);

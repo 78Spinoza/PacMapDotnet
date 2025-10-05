@@ -28,7 +28,7 @@ int main() {
     std::cout << "Target embedding: " << embedding_dim << "D" << std::endl;
 
     // Create and fit model
-    UwotModel* model = uwot_create();
+    PacMapModel* model = uwot_create();
     if (!model) {
         std::cout << "❌ Failed to create model" << std::endl;
         return 1;
@@ -48,7 +48,7 @@ int main() {
         0.1f,  // min_dist
         1.0f,  // spread
         200,   // n_epochs
-        UWOT_METRIC_EUCLIDEAN,
+        PACMAP_METRIC_EUCLIDEAN,
         embedding.data(),
         nullptr, // progress callback
         0,       // force_exact_knn
@@ -60,7 +60,7 @@ int main() {
         1        // autoHNSWParam
     );
 
-    if (result != UWOT_SUCCESS) {
+    if (result != PACMAP_SUCCESS) {
         std::cout << "❌ Training failed with error: " << result << std::endl;
         std::cout << "Error message: " << uwot_get_error_message(result) << std::endl;
         uwot_destroy(model);
@@ -93,7 +93,7 @@ int main() {
     std::cout << "\n--- Testing embedding storage optimization via save/load ---" << std::endl;
 
     result = uwot_save_model(model, filename);
-    if (result != UWOT_SUCCESS) {
+    if (result != PACMAP_SUCCESS) {
         std::cout << "❌ Save failed with error: " << result << std::endl;
         uwot_destroy(model);
         return 1;
@@ -102,7 +102,7 @@ int main() {
     std::cout << "✅ Model saved successfully with embedding storage optimization" << std::endl;
 
     // Load the model
-    UwotModel* loaded_model = uwot_load_model(filename);
+    PacMapModel* loaded_model = uwot_load_model(filename);
     if (!loaded_model) {
         std::cout << "❌ Load failed" << std::endl;
         uwot_destroy(model);
@@ -121,7 +121,7 @@ int main() {
     std::cout << "\n--- Testing transform with HNSW embedding extraction ---" << std::endl;
 
     result = uwot_transform(loaded_model, new_data.data(), 1, n_dim, new_embedding.data());
-    if (result != UWOT_SUCCESS) {
+    if (result != PACMAP_SUCCESS) {
         std::cout << "❌ Transform failed with error: " << result << std::endl;
         std::cout << "Error message: " << uwot_get_error_message(result) << std::endl;
         uwot_destroy(model);
@@ -160,7 +160,7 @@ int main() {
         &z_score
     );
 
-    if (result != UWOT_SUCCESS) {
+    if (result != PACMAP_SUCCESS) {
         std::cout << "❌ Enhanced transform failed with error: " << result << std::endl;
         uwot_destroy(model);
         uwot_destroy(loaded_model);

@@ -22,7 +22,7 @@ void test_progress_callback(int epoch, int total_epochs, float percent) {
 bool test_progress_reporting() {
     printf("Testing progress reporting...\n");
 
-    UwotModel* model = uwot_create();
+    PacMapModel* model = uwot_create();
     if (!model) {
         printf("Failed to create model\n");
         return false;
@@ -47,10 +47,10 @@ bool test_progress_reporting() {
     printf("Testing uwot_fit_with_progress...\n");
     int result = uwot_fit_with_progress(model, data.data(), n_obs, n_dim,
         embedding_dim, 15, 0.1f, 1.0f, n_epochs,
-        UWOT_METRIC_EUCLIDEAN, embedding.data(),
+        PACMAP_METRIC_EUCLIDEAN, embedding.data(),
         test_progress_callback);
 
-    if (result != UWOT_SUCCESS) {
+    if (result != PACMAP_SUCCESS) {
         printf("Progress test failed with error: %s\n", uwot_get_error_message(result));
         uwot_destroy(model);
         return false;
@@ -64,7 +64,7 @@ bool test_progress_reporting() {
 bool test_basic_functionality() {
     printf("Testing basic UMAP functionality...\n");
 
-    UwotModel* model = uwot_create();
+    PacMapModel* model = uwot_create();
     if (!model) {
         printf("Failed to create model\n");
         return false;
@@ -88,10 +88,10 @@ bool test_basic_functionality() {
     printf("Testing basic uwot_fit_with_progress...\n");
     int result = uwot_fit_with_progress(model, data.data(), n_obs, n_dim,
         embedding_dim, 15, 0.1f, 1.0f, 100,
-        UWOT_METRIC_EUCLIDEAN, embedding.data(),
+        PACMAP_METRIC_EUCLIDEAN, embedding.data(),
         nullptr);
 
-    if (result != UWOT_SUCCESS) {
+    if (result != PACMAP_SUCCESS) {
         printf("Basic test failed with error: %s\n", uwot_get_error_message(result));
         uwot_destroy(model);
         return false;
@@ -100,7 +100,7 @@ bool test_basic_functionality() {
     // Test model info
     int info_n_vertices, info_n_dim, info_embedding_dim, info_n_neighbors;
     float info_min_dist;
-    UwotMetric info_metric;
+    PacMapMetric info_metric;
 
     float info_spread;
     int info_hnsw_M, info_hnsw_ef_construction, info_hnsw_ef_search;
@@ -109,7 +109,7 @@ bool test_basic_functionality() {
         &info_min_dist, &info_spread, &info_metric,
         &info_hnsw_M, &info_hnsw_ef_construction, &info_hnsw_ef_search);
 
-    if (result != UWOT_SUCCESS) {
+    if (result != PACMAP_SUCCESS) {
         printf("Model info test failed\n");
         uwot_destroy(model);
         return false;
@@ -127,7 +127,7 @@ bool test_basic_functionality() {
 bool test_27d_embedding() {
     printf("Testing 27D embedding...\n");
 
-    UwotModel* model = uwot_create();
+    PacMapModel* model = uwot_create();
     if (!model) {
         printf("Failed to create model\n");
         return false;
@@ -151,10 +151,10 @@ bool test_27d_embedding() {
     printf("Testing 27D embedding with cosine distance...\n");
     int result = uwot_fit_with_progress(model, data.data(), n_obs, n_dim,
         embedding_dim, 15, 0.1f, 1.0f, 50,
-        UWOT_METRIC_COSINE, embedding.data(),
+        PACMAP_METRIC_COSINE, embedding.data(),
         nullptr);
 
-    if (result != UWOT_SUCCESS) {
+    if (result != PACMAP_SUCCESS) {
         printf("27D test failed with error: %s\n", uwot_get_error_message(result));
         uwot_destroy(model);
         return false;
@@ -170,12 +170,12 @@ bool test_27d_embedding() {
 bool test_distance_metrics() {
     printf("Testing different distance metrics...\n");
 
-    const UwotMetric metrics[] = {
-        UWOT_METRIC_EUCLIDEAN,
-        UWOT_METRIC_COSINE,
-        UWOT_METRIC_MANHATTAN,
-        UWOT_METRIC_CORRELATION,
-        UWOT_METRIC_HAMMING
+    const PacMapMetric metrics[] = {
+        PACMAP_METRIC_EUCLIDEAN,
+        PACMAP_METRIC_COSINE,
+        PACMAP_METRIC_MANHATTAN,
+        PACMAP_METRIC_CORRELATION,
+        PACMAP_METRIC_HAMMING
     };
 
     // Use different parameters for different metrics
@@ -188,7 +188,7 @@ bool test_distance_metrics() {
         int n_obs, n_dim, n_neighbors, n_epochs;
         float min_dist, spread;
 
-        if (metric == UWOT_METRIC_CORRELATION || metric == UWOT_METRIC_HAMMING) {
+        if (metric == PACMAP_METRIC_CORRELATION || metric == PACMAP_METRIC_HAMMING) {
             // Correlation and Hamming need larger datasets and specific parameters
             n_obs = 200;          // Larger dataset
             n_dim = 10;           // More dimensions for correlation computation
@@ -211,13 +211,13 @@ bool test_distance_metrics() {
         std::vector<float> data(n_obs * n_dim);
         std::mt19937 gen(456 + static_cast<int>(metric)); // Different seed per metric
 
-        if (metric == UWOT_METRIC_HAMMING) {
+        if (metric == PACMAP_METRIC_HAMMING) {
             // Binary data for Hamming distance
             std::bernoulli_distribution binary_dist(0.5);
             for (int i = 0; i < n_obs * n_dim; i++) {
                 data[i] = binary_dist(gen) ? 1.0f : 0.0f;
             }
-        } else if (metric == UWOT_METRIC_CORRELATION) {
+        } else if (metric == PACMAP_METRIC_CORRELATION) {
             // Generate correlated data for correlation distance
             std::normal_distribution<float> normal_dist(0.0f, 1.0f);
             for (int i = 0; i < n_obs; i++) {
@@ -235,7 +235,7 @@ bool test_distance_metrics() {
             }
         }
 
-        UwotModel* model = uwot_create();
+        PacMapModel* model = uwot_create();
         if (!model) {
             printf("Failed to create model for %s\n", uwot_get_metric_name(metric));
             all_passed = false;
@@ -249,8 +249,8 @@ bool test_distance_metrics() {
             metric, embedding.data(),
             nullptr);
 
-        if (result != UWOT_SUCCESS) {
-            if (metric == UWOT_METRIC_CORRELATION || metric == UWOT_METRIC_HAMMING) {
+        if (result != PACMAP_SUCCESS) {
+            if (metric == PACMAP_METRIC_CORRELATION || metric == PACMAP_METRIC_HAMMING) {
                 printf("%s metric: Expected limitation (requires specialized dataset characteristics)\n",
                     uwot_get_metric_name(metric));
                 printf("   Status: SKIPPED - Known limitation in test environment\n");

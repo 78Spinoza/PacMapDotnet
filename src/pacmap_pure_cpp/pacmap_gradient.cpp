@@ -1,10 +1,15 @@
 #include "pacmap_gradient.h"
 #include "pacmap_distance.h"
+#include "pacmap_triplet_sampling.h"
 #include <cmath>
 #include <algorithm>
 #include <omp.h>
 #include <iostream>
 #include <chrono>
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 
 static std::chrono::high_resolution_clock::time_point gradient_start_time;
 
@@ -38,7 +43,7 @@ void compute_gradients(const std::vector<float>& embedding, const std::vector<Tr
 
     // Parallel gradient computation with atomic operations (review requirement)
     #pragma omp parallel for schedule(dynamic, 1000)
-    for (size_t idx = 0; idx < triplets.size(); ++idx) {
+    for (int idx = 0; idx < static_cast<int>(triplets.size()); ++idx) {
         const auto& t = triplets[idx];
         size_t idx_a = static_cast<size_t>(t.anchor) * n_components;
         size_t idx_n = static_cast<size_t>(t.neighbor) * n_components;
@@ -95,7 +100,7 @@ void adam_update(std::vector<float>& embedding, const std::vector<float>& gradie
 
     // Parallel Adam update with adaptive learning rates
     #pragma omp parallel for
-    for (size_t i = 0; i < embedding.size(); ++i) {
+    for (int i = 0; i < static_cast<int>(embedding.size()); ++i) {
         // Update biased first moment estimate
         m[i] = beta1 * m[i] + (1 - beta1) * gradients[i];
 
@@ -336,7 +341,7 @@ void compute_second_order_info(const std::vector<float>& embedding, const std::v
 
     // Simple approximation of diagonal Hessian
     #pragma omp parallel for
-    for (size_t idx = 0; idx < triplets.size(); ++idx) {
+    for (int idx = 0; idx < static_cast<int>(triplets.size()); ++idx) {
         const auto& t = triplets[idx];
         size_t idx_a = static_cast<size_t>(t.anchor) * n_components;
         size_t idx_n = static_cast<size_t>(t.neighbor) * n_components;

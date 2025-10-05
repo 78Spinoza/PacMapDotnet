@@ -403,7 +403,7 @@
 
 ✅ UPGRADE RECOMMENDED: Massive performance gains with full backward compatibility!
 ]]></PackageReleaseNotes>
-    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <Copyright>Copyright © 2025 ID Soft AB</Copyright>

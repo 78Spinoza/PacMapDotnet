@@ -30,7 +30,7 @@ void test_find_knn_exact() {
 
     // Test with query point 0, find 3 nearest neighbors
     const float* query_point = &data[0];
-    distance_metrics::find_knn_exact(query_point, data, n_obs, n_dim, UWOT_METRIC_EUCLIDEAN, 3, neighbors_out, 0);
+    distance_metrics::find_knn_exact(query_point, data, n_obs, n_dim, PACMAP_METRIC_EUCLIDEAN, 3, neighbors_out, 0);
 
     std::cout << "Query point: [1.0, 2.0]" << std::endl;
     std::cout << "3 nearest neighbors:" << std::endl;
@@ -94,7 +94,7 @@ void test_build_distance_matrix() {
     float distance_matrix[n_obs * n_obs];
 
     // Build distance matrix
-    distance_metrics::build_distance_matrix(data, n_obs, n_dim, UWOT_METRIC_EUCLIDEAN, distance_matrix);
+    distance_metrics::build_distance_matrix(data, n_obs, n_dim, PACMAP_METRIC_EUCLIDEAN, distance_matrix);
 
     std::cout << "Distance matrix:" << std::endl;
     for (int i = 0; i < n_obs; i++) {

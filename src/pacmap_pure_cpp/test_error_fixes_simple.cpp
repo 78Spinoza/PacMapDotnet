@@ -21,7 +21,7 @@ int main() {
     }
 
     // Create model
-    UwotModel* model = uwot_create();
+    PacMapModel* model = uwot_create();
     if (!model) {
         std::cout << "❌ Failed to create model" << std::endl;
         return 1;
@@ -32,10 +32,10 @@ int main() {
     // Test 1: Training with cosine distance (Fix 1: Unit normalization)
     std::cout << "\n🧪 Test 1: Cosine distance training (unit normalization fix)..." << std::endl;
     int result = uwot_fit_with_progress(model, data.data(), n_obs, n_dim, embedding_dim,
-        15, 0.1f, 1.0f, 50, UWOT_METRIC_COSINE, embedding.data(), nullptr,
+        15, 0.1f, 1.0f, 50, PACMAP_METRIC_COSINE, embedding.data(), nullptr,
         0, 16, 200, 64);
 
-    if (result == UWOT_SUCCESS) {
+    if (result == PACMAP_SUCCESS) {
         std::cout << "✅ Cosine training succeeded" << std::endl;
         std::cout << "   - Training completed successfully with all fixes applied" << std::endl;
     } else {
@@ -48,14 +48,14 @@ int main() {
     std::cout << "\n🧪 Test 2: Save/load validation..." << std::endl;
 
     result = uwot_save_model(model, "test_error_fixes.umap");
-    if (result != UWOT_SUCCESS) {
+    if (result != PACMAP_SUCCESS) {
         std::cout << "❌ Save failed: " << result << std::endl;
         uwot_destroy(model);
         return 1;
     }
 
     uwot_destroy(model);
-    UwotModel* loaded_model = uwot_load_model("test_error_fixes.umap");
+    PacMapModel* loaded_model = uwot_load_model("test_error_fixes.umap");
     if (!loaded_model) {
         std::cout << "❌ Load failed" << std::endl;
         return 1;
@@ -82,7 +82,7 @@ int main() {
         new_embedding.data(), nn_indices.data(), nn_distances.data(),
         confidence_score.data(), outlier_level.data(), percentile_rank.data(), z_score.data());
 
-    if (result == UWOT_SUCCESS) {
+    if (result == PACMAP_SUCCESS) {
         std::cout << "✅ Transform with safety metrics succeeded" << std::endl;
         std::cout << "   Sample safety metrics:" << std::endl;
         for (int i = 0; i < 3; i++) {

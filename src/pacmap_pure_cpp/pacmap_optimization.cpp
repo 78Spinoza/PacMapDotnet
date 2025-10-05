@@ -100,6 +100,7 @@ void run_optimization_phase(PacMapModel* model, std::vector<float>& embedding,
                                            w_n, w_mn, w_f, model->n_components);
 
             std::string message = phase_name + " - Loss: " + std::to_string(loss);
+            int total_iters = model->phase1_iters + model->phase2_iters + model->phase3_iters;
             callback(phase_name.c_str(), iter, total_iters,
                     static_cast<float>(iter - start_iter) / (end_iter - start_iter) * 100.0f,
                     message.c_str());

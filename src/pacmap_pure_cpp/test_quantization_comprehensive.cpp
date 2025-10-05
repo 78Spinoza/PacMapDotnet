@@ -273,7 +273,7 @@ QuantizationTestResult run_quantization_test(const std::vector<float>& data) {
     // Step 1: Train NON-QUANTIZED model
     std::cout << "\n📚 Step 1: Training NON-QUANTIZED UMAP model..." << std::endl;
 
-    UwotModel* non_quantized_model = uwot_create();
+    PacMapModel* non_quantized_model = uwot_create();
     if (!non_quantized_model) {
         std::cout << "❌ Failed to create non-quantized model" << std::endl;
         return result;
@@ -283,11 +283,11 @@ QuantizationTestResult run_quantization_test(const std::vector<float>& data) {
 
     int fit_result = uwot_fit_with_progress_v2(
         non_quantized_model, const_cast<float*>(data.data()), N_SAMPLES, N_DIM, EMBEDDING_DIM, N_NEIGHBORS,
-        MIN_DIST, SPREAD, N_EPOCHS, UWOT_METRIC_EUCLIDEAN,
+        MIN_DIST, SPREAD, N_EPOCHS, PACMAP_METRIC_EUCLIDEAN,
         result.non_quantized_projection.data(), progress_callback_v2,
         0, 16, 200, 200, 0, 42, 1); // use_quantization = 0, random_seed = 42
 
-    if (fit_result != UWOT_SUCCESS) {
+    if (fit_result != PACMAP_SUCCESS) {
         std::cout << "❌ Non-quantized training failed" << std::endl;
         uwot_destroy(non_quantized_model);
         return result;
@@ -296,7 +296,7 @@ QuantizationTestResult run_quantization_test(const std::vector<float>& data) {
     // Step 2: Save and test non-quantized model
     std::string non_quantized_file = "test_non_quantized_20d.umap";
     int save_result = uwot_save_model(non_quantized_model, non_quantized_file.c_str());
-    if (save_result != UWOT_SUCCESS) {
+    if (save_result != PACMAP_SUCCESS) {
         std::cout << "❌ Failed to save non-quantized model" << std::endl;
         uwot_destroy(non_quantized_model);
         return result;
@@ -306,7 +306,7 @@ QuantizationTestResult run_quantization_test(const std::vector<float>& data) {
     std::cout << "💾 Non-quantized model saved: " << result.non_quantized_file_size << " bytes" << std::endl;
 
     // Step 3: Load non-quantized model and transform
-    UwotModel* loaded_non_quantized = uwot_load_model(non_quantized_file.c_str());
+    PacMapModel* loaded_non_quantized = uwot_load_model(non_quantized_file.c_str());
     if (!loaded_non_quantized) {
         std::cout << "❌ Failed to load non-quantized model" << std::endl;
         uwot_destroy(non_quantized_model);
@@ -317,7 +317,7 @@ QuantizationTestResult run_quantization_test(const std::vector<float>& data) {
     int transform_result = uwot_transform(loaded_non_quantized, const_cast<float*>(data.data()),
                                         N_SAMPLES, N_DIM, result.non_quantized_loaded_transform.data());
 
-    if (transform_result != UWOT_SUCCESS) {
+    if (transform_result != PACMAP_SUCCESS) {
         std::cout << "❌ Non-quantized transform failed" << std::endl;
         uwot_destroy(non_quantized_model);
         uwot_destroy(loaded_non_quantized);
@@ -329,7 +329,7 @@ QuantizationTestResult run_quantization_test(const std::vector<float>& data) {
     // Step 4: Train QUANTIZED model
     std::cout << "\n📚 Step 4: Training QUANTIZED UMAP model..." << std::endl;
 
-    UwotModel* quantized_model = uwot_create();
+    PacMapModel* quantized_model = uwot_create();
     if (!quantized_model) {
         std::cout << "❌ Failed to create quantized model" << std::endl;
         uwot_destroy(non_quantized_model);
@@ -341,11 +341,11 @@ QuantizationTestResult run_quantization_test(const std::vector<float>& data) {
 
     fit_result = uwot_fit_with_progress_v2(
         quantized_model, const_cast<float*>(data.data()), N_SAMPLES, N_DIM, EMBEDDING_DIM, N_NEIGHBORS,
-        MIN_DIST, SPREAD, N_EPOCHS, UWOT_METRIC_EUCLIDEAN,
+        MIN_DIST, SPREAD, N_EPOCHS, PACMAP_METRIC_EUCLIDEAN,
         result.quantized_projection.data(), progress_callback_v2,
         0, 16, 200, 200, 1, 42, 1); // use_quantization = 1, random_seed = 42
 
-    if (fit_result != UWOT_SUCCESS) {
+    if (fit_result != PACMAP_SUCCESS) {
         std::cout << "❌ Quantized training failed" << std::endl;
         uwot_destroy(non_quantized_model);
         uwot_destroy(loaded_non_quantized);
@@ -356,7 +356,7 @@ QuantizationTestResult run_quantization_test(const std::vector<float>& data) {
     // Step 5: Save and test quantized model
     std::string quantized_file = "test_quantized_20d.umap";
     save_result = uwot_save_model(quantized_model, quantized_file.c_str());
-    if (save_result != UWOT_SUCCESS) {
+    if (save_result != PACMAP_SUCCESS) {
         std::cout << "❌ Failed to save quantized model" << std::endl;
         uwot_destroy(non_quantized_model);
         uwot_destroy(loaded_non_quantized);
@@ -373,7 +373,7 @@ QuantizationTestResult run_quantization_test(const std::vector<float>& data) {
               << result.compression_ratio << "% reduction" << std::endl;
 
     // Step 6: Load quantized model and transform
-    UwotModel* loaded_quantized = uwot_load_model(quantized_file.c_str());
+    PacMapModel* loaded_quantized = uwot_load_model(quantized_file.c_str());
     if (!loaded_quantized) {
         std::cout << "❌ Failed to load quantized model" << std::endl;
         uwot_destroy(non_quantized_model);
@@ -386,7 +386,7 @@ QuantizationTestResult run_quantization_test(const std::vector<float>& data) {
     transform_result = uwot_transform(loaded_quantized, const_cast<float*>(data.data()),
                                     N_SAMPLES, N_DIM, result.quantized_loaded_transform.data());
 
-    if (transform_result != UWOT_SUCCESS) {
+    if (transform_result != PACMAP_SUCCESS) {
         std::cout << "❌ Quantized transform failed" << std::endl;
         uwot_destroy(non_quantized_model);
         uwot_destroy(loaded_non_quantized);

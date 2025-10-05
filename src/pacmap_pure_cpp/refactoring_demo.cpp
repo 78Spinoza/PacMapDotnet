@@ -62,7 +62,7 @@ void demonstrate_refactoring_benefits() {
     std::cout << "Finding 3 nearest neighbors..." << std::endl;
 
     // This replaces 15+ lines of duplicate code
-    distance_metrics::find_knn_exact(query_point, data, n_obs, n_dim, UWOT_METRIC_EUCLIDEAN, 3, neighbors, 0);
+    distance_metrics::find_knn_exact(query_point, data, n_obs, n_dim, PACMAP_METRIC_EUCLIDEAN, 3, neighbors, 0);
 
     std::cout << "Result from single helper function call:" << std::endl;
     for (size_t i = 0; i < neighbors.size(); i++) {

@@ -1,1 +1,0 @@
-/usr/bin/c++ -O3 -DNDEBUG CMakeFiles/test_zero_norm_handling.dir/test_zero_norm_handling.cpp.o -o test_zero_norm_handling  -Wl,-rpath,/src/build-linux libuwot.so.3.5.0 /usr/lib/gcc/x86_64-linux-gnu/11/libgomp.so /usr/lib/x86_64-linux-gnu/libpthread.a 

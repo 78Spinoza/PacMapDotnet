@@ -45,11 +45,14 @@ namespace transform_utils {
 
                 // Raw point data collected
 
-                // Use stored normalization mode from training
-                hnsw_utils::NormalizationPipeline::normalize_data_consistent(
-                    raw_point, normalized_point, 1, n_dim,
-                    model->feature_means, model->feature_stds,
-                    model->normalization_mode);
+                // Use stored normalization mode from training (simplified implementation)
+                for (int j = 0; j < n_dim; ++j) {
+                    if (model->normalization_mode == 1 && !model->feature_means.empty() && !model->feature_stds.empty()) {
+                        normalized_point[j] = (raw_point[j] - model->feature_means[j]) / (model->feature_stds[j] + 1e-8f);
+                    } else {
+                        normalized_point[j] = raw_point[j];
+                    }
+                }
 
                 // Point normalization completed
 

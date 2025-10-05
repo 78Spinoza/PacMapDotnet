@@ -1,1 +1,0 @@
-/usr/bin/c++ -O3 -DNDEBUG CMakeFiles/test_ef_scaling_simple.dir/test_ef_scaling_simple.cpp.o -o test_ef_scaling_simple  -Wl,-rpath,/src/build-linux libuwot.so.3.5.0 /usr/lib/gcc/x86_64-linux-gnu/11/libgomp.so /usr/lib/x86_64-linux-gnu/libpthread.a 

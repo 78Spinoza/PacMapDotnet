@@ -29,15 +29,15 @@ int main() {
     std::cout << "Created test dataset: " << N_SAMPLES << " x " << N_DIM << std::endl;
 
     // Test with EXACT k-NN
-    UwotModel* model = uwot_create();
+    PacMapModel* model = uwot_create();
     std::vector<float> fit_embedding(N_SAMPLES * EMBEDDING_DIM);
     std::vector<float> transform_embedding(N_SAMPLES * EMBEDDING_DIM);
 
     int result = uwot_fit_with_progress_v2(model, data.data(), N_SAMPLES, N_DIM, EMBEDDING_DIM,
-        15, 0.1f, 1.0f, 100, UWOT_METRIC_EUCLIDEAN, fit_embedding.data(),
+        15, 0.1f, 1.0f, 100, PACMAP_METRIC_EUCLIDEAN, fit_embedding.data(),
         progress_callback, 1, -1, -1, -1, 0, 42, 1);
 
-    if (result != UWOT_SUCCESS) {
+    if (result != PACMAP_SUCCESS) {
         std::cout << "❌ Training failed: " << result << std::endl;
         uwot_destroy(model);
         return 1;
@@ -48,7 +48,7 @@ int main() {
     result = uwot_transform_detailed(model, data.data(), N_SAMPLES, N_DIM, transform_embedding.data(),
         nullptr, nullptr, nullptr, nullptr, nullptr, nullptr);
 
-    if (result != UWOT_SUCCESS) {
+    if (result != PACMAP_SUCCESS) {
         std::cout << "❌ Transform failed: " << result << std::endl;
         uwot_destroy(model);
         return 1;

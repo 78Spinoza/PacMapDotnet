@@ -31,14 +31,14 @@ int main() {
     // Test 1: Traditional approach (save both HNSW indices)
     std::cout << "\n--- Test 1: Traditional Approach (save both HNSW indices) ---" << std::endl;
 
-    UwotModel* model1 = uwot_create();
+    PacMapModel* model1 = uwot_create();
     std::vector<float> fit_embedding1(N_SAMPLES * EMBEDDING_DIM);
 
     int result = uwot_fit_with_progress_v2(model1, data.data(), N_SAMPLES, N_DIM, EMBEDDING_DIM,
-        15, 0.1f, 1.0f, 100, UWOT_METRIC_EUCLIDEAN, fit_embedding1.data(),
+        15, 0.1f, 1.0f, 100, PACMAP_METRIC_EUCLIDEAN, fit_embedding1.data(),
         progress_callback, 1, -1, -1, -1, 0, 42, 1);
 
-    if (result != UWOT_SUCCESS) {
+    if (result != PACMAP_SUCCESS) {
         std::cout << "❌ Training failed: " << result << std::endl;
         uwot_destroy(model1);
         return 1;
@@ -48,7 +48,7 @@ int main() {
 
     // Save with traditional approach
     result = uwot_save_model(model1, "test_traditional.umap");
-    if (result != UWOT_SUCCESS) {
+    if (result != PACMAP_SUCCESS) {
         std::cout << "❌ Save failed: " << result << std::endl;
         uwot_destroy(model1);
         return 1;
@@ -59,7 +59,7 @@ int main() {
     // Test 2: New approach (always save embedding data, rebuild HNSW)
     std::cout << "\n--- Test 2: New Approach (always save embedding data) ---" << std::endl;
 
-    UwotModel* model2 = uwot_create();
+    PacMapModel* model2 = uwot_create();
     std::vector<float> fit_embedding2(N_SAMPLES * EMBEDDING_DIM);
 
     // Enable the new option
@@ -67,10 +67,10 @@ int main() {
     std::cout << "✅ Enabled always_save_embedding_data option" << std::endl;
 
     result = uwot_fit_with_progress_v2(model2, data.data(), N_SAMPLES, N_DIM, EMBEDDING_DIM,
-        15, 0.1f, 1.0f, 100, UWOT_METRIC_EUCLIDEAN, fit_embedding2.data(),
+        15, 0.1f, 1.0f, 100, PACMAP_METRIC_EUCLIDEAN, fit_embedding2.data(),
         progress_callback, 1, -1, -1, -1, 0, 42, 1);
 
-    if (result != UWOT_SUCCESS) {
+    if (result != PACMAP_SUCCESS) {
         std::cout << "❌ Training failed: " << result << std::endl;
         uwot_destroy(model2);
         return 1;
@@ -80,7 +80,7 @@ int main() {
 
     // Save with new approach
     result = uwot_save_model(model2, "test_preserve.umap");
-    if (result != UWOT_SUCCESS) {
+    if (result != PACMAP_SUCCESS) {
         std::cout << "❌ Save failed: " << result << std::endl;
         uwot_destroy(model2);
         return 1;
@@ -92,7 +92,7 @@ int main() {
     std::cout << "\n--- Test 3: Loading and Comparing ---" << std::endl;
 
     // Load traditional model
-    UwotModel* loaded1 = uwot_load_model("test_traditional.umap");
+    PacMapModel* loaded1 = uwot_load_model("test_traditional.umap");
     if (!loaded1) {
         std::cout << "❌ Failed to load traditional model" << std::endl;
         return 1;
@@ -100,7 +100,7 @@ int main() {
     std::cout << "✅ Loaded traditional model" << std::endl;
 
     // Load preserved model
-    UwotModel* loaded2 = uwot_load_model("test_preserve.umap");
+    PacMapModel* loaded2 = uwot_load_model("test_preserve.umap");
     if (!loaded2) {
         std::cout << "❌ Failed to load preserved model" << std::endl;
         return 1;
@@ -138,7 +138,7 @@ int main() {
 
     result = uwot_transform_detailed(loaded1, test_point.data(), 1, N_DIM, transform1.data(),
         nullptr, nullptr, nullptr, nullptr, nullptr, nullptr);
-    if (result != UWOT_SUCCESS) {
+    if (result != PACMAP_SUCCESS) {
         std::cout << "❌ Transform with traditional model failed: " << result << std::endl;
     } else {
         std::cout << "✅ Transform with traditional model succeeded" << std::endl;
@@ -146,7 +146,7 @@ int main() {
 
     result = uwot_transform_detailed(loaded2, test_point.data(), 1, N_DIM, transform2.data(),
         nullptr, nullptr, nullptr, nullptr, nullptr, nullptr);
-    if (result != UWOT_SUCCESS) {
+    if (result != PACMAP_SUCCESS) {
         std::cout << "❌ Transform with preserved model failed: " << result << std::endl;
     } else {
         std::cout << "✅ Transform with preserved model succeeded" << std::endl;

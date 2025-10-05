@@ -23,15 +23,15 @@ void test_embedding_loading_bug() {
     }
 
     // Create and fit model
-    UwotModel* model = uwot_create();
+    PacMapModel* model = uwot_create();
     std::vector<float> embedding(n_obs * embedding_dim);
 
     std::cout << "1. Training model..." << std::endl;
     int result = uwot_fit_with_progress_v2(model, data.data(), n_obs, n_dim, embedding_dim,
-        15, 0.1f, 1.0f, 200, UWOT_METRIC_EUCLIDEAN, embedding.data(), nullptr,
+        15, 0.1f, 1.0f, 200, PACMAP_METRIC_EUCLIDEAN, embedding.data(), nullptr,
         0, -1, -1, -1, 1, 42, 1);
 
-    if (result != UWOT_SUCCESS) {
+    if (result != PACMAP_SUCCESS) {
         std::cout << "❌ Training failed: " << uwot_get_error_message(result) << std::endl;
         return;
     }
@@ -47,7 +47,7 @@ void test_embedding_loading_bug() {
     std::cout << "2. Testing transform with original model..." << std::endl;
     result = uwot_transform(model, test_point.data(), 1, n_dim, original_transform.data());
 
-    if (result != UWOT_SUCCESS) {
+    if (result != PACMAP_SUCCESS) {
         std::cout << "❌ Original transform failed: " << uwot_get_error_message(result) << std::endl;
         uwot_destroy(model);
         return;
@@ -72,7 +72,7 @@ void test_embedding_loading_bug() {
     std::cout << "4. Saving model to " << filename << "..." << std::endl;
     result = uwot_save_model(model, filename);
 
-    if (result != UWOT_SUCCESS) {
+    if (result != PACMAP_SUCCESS) {
         std::cout << "❌ Save failed: " << uwot_get_error_message(result) << std::endl;
         uwot_destroy(model);
         return;
@@ -91,7 +91,7 @@ void test_embedding_loading_bug() {
 
     // Load model
     std::cout << "5. Loading model from " << filename << "..." << std::endl;
-    UwotModel* loaded_model = uwot_load_model(filename);
+    PacMapModel* loaded_model = uwot_load_model(filename);
 
     if (!loaded_model) {
         std::cout << "❌ Load failed: nullptr returned" << std::endl;
@@ -112,7 +112,7 @@ void test_embedding_loading_bug() {
     std::cout << "6. Testing transform with loaded model..." << std::endl;
     result = uwot_transform(loaded_model, test_point.data(), 1, n_dim, loaded_transform.data());
 
-    if (result != UWOT_SUCCESS) {
+    if (result != PACMAP_SUCCESS) {
         std::cout << "❌ Loaded transform failed: " << uwot_get_error_message(result) << std::endl;
         uwot_destroy(loaded_model);
         return;

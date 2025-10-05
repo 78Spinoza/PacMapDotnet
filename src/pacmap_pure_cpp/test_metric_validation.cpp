@@ -23,14 +23,14 @@ void test_hamming_validation() {
         data[i] = dis(gen);
     }
 
-    UwotModel* model = uwot_create_model();
+    PacMapModel* model = uwot_create_model();
 
     printf("Fitting with non-binary data using Hamming metric (should show warning):\n");
     int result = uwot_fit_with_progress(model, data.data(), n_obs, n_dim, embedding_dim,
-                                       15, 0.1f, 1.0f, 50, UWOT_METRIC_HAMMING,
+                                       15, 0.1f, 1.0f, 50, PACMAP_METRIC_HAMMING,
                                        embedding.data(), nullptr, 0, 16, 64, 32, 0);
 
-    printf("Fit result: %s\n", (result == UWOT_SUCCESS) ? "SUCCESS" : "ERROR");
+    printf("Fit result: %s\n", (result == PACMAP_SUCCESS) ? "SUCCESS" : "ERROR");
 
     uwot_destroy_model(model);
 }
@@ -51,14 +51,14 @@ void test_correlation_validation() {
         data[i] = 1.0f; // All same value
     }
 
-    UwotModel* model = uwot_create_model();
+    PacMapModel* model = uwot_create_model();
 
     printf("Fitting with constant data using Correlation metric (should show warning):\n");
     int result = uwot_fit_with_progress(model, data.data(), n_obs, n_dim, embedding_dim,
-                                       15, 0.1f, 1.0f, 50, UWOT_METRIC_CORRELATION,
+                                       15, 0.1f, 1.0f, 50, PACMAP_METRIC_CORRELATION,
                                        embedding.data(), nullptr, 0, 16, 64, 32, 0);
 
-    printf("Fit result: %s\n", (result == UWOT_SUCCESS) ? "SUCCESS" : "ERROR");
+    printf("Fit result: %s\n", (result == PACMAP_SUCCESS) ? "SUCCESS" : "ERROR");
 
     uwot_destroy_model(model);
 }
@@ -82,14 +82,14 @@ void test_good_binary_data() {
         data[i] = static_cast<float>(dis(gen));
     }
 
-    UwotModel* model = uwot_create_model();
+    PacMapModel* model = uwot_create_model();
 
     printf("Fitting with proper binary data using Hamming metric (no warning expected):\n");
     int result = uwot_fit_with_progress(model, data.data(), n_obs, n_dim, embedding_dim,
-                                       15, 0.1f, 1.0f, 50, UWOT_METRIC_HAMMING,
+                                       15, 0.1f, 1.0f, 50, PACMAP_METRIC_HAMMING,
                                        embedding.data(), nullptr, 0, 16, 64, 32, 0);
 
-    printf("Fit result: %s\n", (result == UWOT_SUCCESS) ? "SUCCESS" : "ERROR");
+    printf("Fit result: %s\n", (result == PACMAP_SUCCESS) ? "SUCCESS" : "ERROR");
 
     uwot_destroy_model(model);
 }

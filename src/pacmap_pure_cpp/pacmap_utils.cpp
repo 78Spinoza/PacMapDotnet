@@ -7,6 +7,7 @@
 #include <random>
 #include <chrono>
 #include <sstream>
+#include <iomanip>
 
 int validate_parameters(PacMapModel* model) {
     if (!model) return PACMAP_ERROR_INVALID_PARAMS;
@@ -237,20 +238,7 @@ PerformanceStats get_performance_stats(const PacMapModel* model) {
 }
 
 float compute_distance(const float* x, const float* y, int n_features, PacMapMetric metric) {
-    switch (metric) {
-        case PACMAP_METRIC_EUCLIDEAN:
-            return euclid_dist(x, y, n_features);
-        case PACMAP_METRIC_COSINE:
-            return angular_dist(x, y, n_features);
-        case PACMAP_METRIC_MANHATTAN:
-            return manhattan_dist(x, y, n_features);
-        case PACMAP_METRIC_CORRELATION:
-            return correlation_dist(x, y, n_features);
-        case PACMAP_METRIC_HAMMING:
-            return hamming_dist(x, y, n_features);
-        default:
-            return euclid_dist(x, y, n_features);
-    }
+    return distance_metrics::compute_distance(x, y, n_features, metric);
 }
 
 void normalize_data(std::vector<float>& data, int n_samples, int n_features, PacMapMetric metric) {

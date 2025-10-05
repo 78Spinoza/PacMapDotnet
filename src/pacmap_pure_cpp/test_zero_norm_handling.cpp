@@ -42,7 +42,7 @@ void test_cosine_with_zero_vectors() {
     std::cout << "🔍 Created dataset with " << (n_obs / 10) << " zero vectors for cosine metric testing" << std::endl;
 
     // Create model and test with cosine metric
-    UwotModel* model = uwot_create();
+    PacMapModel* model = uwot_create();
     if (!model) {
         std::cout << "❌ Failed to create model" << std::endl;
         return;
@@ -61,7 +61,7 @@ void test_cosine_with_zero_vectors() {
         0.1f,  // min_dist
         1.0f,  // spread
         20,  // n_epochs (reduced for quick test)
-        UWOT_METRIC_COSINE,
+        PACMAP_METRIC_COSINE,
         embedding.data(),
         progress_callback,
         0,  // force_exact_knn
@@ -110,7 +110,7 @@ void test_correlation_with_constant_vectors() {
     std::cout << "🔍 Created dataset with " << (n_obs / 8) << " constant vectors for correlation metric testing" << std::endl;
 
     // Create model and test with correlation metric
-    UwotModel* model = uwot_create();
+    PacMapModel* model = uwot_create();
     if (!model) {
         std::cout << "❌ Failed to create model" << std::endl;
         return;
@@ -129,7 +129,7 @@ void test_correlation_with_constant_vectors() {
         0.1f,  // min_dist
         1.0f,  // spread
         20,  // n_epochs (reduced for quick test)
-        UWOT_METRIC_CORRELATION,
+        PACMAP_METRIC_CORRELATION,
         embedding.data(),
         progress_callback,
         0,  // force_exact_knn
@@ -173,7 +173,7 @@ void test_normal_data_control() {
     std::cout << "🔍 Created normal dataset without zero or constant vectors" << std::endl;
 
     // Create model and test with cosine metric
-    UwotModel* model = uwot_create();
+    PacMapModel* model = uwot_create();
     if (!model) {
         std::cout << "❌ Failed to create model" << std::endl;
         return;
@@ -192,7 +192,7 @@ void test_normal_data_control() {
         0.1f,  // min_dist
         1.0f,  // spread
         20,  // n_epochs (reduced for quick test)
-        UWOT_METRIC_COSINE,
+        PACMAP_METRIC_COSINE,
         embedding.data(),
         progress_callback,
         0,  // force_exact_knn

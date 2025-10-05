@@ -22,7 +22,7 @@ int main() {
     }
 
     // Create model
-    UwotModel* model = uwot_create();
+    PacMapModel* model = uwot_create();
     if (!model) {
         std::cout << "❌ Failed to create model" << std::endl;
         return 1;
@@ -31,10 +31,10 @@ int main() {
     // Train model
     std::vector<float> embedding(n_samples * embedding_dim);
     int result = uwot_fit_with_progress_v2(model, data.data(), n_samples, n_features,
-        embedding_dim, 15, 0.1f, 1.0f, 50, UWOT_METRIC_EUCLIDEAN,
+        embedding_dim, 15, 0.1f, 1.0f, 50, PACMAP_METRIC_EUCLIDEAN,
         embedding.data(), nullptr, 0, 32, 128, 64, 0, 42, 1);
 
-    if (result != UWOT_SUCCESS) {
+    if (result != PACMAP_SUCCESS) {
         std::cout << "❌ Training failed: " << uwot_get_error_message(result) << std::endl;
         uwot_destroy(model);
         return 1;
@@ -58,7 +58,7 @@ int main() {
         nn_distances_before.data(), confidence_before.data(),
         outlier_level_before.data(), nullptr, nullptr);
 
-    if (result != UWOT_SUCCESS) {
+    if (result != PACMAP_SUCCESS) {
         std::cout << "❌ Transform before save failed: " << uwot_get_error_message(result) << std::endl;
         uwot_destroy(model);
         return 1;
@@ -75,7 +75,7 @@ int main() {
 
     // Save model
     result = uwot_save_model(model, "test_dual_hnsw.umap");
-    if (result != UWOT_SUCCESS) {
+    if (result != PACMAP_SUCCESS) {
         std::cout << "❌ Save failed: " << uwot_get_error_message(result) << std::endl;
         uwot_destroy(model);
         return 1;
@@ -84,7 +84,7 @@ int main() {
     std::cout << "✅ Model saved successfully" << std::endl;
 
     // Load model
-    UwotModel* loaded_model = uwot_load_model("test_dual_hnsw.umap");
+    PacMapModel* loaded_model = uwot_load_model("test_dual_hnsw.umap");
     if (!loaded_model) {
         std::cout << "❌ Load failed" << std::endl;
         uwot_destroy(model);
@@ -105,7 +105,7 @@ int main() {
         nn_distances_after.data(), confidence_after.data(),
         outlier_level_after.data(), nullptr, nullptr);
 
-    if (result != UWOT_SUCCESS) {
+    if (result != PACMAP_SUCCESS) {
         std::cout << "❌ Transform after load failed: " << uwot_get_error_message(result) << std::endl;
         uwot_destroy(model);
         uwot_destroy(loaded_model);

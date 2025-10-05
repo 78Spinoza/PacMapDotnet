@@ -22,13 +22,13 @@ int main() {
     }
 
     // Create model
-    UwotModel* model = uwot_create();
+    PacMapModel* model = uwot_create();
 
     // Train without quantization
     std::vector<float> training_embedding(n_obs * embedding_dim);
     int result = uwot_fit_with_progress_v2(
         model, data.data(), n_obs, n_dim, embedding_dim, 15,
-        0.1f, 1.0f, 50, UWOT_METRIC_EUCLIDEAN, training_embedding.data(),
+        0.1f, 1.0f, 50, PACMAP_METRIC_EUCLIDEAN, training_embedding.data(),
         nullptr, // No progress callback
         0, // Don't force exact KNN
         -1, -1, -1, // Auto HNSW params
@@ -37,7 +37,7 @@ int main() {
         1   // Auto HNSW
     );
 
-    if (result != UWOT_SUCCESS) {
+    if (result != PACMAP_SUCCESS) {
         std::cout << "❌ Training failed: " << uwot_get_error_message(result) << std::endl;
         return 1;
     }
@@ -58,7 +58,7 @@ int main() {
     std::vector<float> transform_embedding(n_obs * embedding_dim);
     result = uwot_transform(model, data.data(), n_obs, n_dim, transform_embedding.data());
 
-    if (result != UWOT_SUCCESS) {
+    if (result != PACMAP_SUCCESS) {
         std::cout << "❌ Transform failed: " << uwot_get_error_message(result) << std::endl;
         return 1;
     }
