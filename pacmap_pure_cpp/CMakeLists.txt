@@ -51,5 +51,19 @@ if(WIN32)
     )
 endif()
 
-# =================== CLEAN BUILD ===================
-# No test executables - minimal, clean implementation
+# =================== TEST EXECUTABLES ===================
+
+# Simple DLL integration test
+add_executable(test_simple
+    test_simple.cpp
+)
+
+# Windows specific settings for tests
+if(WIN32)
+    target_compile_definitions(test_simple PRIVATE _CRT_SECURE_NO_WARNINGS)
+endif()
+
+# Set output directory for tests
+set_target_properties(test_simple PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+)
