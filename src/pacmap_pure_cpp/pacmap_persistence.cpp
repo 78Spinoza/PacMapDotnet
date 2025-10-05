@@ -1,5 +1,5 @@
-#include "uwot_persistence.h"
-#include "uwot_quantization.h"
+#include "pacmap_persistence.h"
+#include "pacmap_quantization.h"
 #include "lz4.h"
 #include <algorithm>
 #include <vector>
@@ -180,15 +180,15 @@ namespace persistence_utils {
         }
     }
 
-    int save_model(UwotModel* model, const char* filename) {
+    int save_model(PacMapModel* model, const char* filename) {
         if (!model || !model->is_fitted || !filename) {
-            return UWOT_ERROR_INVALID_PARAMS;
+            return PACMAP_ERROR_INVALID_PARAMS;
         }
 
 
         std::ofstream file(filename, std::ios::binary);
         if (!file.is_open()) {
-            return UWOT_ERROR_FILE_IO;
+            return PACMAP_ERROR_FILE_IO;
         }
 
         try {
@@ -201,7 +201,7 @@ namespace persistence_utils {
             endian_utils::write_value(file, format_version);
 
             // Library version (16 bytes) - keep as string for compatibility
-            file.write(UWOT_WRAPPER_VERSION_STRING, 16);
+            file.write(PACMAP_WRAPPER_VERSION_STRING, 16);
 
             // Basic model parameters (endian-safe)
             endian_utils::write_value(file, model->n_vertices);
@@ -421,15 +421,15 @@ namespace persistence_utils {
             endian_utils::write_value(file, model->model_version_crc);
 
             file.close();
-            return UWOT_SUCCESS;
+            return PACMAP_SUCCESS;
         }
         catch (const std::exception& e) {
             send_error_to_callback(e.what());
-            return UWOT_ERROR_FILE_IO;
+            return PACMAP_ERROR_FILE_IO;
         }
     }
 
-    UwotModel* load_model(const char* filename) {
+    PacMapModel* load_model(const char* filename) {
         if (!filename) {
             return nullptr;
         }
@@ -439,7 +439,7 @@ namespace persistence_utils {
             return nullptr;
         }
 
-        UwotModel* model = nullptr;
+        PacMapModel* model = nullptr;
 
         try {
             model = model_utils::create_model();
@@ -467,7 +467,7 @@ namespace persistence_utils {
             // Read library version (16 bytes) - keep as string for compatibility
             char version[17] = { 0 };
             file.read(version, 16);
-            if (strcmp(version, UWOT_WRAPPER_VERSION_STRING) != 0) {
+            if (strcmp(version, PACMAP_WRAPPER_VERSION_STRING) != 0) {
                 send_warning_to_callback("Model version mismatch - attempting to load anyway");
             }
 
@@ -485,7 +485,7 @@ namespace persistence_utils {
             if (!endian_utils::read_value(file, metric_value)) {
                 throw std::runtime_error("Failed to read metric parameter");
             }
-            model->metric = static_cast<UwotMetric>(metric_value);
+            model->metric = static_cast<PacMapMetric>(metric_value);
 
             if (!endian_utils::read_value(file, model->a) ||
                 !endian_utils::read_value(file, model->b)) {
@@ -778,7 +778,7 @@ namespace persistence_utils {
             if (has_embedding_index) {
                 try {
                     // Initialize embedding space factory (always L2 for embeddings)
-                    if (!model->embedding_space_factory->create_space(UWOT_METRIC_EUCLIDEAN, model->embedding_dim)) {
+                    if (!model->embedding_space_factory->create_space(PACMAP_METRIC_EUCLIDEAN, model->embedding_dim)) {
                         throw std::runtime_error("Failed to create embedding space HNSW space");
                     }
 
@@ -825,7 +825,7 @@ namespace persistence_utils {
                 send_warning_to_callback("Rebuilding embedding space HNSW index from saved embeddings (always_save_embedding_data mode)");
                 try {
                     // Initialize embedding space factory (always L2 for embeddings)
-                    if (!model->embedding_space_factory->create_space(UWOT_METRIC_EUCLIDEAN, model->embedding_dim)) {
+                    if (!model->embedding_space_factory->create_space(PACMAP_METRIC_EUCLIDEAN, model->embedding_dim)) {
                         throw std::runtime_error("Failed to create embedding space HNSW space");
                     }
 
@@ -906,7 +906,7 @@ namespace persistence_utils {
                     send_warning_to_callback("Rebuilding embedding space HNSW from saved embeddings");
                     try {
                         // Initialize embedding space factory (always L2)
-                        if (!model->embedding_space_factory->create_space(UWOT_METRIC_EUCLIDEAN, model->embedding_dim)) {
+                        if (!model->embedding_space_factory->create_space(PACMAP_METRIC_EUCLIDEAN, model->embedding_dim)) {
                             throw std::runtime_error("Failed to create embedding space HNSW for reconstruction");
                         }
 

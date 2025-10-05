@@ -1,6 +1,6 @@
 #pragma once
 
-#include "uwot_simple_wrapper.h"
+#include "pacmap_simple_wrapper.h"
 #include "hnswlib.h"
 #include "hnswalg.h"
 #include "space_l2.h"
@@ -58,12 +58,12 @@ namespace hnsw_utils {
         std::unique_ptr<hnswlib::L2Space> l2_space;
         std::unique_ptr<hnswlib::InnerProductSpace> ip_space;
         std::unique_ptr<L1Space> l1_space;
-        UwotMetric current_metric;
+        PacMapMetric current_metric;
         int current_dim;
 
-        SpaceFactory() : current_metric(UWOT_METRIC_EUCLIDEAN), current_dim(0) {}
+        SpaceFactory() : current_metric(PACMAP_METRIC_EUCLIDEAN), current_dim(0) {}
 
-        bool create_space(UwotMetric metric, int n_dim);
+        bool create_space(PacMapMetric metric, int n_dim);
         hnswlib::SpaceInterface<float>* get_space();
         bool can_use_hnsw() const;
     };
@@ -95,7 +95,7 @@ namespace hnsw_utils {
 
     // Temporary normalization utilities (will be moved to separate module later)
     namespace NormalizationPipeline {
-        int determine_normalization_mode(UwotMetric metric);
+        int determine_normalization_mode(PacMapMetric metric);
         bool normalize_data_consistent(std::vector<float>& input_data, std::vector<float>& output_data,
             int n_obs, int n_dim, std::vector<float>& means, std::vector<float>& stds, int mode);
     }

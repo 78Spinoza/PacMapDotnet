@@ -1,6 +1,6 @@
-#include "uwot_hnsw_utils.h"
-#include "uwot_progress_utils.h"
-#include "uwot_crc32.h"
+#include "pacmap_hnsw_utils.h"
+#include "pacmap_progress_utils.h"
+#include "pacmap_crc32.h"
 #include "lz4.h"
 
 // Endian-safe serialization utilities (inline for HNSW)
@@ -56,7 +56,7 @@ namespace endian_utils {
 // HNSW space factory implementation
 namespace hnsw_utils {
 
-    bool SpaceFactory::create_space(UwotMetric metric, int n_dim) {
+    bool SpaceFactory::create_space(PacMapMetric metric, int n_dim) {
         current_metric = metric;
         current_dim = n_dim;
 
@@ -67,15 +67,15 @@ namespace hnsw_utils {
 
         try {
             switch (metric) {
-            case UWOT_METRIC_EUCLIDEAN:
+            case PACMAP_METRIC_EUCLIDEAN:
                 l2_space = std::make_unique<hnswlib::L2Space>(n_dim);
                 return true;
 
-            case UWOT_METRIC_COSINE:
+            case PACMAP_METRIC_COSINE:
                 ip_space = std::make_unique<hnswlib::InnerProductSpace>(n_dim);
                 return true;
 
-            case UWOT_METRIC_MANHATTAN:
+            case PACMAP_METRIC_MANHATTAN:
                 l1_space = std::make_unique<L1Space>(n_dim);
                 return true;
 
@@ -90,11 +90,11 @@ namespace hnsw_utils {
 
     hnswlib::SpaceInterface<float>* SpaceFactory::get_space() {
         switch (current_metric) {
-        case UWOT_METRIC_EUCLIDEAN:
+        case PACMAP_METRIC_EUCLIDEAN:
             return l2_space.get();
-        case UWOT_METRIC_COSINE:
+        case PACMAP_METRIC_COSINE:
             return ip_space.get();
-        case UWOT_METRIC_MANHATTAN:
+        case PACMAP_METRIC_MANHATTAN:
             return l1_space.get();
         default:
             return nullptr;
@@ -102,9 +102,9 @@ namespace hnsw_utils {
     }
 
     bool SpaceFactory::can_use_hnsw() const {
-        return current_metric == UWOT_METRIC_EUCLIDEAN ||
-               current_metric == UWOT_METRIC_COSINE ||
-               current_metric == UWOT_METRIC_MANHATTAN;
+        return current_metric == PACMAP_METRIC_EUCLIDEAN ||
+               current_metric == PACMAP_METRIC_COSINE ||
+               current_metric == PACMAP_METRIC_MANHATTAN;
     }
 
     // HNSW stream utilities implementation
@@ -443,12 +443,12 @@ namespace hnsw_utils {
 
     // Temporary normalization utilities (will be moved to separate module later)
     namespace NormalizationPipeline {
-        int determine_normalization_mode(UwotMetric metric) {
+        int determine_normalization_mode(PacMapMetric metric) {
             // Enhanced logic for proper HNSW compatibility
-            if (metric == UWOT_METRIC_COSINE) {
+            if (metric == PACMAP_METRIC_COSINE) {
                 return 2; // L2 normalization for cosine (HNSW InnerProductSpace requires unit vectors)
             }
-            else if (metric == UWOT_METRIC_CORRELATION) {
+            else if (metric == PACMAP_METRIC_CORRELATION) {
                 return 0; // No normalization for correlation
             }
             return 1; // Use z-score normalization for other metrics

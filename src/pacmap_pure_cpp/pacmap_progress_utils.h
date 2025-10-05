@@ -1,7 +1,9 @@
 #pragma once
 
-#include "uwot_simple_wrapper.h"
 #include <string>
+
+// Forward declaration of callback type to avoid circular dependency
+typedef void (*uwot_progress_callback_v2)(const char* phase, int current, int total, float percent, const char* message);
 
 // Global variables for passing information to v2 callbacks
 extern thread_local float g_current_epoch_loss;

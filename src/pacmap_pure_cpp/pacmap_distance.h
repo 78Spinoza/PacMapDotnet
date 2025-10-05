@@ -1,6 +1,6 @@
 #pragma once
 
-#include "uwot_model.h"
+#include "pacmap_model.h"
 #include <cmath>
 #include <algorithm>
 
@@ -15,19 +15,19 @@ namespace distance_metrics {
     float hamming_distance(const float* a, const float* b, int dim);
 
     // Unified distance computation based on metric type
-    float compute_distance(const float* a, const float* b, int dim, UwotMetric metric);
+    float compute_distance(const float* a, const float* b, int dim, PacMapMetric metric);
 
     // Data validation for metric-specific requirements
-    void validate_metric_data(const float* data, int n_obs, int n_dim, UwotMetric metric);
+    void validate_metric_data(const float* data, int n_obs, int n_dim, PacMapMetric metric);
 
     // Zero-norm vector detection for cosine and correlation metrics
-    bool detect_zero_norm_vectors(const float* data, int n_obs, int n_dim, UwotMetric metric);
+    bool detect_zero_norm_vectors(const float* data, int n_obs, int n_dim, PacMapMetric metric);
 
     // Helper functions for common distance conversion patterns
 
     // Find k nearest neighbors from a query point to all dataset points (exact search)
     void find_knn_exact(const float* query_point, const float* dataset, int n_obs, int n_dim,
-                       UwotMetric metric, int k_neighbors, std::vector<std::pair<float, int>>& neighbors_out,
+                       PacMapMetric metric, int k_neighbors, std::vector<std::pair<float, int>>& neighbors_out,
                        int query_index = -1);
 
     // Compare two neighbor lists and calculate recall (intersection / union)
@@ -35,7 +35,7 @@ namespace distance_metrics {
                           const int* hnsw_neighbor_indices, int k_neighbors);
 
     // Build distance matrix with progress reporting (all-to-all distances)
-    void build_distance_matrix(const float* data, int n_obs, int n_dim, UwotMetric metric,
+    void build_distance_matrix(const float* data, int n_obs, int n_dim, PacMapMetric metric,
                               float* distance_matrix, uwot_progress_callback_v2 progress_callback = nullptr,
                               int current_obs = 0, int total_obs = 0);
 

@@ -1,7 +1,7 @@
-#include "uwot_fit.h"
-#include "uwot_simple_wrapper.h"
-#include "uwot_quantization.h"
-#include "uwot_distance.h"
+#include "pacmap_fit.h"
+#include "pacmap_simple_wrapper.h"
+#include "pacmap_quantization.h"
+#include "pacmap_distance.h"
 #include <iostream>
 #include <fstream>
 #include <algorithm>
@@ -45,7 +45,7 @@ namespace fit_utils {
     }
 
     // Helper function to compute comprehensive neighbor statistics
-    void compute_neighbor_statistics(UwotModel* model, const std::vector<float>& normalized_data) {
+    void compute_neighbor_statistics(PacMapModel* model, const std::vector<float>& normalized_data) {
         if (!model->original_space_index || model->n_vertices == 0) return;
 
         std::vector<float> all_distances;
@@ -69,15 +69,15 @@ namespace fit_utils {
                         // Convert HNSW distance based on metric
                         float distance = pair.first;
                         switch (model->metric) {
-                        case UWOT_METRIC_EUCLIDEAN:
+                        case PACMAP_METRIC_EUCLIDEAN:
                             distance = std::sqrt(std::max(0.0f, distance)); // L2Space returns squared distance
                             break;
-                        case UWOT_METRIC_COSINE:
+                        case PACMAP_METRIC_COSINE:
                             // InnerProductSpace returns -inner_product for unit vectors
                             // Convert to cosine distance: distance = 1 - similarity
                             distance = std::max(0.0f, std::min(2.0f, 1.0f + distance));
                             break;
-                        case UWOT_METRIC_MANHATTAN:
+                        case PACMAP_METRIC_MANHATTAN:
                             // L1Space returns direct Manhattan distance
                             distance = std::max(0.0f, distance);
                             break;
@@ -147,7 +147,7 @@ namespace fit_utils {
 
     // Build k-NN graph using specified distance metric
     void build_knn_graph(const std::vector<float>& data, int n_obs, int n_dim,
-        int n_neighbors, UwotMetric metric, UwotModel* model,
+        int n_neighbors, PacMapMetric metric, PacMapModel* model,
         std::vector<int>& nn_indices, std::vector<double>& nn_distances,
         int force_exact_knn, uwot_progress_callback_v2 progress_callback, int autoHNSWParam) {
 
@@ -196,15 +196,15 @@ namespace fit_utils {
                         // Convert HNSW distance to actual distance based on metric
                         float distance = neighbors[k].first;
                         switch (metric) {
-                        case UWOT_METRIC_EUCLIDEAN:
+                        case PACMAP_METRIC_EUCLIDEAN:
                             distance = std::sqrt(std::max(0.0f, distance)); // L2Space returns squared distance
                             break;
-                        case UWOT_METRIC_COSINE:
+                        case PACMAP_METRIC_COSINE:
                             // InnerProductSpace returns -inner_product for unit vectors
                             // Convert to cosine distance: distance = 1 - similarity
                             distance = std::max(0.0f, std::min(2.0f, 1.0f + distance));
                             break;
-                        case UWOT_METRIC_MANHATTAN:
+                        case PACMAP_METRIC_MANHATTAN:
                             // L1Space returns direct Manhattan distance
                             distance = std::max(0.0f, distance);
                             break;
@@ -367,7 +367,7 @@ namespace fit_utils {
 
     // Calculate UMAP a,b parameters from spread and min_dist
     // Based on the official UMAP implementation curve fitting
-    void calculate_ab_from_spread_and_min_dist(UwotModel* model) {
+    void calculate_ab_from_spread_and_min_dist(PacMapModel* model) {
         float spread = model->spread;
         float min_dist = model->min_dist;
 
@@ -421,7 +421,7 @@ namespace fit_utils {
     }
 
     // Main fit function with progress reporting
-    int uwot_fit_with_progress(UwotModel* model,
+    int uwot_fit_with_progress(PacMapModel* model,
         float* data,
         int n_obs,
         int n_dim,
@@ -430,9 +430,9 @@ namespace fit_utils {
         float min_dist,
         float spread,
         int n_epochs,
-        UwotMetric metric,
+        PacMapMetric metric,
         float* embedding,
-        uwot_progress_callback progress_callback,
+        uwot_progress_callback_v2 progress_callback,
         int force_exact_knn,
         int M,
         int ef_construction,
@@ -445,11 +445,11 @@ namespace fit_utils {
 
         if (!model || !data || !embedding || n_obs <= 0 || n_dim <= 0 ||
             embedding_dim <= 0 || n_neighbors <= 0 || n_epochs <= 0) {
-            return UWOT_ERROR_INVALID_PARAMS;
+            return PACMAP_ERROR_INVALID_PARAMS;
         }
 
         if (embedding_dim > 50) {
-            return UWOT_ERROR_INVALID_PARAMS;
+            return PACMAP_ERROR_INVALID_PARAMS;
         }
 
         // Validate data appropriateness for the selected metric
@@ -521,7 +521,7 @@ namespace fit_utils {
 
             // CRITICAL FIX: Create HNSW index BEFORE k-NN graph so build_knn_graph can use it
             if (!model->original_space_factory->create_space(metric, n_dim)) {
-                return UWOT_ERROR_MEMORY;
+                return PACMAP_ERROR_MEMORY;
             }
 
             // Memory estimation for HNSW index - calculate expected memory usage
@@ -819,23 +819,23 @@ namespace fit_utils {
             // Fix 6: Bounds-checked element-wise copy instead of unsafe memcpy
             size_t expected = static_cast<size_t>(n_obs) * static_cast<size_t>(embedding_dim);
             if (model->embedding.size() < expected) {
-                return UWOT_ERROR_MEMORY;
+                return PACMAP_ERROR_MEMORY;
             }
             for (size_t i = 0; i < expected; ++i) {
                 embedding[i] = model->embedding[i];
             }
 
             model->is_fitted = true;
-            return UWOT_SUCCESS;
+            return PACMAP_SUCCESS;
 
         }
         catch (...) {
-            return UWOT_ERROR_MEMORY;
+            return PACMAP_ERROR_MEMORY;
         }
     }
 
     // Enhanced v2 function with loss reporting - delegates to existing function
-    int uwot_fit_with_progress_v2(UwotModel* model,
+    int uwot_fit_with_progress_v2(PacMapModel* model,
         float* data,
         int n_obs,
         int n_dim,
@@ -844,7 +844,7 @@ namespace fit_utils {
         float min_dist,
         float spread,
         int n_epochs,
-        UwotMetric metric,
+        PacMapMetric metric,
         float* embedding,
         uwot_progress_callback_v2 progress_callback,
         int force_exact_knn,
@@ -862,14 +862,14 @@ namespace fit_utils {
             if (progress_callback) {
                 progress_callback("Error", 0, 1, 0.0f, "Invalid parameters: model, data, or embedding parameters are invalid");
             }
-            return UWOT_ERROR_INVALID_PARAMS;
+            return PACMAP_ERROR_INVALID_PARAMS;
         }
 
         if (embedding_dim > 50) {
             if (progress_callback) {
                 progress_callback("Error", 0, 1, 0.0f, "Invalid parameter: embedding dimension must be <= 50");
             }
-            return UWOT_ERROR_INVALID_PARAMS;
+            return PACMAP_ERROR_INVALID_PARAMS;
         }
 
         // Validate data appropriateness for the selected metric
@@ -881,7 +881,7 @@ namespace fit_utils {
             static thread_local uwot_progress_callback_v2 g_local_v2_callback = nullptr;
             g_local_v2_callback = progress_callback;
 
-            uwot_progress_callback v1_callback = nullptr;
+            uwot_progress_callback_v2 v1_callback = nullptr;
             if (progress_callback) {
                 v1_callback = [](int epoch, int total_epochs, float percent) {
                     if (g_local_v2_callback) {
@@ -907,7 +907,7 @@ namespace fit_utils {
             else {
                 send_error_to_callback(error_msg);
             }
-            return UWOT_ERROR_MEMORY;
+            return PACMAP_ERROR_MEMORY;
         }
     }
 

@@ -1,8 +1,8 @@
-#include "uwot_transform.h"
-#include "uwot_simple_wrapper.h"
-#include "uwot_quantization.h"
-#include "uwot_crc32.h"
-#include "uwot_progress_utils.h"
+#include "pacmap_transform.h"
+#include "pacmap_simple_wrapper.h"
+#include "pacmap_quantization.h"
+#include "pacmap_crc32.h"
+#include "pacmap_progress_utils.h"
 #include <iostream>
 #include <algorithm>
 #include <numeric>
@@ -12,7 +12,7 @@ namespace transform_utils {
 
     // TEMPORARY: Use exact working version from git commit 65abd80
     int uwot_transform_detailed(
-        UwotModel* model,
+        PacMapModel* model,
         float* new_data,
         int n_new_obs,
         int n_dim,
@@ -26,7 +26,7 @@ namespace transform_utils {
     ) {
         if (!model || !model->is_fitted || !new_data || !embedding ||
             n_new_obs <= 0 || n_dim != model->n_dim) {
-            return UWOT_ERROR_INVALID_PARAMS;
+            return PACMAP_ERROR_INVALID_PARAMS;
         }
 
         // Transform operation starting
@@ -125,14 +125,14 @@ namespace transform_utils {
 
                         // Apply metric-specific distance conversion
                         switch (model->metric) {
-                        case UWOT_METRIC_EUCLIDEAN:
+                        case PACMAP_METRIC_EUCLIDEAN:
                             // L2Space returns squared distance - convert to actual Euclidean distance
                             distance = std::sqrt(std::max(0.0f, distance));
                             break;
-                        case UWOT_METRIC_COSINE:
+                        case PACMAP_METRIC_COSINE:
                             distance = std::max(0.0f, std::min(2.0f, 1.0f + distance));
                             break;
-                        case UWOT_METRIC_MANHATTAN:
+                        case PACMAP_METRIC_MANHATTAN:
                             distance = std::max(0.0f, distance);
                             break;
                         default:
@@ -181,14 +181,14 @@ namespace transform_utils {
 
                     // Convert HNSW distance based on metric
                     switch (model->metric) {
-                    case UWOT_METRIC_EUCLIDEAN:
+                    case PACMAP_METRIC_EUCLIDEAN:
                         // HNSW already returns actual Euclidean distance - no conversion needed
                         // distance = distance;  // No-op
                         break;
-                    case UWOT_METRIC_COSINE:
+                    case PACMAP_METRIC_COSINE:
                         distance = std::max(0.0f, std::min(2.0f, 1.0f + distance));
                         break;
-                    case UWOT_METRIC_MANHATTAN:
+                    case PACMAP_METRIC_MANHATTAN:
                         distance = std::max(0.0f, distance);
                         break;
                     default:
@@ -355,24 +355,24 @@ namespace transform_utils {
             // Fix 6: Bounds-checked element-wise copy instead of unsafe memcpy
             size_t expected = static_cast<size_t>(n_new_obs) * static_cast<size_t>(model->embedding_dim);
             if (new_embedding.size() < expected) {
-                return UWOT_ERROR_MEMORY;
+                return PACMAP_ERROR_MEMORY;
             }
             for (size_t i = 0; i < expected; ++i) {
                 embedding[i] = new_embedding[i];
             }
 
-            return UWOT_SUCCESS;
+            return PACMAP_SUCCESS;
 
         }
         catch (const std::exception& e) {
             send_error_to_callback(e.what());
-            return UWOT_ERROR_MEMORY;
+            return PACMAP_ERROR_MEMORY;
         }
     }
 
     // Minimal uwot_transform that just calls uwot_transform_detailed
     int uwot_transform(
-        UwotModel* model,
+        PacMapModel* model,
         float* new_data,
         int n_new_obs,
         int n_dim,

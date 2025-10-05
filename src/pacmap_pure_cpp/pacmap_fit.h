@@ -1,9 +1,9 @@
 #pragma once
 
-#include "uwot_model.h"
-#include "uwot_hnsw_utils.h"
-#include "uwot_progress_utils.h"
-#include "uwot_distance.h"
+#include "pacmap_model.h"
+#include "pacmap_hnsw_utils.h"
+#include "pacmap_progress_utils.h"
+#include "pacmap_distance.h"
 #include <vector>
 #include <map>
 #include <algorithm>
@@ -26,7 +26,7 @@ namespace fit_utils {
     void build_knn_graph(
         const std::vector<float>& data,
         int n_obs, int n_dim, int n_neighbors,
-        UwotMetric metric, UwotModel* model,
+        PacMapMetric metric, PacMapModel* model,
         std::vector<int>& nn_indices,
         std::vector<double>& nn_distances,
         int force_exact_knn,
@@ -45,7 +45,7 @@ namespace fit_utils {
     );
 
     // Calculate UMAP parameters from spread and min_dist
-    void calculate_ab_from_spread_and_min_dist(UwotModel* model);
+    void calculate_ab_from_spread_and_min_dist(PacMapModel* model);
 
     // Compute normalization parameters for training data
     void compute_normalization(
@@ -56,11 +56,11 @@ namespace fit_utils {
     );
 
     // Compute neighbor statistics for safety analysis
-    void compute_neighbor_statistics(UwotModel* model, const std::vector<float>& normalized_data);
+    void compute_neighbor_statistics(PacMapModel* model, const std::vector<float>& normalized_data);
 
     // Main fit function with progress reporting
     int uwot_fit_with_progress(
-        UwotModel* model,
+        PacMapModel* model,
         float* data,
         int n_obs,
         int n_dim,
@@ -69,9 +69,9 @@ namespace fit_utils {
         float min_dist,
         float spread,
         int n_epochs,
-        UwotMetric metric,
+        PacMapMetric metric,
         float* embedding,
-        uwot_progress_callback progress_callback,
+        uwot_progress_callback_v2 progress_callback,
         int force_exact_knn,
         int M,
         int ef_construction,
@@ -83,7 +83,7 @@ namespace fit_utils {
 
     // Enhanced v2 function with loss reporting
     int uwot_fit_with_progress_v2(
-        UwotModel* model,
+        PacMapModel* model,
         float* data,
         int n_obs,
         int n_dim,
@@ -92,7 +92,7 @@ namespace fit_utils {
         float min_dist,
         float spread,
         int n_epochs,
-        UwotMetric metric,
+        PacMapMetric metric,
         float* embedding,
         uwot_progress_callback_v2 progress_callback,
         int force_exact_knn,
@@ -107,14 +107,14 @@ namespace fit_utils {
     // Helper functions for uwot_fit refactoring
     namespace fit_helpers {
         // HNSW recall validation and auto-tuning
-        bool validate_hnsw_recall(UwotModel* model, const float* data, int n_obs, int n_dim,
-                                  int n_neighbors, UwotMetric metric, uwot_progress_callback_v2 progress_callback);
+        bool validate_hnsw_recall(PacMapModel* model, const float* data, int n_obs, int n_dim,
+                                  int n_neighbors, PacMapMetric metric, uwot_progress_callback_v2 progress_callback);
 
         // Auto-tune ef_search parameter based on recall measurement
-        bool auto_tune_ef_search(UwotModel* model, const float* data, int n_obs, int n_dim,
-                                 int n_neighbors, UwotMetric metric, uwot_progress_callback_v2 progress_callback);
+        bool auto_tune_ef_search(PacMapModel* model, const float* data, int n_obs, int n_dim,
+                                 int n_neighbors, PacMapMetric metric, uwot_progress_callback_v2 progress_callback);
 
         // Initialize random number generators with seed
-        void initialize_random_generators(UwotModel* model);
+        void initialize_random_generators(PacMapModel* model);
     }
 }

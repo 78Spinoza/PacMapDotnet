@@ -1,4 +1,4 @@
-#include "uwot_distance.h"
+#include "pacmap_distance.h"
 #include <cstdio>  // For fprintf warnings
 
 namespace distance_metrics {
@@ -76,17 +76,17 @@ namespace distance_metrics {
         return static_cast<float>(different) / static_cast<float>(dim);
     }
 
-    float compute_distance(const float* a, const float* b, int dim, UwotMetric metric) {
+    float compute_distance(const float* a, const float* b, int dim, PacMapMetric metric) {
         switch (metric) {
-        case UWOT_METRIC_EUCLIDEAN:
+        case PACMAP_METRIC_EUCLIDEAN:
             return euclidean_distance(a, b, dim);
-        case UWOT_METRIC_COSINE:
+        case PACMAP_METRIC_COSINE:
             return cosine_distance(a, b, dim);
-        case UWOT_METRIC_MANHATTAN:
+        case PACMAP_METRIC_MANHATTAN:
             return manhattan_distance(a, b, dim);
-        case UWOT_METRIC_CORRELATION:
+        case PACMAP_METRIC_CORRELATION:
             return correlation_distance(a, b, dim);
-        case UWOT_METRIC_HAMMING:
+        case PACMAP_METRIC_HAMMING:
             return hamming_distance(a, b, dim);
         default:
             return euclidean_distance(a, b, dim);
@@ -148,28 +148,28 @@ namespace distance_metrics {
     }
 
     // Main validation function that issues warnings for inappropriate data
-    void validate_metric_data(const float* data, int n_obs, int n_dim, UwotMetric metric) {
+    void validate_metric_data(const float* data, int n_obs, int n_dim, PacMapMetric metric) {
         switch (metric) {
-            case UWOT_METRIC_HAMMING:
+            case PACMAP_METRIC_HAMMING:
                 if (!validate_hamming_data(data, n_obs, n_dim)) {
                     fprintf(stderr, "WARNING: Hamming metric expects binary data (0/1 values). "
                                    "Non-binary data detected - results may be meaningless.\n");
                 }
                 break;
 
-            case UWOT_METRIC_CORRELATION:
+            case PACMAP_METRIC_CORRELATION:
                 if (!validate_correlation_data(data, n_obs, n_dim)) {
                     fprintf(stderr, "WARNING: Correlation metric expects data with meaningful variance. "
                                    "Constant or near-constant features detected - results may be unreliable.\n");
                 }
                 break;
 
-            case UWOT_METRIC_COSINE:
+            case PACMAP_METRIC_COSINE:
                 // Could add validation for zero-norm vectors, but cosine_distance already handles this
                 break;
 
-            case UWOT_METRIC_EUCLIDEAN:
-            case UWOT_METRIC_MANHATTAN:
+            case PACMAP_METRIC_EUCLIDEAN:
+            case PACMAP_METRIC_MANHATTAN:
             default:
                 // These metrics are generally robust to different data types
                 break;
