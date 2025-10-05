@@ -1,0 +1,37 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(PacMapDemo:*)",
+      "Bash(\"PacMapDemo\\bin\\Release\\net8.0\\PacMapDemo.exe\" mammoth hnsw)",
+      "Bash(RUST_BACKTRACE=1 ./PacMapDemo.exe mammoth hnsw)",
+      "Bash(RUST_BACKTRACE=full ./PacMapDemo.exe mammoth hnsw)",
+      "Bash(export:*)",
+      "Bash(tasklist:*)",
+      "Bash(dir:*)",
+      "Bash(cargo build:*)",
+      "Bash(awk:*)",
+      "Bash(cargo clean:*)",
+      "Bash(PACMAP_VERBOSE=1 cargo build --release)",
+      "Bash(dotnet build:*)",
+      "Bash(timeout:*)",
+      "Bash(./PacMapDemo.exe)",
+      "Bash(./PacMapDemo.exe 2)",
+      "Bash(1)",
+      "Bash(cargo test:*)",
+      "Bash(dotnet clean:*)",
+      "Bash(\"./PacMapDemo/bin/Release/net8.0/win-x64/PacMapDemo.exe\" mammoth hnsw)",
+      "Bash(./PacMapDemo.exe mammoth hnsw)",
+      "Bash(taskkill:*)",
+      "Bash(git log:*)",
+      "Bash(git checkout:*)",
+      "Bash(git stash show:*)",
+      "Bash(tee:*)",
+      "Bash(PACMAP_VERBOSE=1 timeout 30 ./PacMapDemo.exe mammoth hnsw)",
+      "Bash(git rm:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
