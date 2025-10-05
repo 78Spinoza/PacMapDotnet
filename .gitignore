@@ -1,0 +1,191 @@
+# Build outputs and binaries
+bin/
+obj/
+out/
+build/
+dist/
+target/
+*.exe
+*.dll
+*.so
+*.dylib
+*.a
+*.lib
+*.exp
+*.pdb
+*.ilk
+*.map
+*.tmp
+*.cache
+
+# C# specific
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.vspscc
+*.vssscc
+*.userosscache
+
+# C++ specific
+*.o
+*.obj
+*.tlog
+*.pch
+*.pdb
+*.pgc
+*.pgd
+*.rsp
+*.sbr
+*.tlb
+*.tli
+*.tlh
+*.opt
+*.plg
+*.tps
+*.aps
+*.clw
+*.opt
+*.ncb
+*.plg
+*.bsc
+*.sbr
+*.xml
+*.metagen
+*.metagen.bin
+
+# Visual Studio specific
+.vs/
+.vscode/settings.json
+.vscode/launch.json
+.vscode/extensions.json
+.vscode/tasks.json
+*.vcxproj*
+*.sln
+*.filters
+*.vcxproj.filters
+*.props
+*.targets
+*.dirprops
+
+# Rider specific
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Windows specific
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# macOS specific
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+
+# Linux specific
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# Package files
+*.nupkg
+*.snupkg
+*.zip
+*.tar.gz
+*.rar
+
+# Logs
+*.log
+logs/
+
+# Test results
+TestResults/
+Coverage/
+*.coverage
+*.coveragexml
+*.trx
+*.vsidx
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# Node.js (if any)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Python (if any)
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Profiling
+*.prof
+*.profraw
+
+# Model files (can be large)
+*.model
+*.pmm
+*.umap
+
+# Dataset files (can be large)
+*.csv
+*.h5
+*.hdf5
+*.parquet
+*.feather
+*.arrow
+
+# Benchmark results
+benchmark_results/
+performance_logs/
+
+# Documentation build
+docs/_build/
+docs/.doctrees/
+site/
+
+# Backup files
+*.bak
+*.backup
+*.old
+*.orig
+*.rej
+
+# Auto-generated files
+auto/
+generated/
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Secrets
+secrets/
+*.key
+*.pem
+*.crt
+*.pfx
