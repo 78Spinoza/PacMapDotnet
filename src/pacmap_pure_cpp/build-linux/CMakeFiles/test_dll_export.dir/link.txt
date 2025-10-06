@@ -1,0 +1,1 @@
+/usr/bin/c++ -O3 -DNDEBUG CMakeFiles/test_dll_export.dir/test_dll_export.cpp.o -o bin/test_dll_export  -Wl,-rpath,/src/build-linux/lib lib/libpacmap.so 

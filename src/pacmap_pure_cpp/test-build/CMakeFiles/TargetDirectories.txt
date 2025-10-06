@@ -1,0 +1,8 @@
+C:/PacMapDotnet/src/pacmap_pure_cpp/test-build/CMakeFiles/pacmap.dir
+C:/PacMapDotnet/src/pacmap_pure_cpp/test-build/CMakeFiles/run_all_tests.dir
+C:/PacMapDotnet/src/pacmap_pure_cpp/test-build/CMakeFiles/test_minimal_standalone.dir
+C:/PacMapDotnet/src/pacmap_pure_cpp/test-build/CMakeFiles/test_simple_minimal.dir
+C:/PacMapDotnet/src/pacmap_pure_cpp/test-build/CMakeFiles/test_dll_export.dir
+C:/PacMapDotnet/src/pacmap_pure_cpp/test-build/CMakeFiles/test_basic_integration.dir
+C:/PacMapDotnet/src/pacmap_pure_cpp/test-build/CMakeFiles/ALL_BUILD.dir
+C:/PacMapDotnet/src/pacmap_pure_cpp/test-build/CMakeFiles/ZERO_CHECK.dir

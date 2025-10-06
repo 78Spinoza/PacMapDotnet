@@ -1,0 +1,1 @@
+/usr/bin/c++ -O3 -DNDEBUG CMakeFiles/test_minimal_standalone.dir/test_minimal_standalone.cpp.o -o bin/test_minimal_standalone  -Wl,-rpath,/src/build-linux/lib lib/libpacmap.so 
