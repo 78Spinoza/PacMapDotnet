@@ -36,7 +36,7 @@ if !ERRORLEVEL! NEQ 0 (
 )
 
 echo [INFO] Running Windows validation tests...
-cd Release
+cd bin\Release
 
 REM Run all essential tests
 set WIN_ALL_TESTS_PASSED=1
@@ -95,7 +95,7 @@ if exist "test_basic_integration.exe" (
     set WIN_ALL_TESTS_PASSED=0
 )
 
-cd ..
+cd ..\..
 if !WIN_ALL_TESTS_PASSED! EQU 1 (
     echo [PASS] ALL Windows tests completed successfully
 ) else (
@@ -130,29 +130,19 @@ echo [PASS] Linux build completed
 
 REM === SETUP CSHARP PROJECT STRUCTURE ===
 echo.
-echo [3/3] Setting up Enhanced UMAPuwotSharp project...
+echo [3/3] Setting up PACMAPCSharp project...
 echo ----------------------------------------
 
-REM Create C# project structure
-if not exist "..\UMAPuwotSharp" (
-    echo [INFO] Creating UMAPuwotSharp project structure
-    mkdir "..\UMAPuwotSharp"
-)
-
-if not exist "..\UMAPuwotSharp\UMAPuwotSharp" (
-    mkdir "..\UMAPuwotSharp\UMAPuwotSharp"
-)
-
 REM Copy Windows DLL directly to project base folder
-if exist "build-windows\Release\uwot.dll" (
-    copy "build-windows\Release\uwot.dll" "..\UMAPuwotSharp\UMAPuwotSharp\uwot.dll"
+if exist "build-windows\bin\Release\pacmap.dll" (
+    copy "build-windows\bin\Release\pacmap.dll" "..\PACMAPCSharp\PACMAPCSharp\pacmap.dll"
     if !ERRORLEVEL! EQU 0 (
-        echo [PASS] Copied Windows uwot.dll to C# project base folder
+        echo [PASS] Copied Windows pacmap.dll to C# project base folder
     ) else (
-        echo [FAIL] Failed to copy Windows uwot.dll - Error: !ERRORLEVEL!
+        echo [FAIL] Failed to copy Windows pacmap.dll - Error: !ERRORLEVEL!
     )
 ) else (
-    echo [FAIL] Windows uwot.dll not found in build-windows\Release\
+    echo [FAIL] Windows pacmap.dll not found in build-windows\bin\Release\
 )
 
 REM Copy Linux .so file directly to project base folder
