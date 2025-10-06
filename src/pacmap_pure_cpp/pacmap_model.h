@@ -107,6 +107,11 @@ struct PacMapModel {
     // Quantization fields (for future implementation)
     std::vector<float> pq_centroids;
     int pq_m = 0;
+    std::vector<uint16_t> pq_codes;
+
+    // Factory fields for HNSW space creation
+    std::unique_ptr<hnswlib::SpaceInterface<float>> original_space_factory;
+    std::unique_ptr<hnswlib::SpaceInterface<float>> embedding_space_factory;
 
     // Unified triplet storage (review optimization)
     std::vector<Triplet> triplets;
@@ -121,6 +126,15 @@ struct PacMapModel {
     // Safety statistics (review addition)
     float min_embedding_dist = 0.0f;
     float p95_embedding_dist = 0.0f;
+
+    // Additional embedding statistics for safety analysis
+    float min_embedding_distance = 0.0f;
+    float p95_embedding_distance = 0.0f;
+    float p99_embedding_distance = 0.0f;
+    float mild_embedding_outlier_threshold = 0.0f;
+    float extreme_embedding_outlier_threshold = 0.0f;
+    float std_embedding_distance = 0.0f;
+    float mean_embedding_distance = 0.0f;
 
     // RNG for deterministic behavior (review requirement)
     std::mt19937 rng;

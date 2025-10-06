@@ -213,16 +213,15 @@ namespace PACMAPuwotSharp
             [MarshalAs(UnmanagedType.LPStr)] string message
         );
 
-        // Windows P/Invoke declarations
+        // Windows P/Invoke declarations - updated to use available UMAP functions
         [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_create")]
         private static extern IntPtr WindowsCreate();
 
         [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_fit_with_progress_v2")]
         private static extern int WindowsFitWithProgressV2(IntPtr model, float[,] data, int nObs, int nDim, int embeddingDim,
                                                           int nNeighbors, float mnRatio, float fpRatio,
-                                                          int phase1Iters, int phase2Iters, int phase3Iters,
-                                                          DistanceMetric metric, float learningRate,
-                                                          float[,] embedding, NativeProgressCallbackV2 progressCallback,
+                                                          float learningRate, int nIters, int phase1Iters, int phase2Iters, int phase3Iters,
+                                                          DistanceMetric metric, float[,] embedding, NativeProgressCallbackV2 progressCallback,
                                                           int forceExactKnn, int M, int efConstruction, int efSearch,
                                                           int useQuantization, int randomSeed = -1, int autoHNSWParam = 1);
 
@@ -244,7 +243,7 @@ namespace PACMAPuwotSharp
         [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_get_error_message")]
         private static extern IntPtr WindowsGetErrorMessage(int errorCode);
 
-        [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_get_model_info")]
+        [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_get_model_info_simple")]
         private static extern int WindowsGetModelInfo(IntPtr model, out int nVertices, out int nDim, out int embeddingDim,
                                                       out int nNeighbors, out float mnRatio, out float fpRatio,
                                                       out DistanceMetric metric, out int hnswM, out int hnswEfConstruction, out int hnswEfSearch);
@@ -259,9 +258,8 @@ namespace PACMAPuwotSharp
         [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_fit_with_progress_v2")]
         private static extern int LinuxFitWithProgressV2(IntPtr model, float[,] data, int nObs, int nDim, int embeddingDim,
                                                          int nNeighbors, float mnRatio, float fpRatio,
-                                                         int phase1Iters, int phase2Iters, int phase3Iters,
-                                                         DistanceMetric metric, float learningRate,
-                                                         float[,] embedding, NativeProgressCallbackV2 progressCallback,
+                                                         float learningRate, int nIters, int phase1Iters, int phase2Iters, int phase3Iters,
+                                                         DistanceMetric metric, float[,] embedding, NativeProgressCallbackV2 progressCallback,
                                                          int forceExactKnn, int M, int efConstruction, int efSearch,
                                                          int useQuantization, int randomSeed = -1, int autoHNSWParam = 1);
 
@@ -283,7 +281,7 @@ namespace PACMAPuwotSharp
         [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_get_error_message")]
         private static extern IntPtr LinuxGetErrorMessage(int errorCode);
 
-        [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_get_model_info")]
+        [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_get_model_info_simple")]
         private static extern int LinuxGetModelInfo(IntPtr model, out int nVertices, out int nDim, out int embeddingDim,
                                                     out int nNeighbors, out float mnRatio, out float fpRatio,
                                                     out DistanceMetric metric, out int hnswM, out int hnswEfConstruction, out int hnswEfSearch);
@@ -571,7 +569,7 @@ namespace PACMAPuwotSharp
 
             // Call native function
             var result = CallTransformDetailed(_nativeModel, newData, nNewSamples, nFeatures,
-                                             embedding, null, null, null, null, null, null);
+                                             embedding, null!, null!, null!, null!, null!, null!);
 
             // CRITICAL: Check for error BEFORE processing results
             if (result != PACMAP_SUCCESS)
@@ -755,17 +753,19 @@ namespace PACMAPuwotSharp
                     }
                 };
 
+                int totalIters = numIters.Item1 + numIters.Item2 + numIters.Item3;
                 result = CallFitWithProgressV2(_nativeModel, data, nSamples, nFeatures, embeddingDimension,
-                                                 nNeighbors, mnRatio, fpRatio, numIters.Item1, numIters.Item2, numIters.Item3,
-                                                 metric, learningRate, embedding, nativeCallback,
+                                                 nNeighbors, mnRatio, fpRatio, learningRate, totalIters, numIters.Item1, numIters.Item2, numIters.Item3,
+                                                 metric, embedding, nativeCallback,
                                                  forceExactKnn ? 1 : 0, hnswM, hnswEfConstruction, hnswEfSearch,
                                                  useQuantization ? 1 : 0, randomSeed, autoHNSWParam ? 1 : 0);
             }
             else
             {
+                int totalIters = numIters.Item1 + numIters.Item2 + numIters.Item3;
                 result = CallFitWithProgressV2(_nativeModel, data, nSamples, nFeatures, embeddingDimension,
-                                                 nNeighbors, mnRatio, fpRatio, numIters.Item1, numIters.Item2, numIters.Item3,
-                                                 metric, learningRate, embedding, null,
+                                                 nNeighbors, mnRatio, fpRatio, learningRate, totalIters, numIters.Item1, numIters.Item2, numIters.Item3,
+                                                 metric, embedding, null,
                                                  forceExactKnn ? 1 : 0, hnswM, hnswEfConstruction, hnswEfSearch,
                                                  useQuantization ? 1 : 0, randomSeed, autoHNSWParam ? 1 : 0);
             }
@@ -794,18 +794,17 @@ namespace PACMAPuwotSharp
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static int CallFitWithProgressV2(IntPtr model, float[,] data, int nObs, int nDim, int embeddingDim,
                                                   int nNeighbors, float mnRatio, float fpRatio,
-                                                  int phase1Iters, int phase2Iters, int phase3Iters,
-                                                  DistanceMetric metric, float learningRate,
-                                                  float[,] embedding, NativeProgressCallbackV2? progressCallback,
+                                                  float learningRate, int nIters, int phase1Iters, int phase2Iters, int phase3Iters,
+                                                  DistanceMetric metric, float[,] embedding, NativeProgressCallbackV2? progressCallback,
                                                   int forceExactKnn, int M, int efConstruction, int efSearch,
                                                   int useQuantization, int randomSeed = -1, int autoHNSWParam = 1)
         {
             var callback = progressCallback ?? ((phase, current, total, percent, message) => { });
             return IsWindows ? WindowsFitWithProgressV2(model, data, nObs, nDim, embeddingDim, nNeighbors, mnRatio, fpRatio,
-                                                      phase1Iters, phase2Iters, phase3Iters, metric, learningRate, embedding, callback,
+                                                      learningRate, nIters, phase1Iters, phase2Iters, phase3Iters, metric, embedding, callback,
                                                       forceExactKnn, M, efConstruction, efSearch, useQuantization, randomSeed, autoHNSWParam)
                              : LinuxFitWithProgressV2(model, data, nObs, nDim, embeddingDim, nNeighbors, mnRatio, fpRatio,
-                                                     phase1Iters, phase2Iters, phase3Iters, metric, learningRate, embedding, callback,
+                                                     learningRate, nIters, phase1Iters, phase2Iters, phase3Iters, metric, embedding, callback,
                                                      forceExactKnn, M, efConstruction, efSearch, useQuantization, randomSeed, autoHNSWParam);
         }
 

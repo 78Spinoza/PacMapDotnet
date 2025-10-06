@@ -19,11 +19,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\UMAPuwotSharp\UMAPuwotSharp.csproj" />
+    <ProjectReference Include="..\PACMAPCSharp\PACMAPCSharp.csproj" />
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="..\UMAPuwotSharp\runtimes\**\*" Link="runtimes\%(RecursiveDir)%(Filename)%(Extension)">
+    <None Include="..\PACMAPCSharp\runtimes\**\*" Link="runtimes\%(RecursiveDir)%(Filename)%(Extension)">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>

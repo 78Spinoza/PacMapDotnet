@@ -9,6 +9,29 @@
 #include <sstream>
 #include <iomanip>
 
+// Callback functions for progress reporting and warnings
+static uwot_progress_callback_v2 g_progress_callback = nullptr;
+
+void send_warning_to_callback(const char* message) {
+    if (g_progress_callback && message) {
+        g_progress_callback("WARNING", 0, 0, 0.0f, message);
+    } else {
+        std::cerr << "WARNING: " << message << std::endl;
+    }
+}
+
+void send_error_to_callback(const char* message) {
+    if (g_progress_callback && message) {
+        g_progress_callback("ERROR", 0, 0, 0.0f, message);
+    } else {
+        std::cerr << "ERROR: " << message << std::endl;
+    }
+}
+
+void set_global_callback(uwot_progress_callback_v2 callback) {
+    g_progress_callback = callback;
+}
+
 int validate_parameters(PacMapModel* model) {
     if (!model) return PACMAP_ERROR_INVALID_PARAMS;
 

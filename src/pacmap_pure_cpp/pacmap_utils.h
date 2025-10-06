@@ -51,3 +51,8 @@ extern bool is_valid_embedding_dimension(int n_components);
 extern void print_model_info(const PacMapModel* model);
 extern void print_triplet_stats(const std::vector<Triplet>& triplets);
 extern void print_performance_stats(const PerformanceStats& stats);
+
+// Callback utilities
+extern void send_warning_to_callback(const char* message);
+extern void send_error_to_callback(const char* message);
+extern void set_global_callback(uwot_progress_callback_v2 callback);

@@ -1,9 +1,9 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using System.Diagnostics;
-using UMAPuwotSharp;
+using PACMAPuwotSharp;
 
-namespace UMAPuwotSharp.Tests
+namespace PACMAPCSharp.Tests
 {
     [TestClass]
     public class PerformanceBenchmarkTests
@@ -29,10 +29,10 @@ namespace UMAPuwotSharp.Tests
             Console.WriteLine("🚀 HNSW Approximate Mode Benchmark");
             var (hnswTime, hnswMemory) = BenchmarkFitOperation(() =>
             {
-                using var model = new UMapModel();
+                using var model = new PacMapModel();
                 return model.Fit(testData,
                     embeddingDimension: 2,
-                    nEpochs: BenchmarkEpochs,
+                    numIters: (BenchmarkEpochs, BenchmarkEpochs, BenchmarkEpochs * 2),
                     metric: DistanceMetric.Euclidean,
                     forceExactKnn: false); // HNSW mode
             }, "HNSW");
@@ -41,10 +41,10 @@ namespace UMAPuwotSharp.Tests
             Console.WriteLine("⚡ Exact Brute-Force Mode Benchmark");
             var (exactTime, exactMemory) = BenchmarkFitOperation(() =>
             {
-                using var model = new UMapModel();
+                using var model = new PacMapModel();
                 return model.Fit(testData,
                     embeddingDimension: 2,
-                    nEpochs: BenchmarkEpochs,
+                    numIters: (BenchmarkEpochs, BenchmarkEpochs, BenchmarkEpochs * 2),
                     metric: DistanceMetric.Euclidean,
                     forceExactKnn: true); // Exact mode
             }, "Exact");
@@ -104,10 +104,10 @@ namespace UMAPuwotSharp.Tests
 
                 var (time, memory) = BenchmarkFitOperation(() =>
                 {
-                    using var model = new UMapModel();
+                    using var model = new PacMapModel();
                     return model.Fit(testData,
                         embeddingDimension: 2,
-                        nEpochs: 30,
+                        numIters: (30, 30, 75),
                         metric: metric,
                         forceExactKnn: false); // HNSW mode
                 }, metric.ToString());
@@ -134,12 +134,12 @@ namespace UMAPuwotSharp.Tests
             var trainData = GenerateLargeTestData(3000, 40, seed: 456);
 
             // Train model first
-            using var model = new UMapModel();
+            using var model = new PacMapModel();
             var trainingStopwatch = Stopwatch.StartNew();
 
             var embedding = model.Fit(trainData,
                 embeddingDimension: 2,
-                nEpochs: 40,
+                numIters: (40, 40, 100),
                 forceExactKnn: false);
 
             trainingStopwatch.Stop();
@@ -204,11 +204,11 @@ namespace UMAPuwotSharp.Tests
                 long memoryBefore = GC.GetTotalMemory(true);
                 var stopwatch = Stopwatch.StartNew();
 
-                using (var model = new UMapModel())
+                using (var model = new PacMapModel())
                 {
                     var embedding = model.Fit(testData,
                         embeddingDimension: 2,
-                        nEpochs: 20,
+                        numIters: (20, 20, 50),
                         forceExactKnn: false);
 
                     stopwatch.Stop();

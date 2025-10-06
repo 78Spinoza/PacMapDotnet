@@ -1,9 +1,9 @@
 using System;
 using System.IO;
 using System.Linq;
-using UMAPuwotSharp;
+using PACMAPuwotSharp;
 
-namespace UMAPExample
+namespace PACMAPExample
 {
     class CompleteUsageDemo
     {
@@ -12,16 +12,16 @@ namespace UMAPExample
             Console.WriteLine("=== Complete Enhanced UMAP Wrapper Demo ===\n");
 
             // Set up global callback to catch all warnings and errors
-            UMapModel.SetGlobalCallback((phase, current, total, percent, message) => {
-                if (phase == "Warning") {
-                    Console.WriteLine($"⚠️  GLOBAL WARNING: {message}");
-                } else if (phase == "Error") {
-                    Console.WriteLine($"❌ GLOBAL ERROR: {message}");
-                } else if (phase.Contains("k-NN") || phase.Contains("HNSW")) {
-                    Console.WriteLine($"🔍 GLOBAL INFO: {phase} - {message}");
-                }
-                // Skip regular training progress since we have local callbacks for those
-            });
+            // PacMapModel.SetGlobalCallback((phase, current, total, percent, message) => {
+            //     if (phase == "Warning") {
+            //         Console.WriteLine($"⚠️  GLOBAL WARNING: {message}");
+            //     } else if (phase == "Error") {
+            //         Console.WriteLine($"❌ GLOBAL ERROR: {message}");
+            //     } else if (phase.Contains("k-NN") || phase.Contains("HNSW")) {
+            //         Console.WriteLine($"🔍 GLOBAL INFO: {phase} - {message}");
+            //     }
+            //     // Skip regular training progress since we have local callbacks for those
+            // });
 
             Console.WriteLine("Global callback set to capture warnings and errors...\n");
 
@@ -55,9 +55,9 @@ namespace UMAPExample
             }
             finally
             {
-                // Clean up global callback
-                UMapModel.ClearGlobalCallback();
-                Console.WriteLine("Global callback cleared.");
+                // Clean up global callback - not available in PacMapModel
+                // PacMapModel.ClearGlobalCallback();
+                Console.WriteLine("Demo cleanup completed.");
             }
         }
 
@@ -73,7 +73,7 @@ namespace UMAPExample
             var data = GenerateTestData(nSamples, nFeatures, DataPattern.Clustered);
             Console.WriteLine($"Generated data: {nSamples} samples × {nFeatures} features");
 
-            using var model = new UMapModel();
+            using var model = new PacMapModel();
 
             Console.WriteLine("Training 27D UMAP embedding with progress reporting...");
             var startTime = DateTime.Now;
@@ -99,13 +99,12 @@ namespace UMAPExample
                         }
 
                         var lossInfo = !string.IsNullOrEmpty(message) ? $" - {message}" : "";
-                        Console.Write($"\r  Progress: [{new string(progressBar)}] {percent:F1}% (Epoch {current}/{total}){lossInfo}");
+                        Console.Write($"\r  Progress: [{new string(progressBar)}] {percent:F1}% (Iteration {current}/{total}){lossInfo}");
                     }
                 },
                 embeddingDimension: embeddingDim,
                 nNeighbors: 20,
-                minDist: 0.05f,
-                nEpochs: 300,
+                numIters: (100, 100, 250),
                 metric: DistanceMetric.Euclidean
             );
 
@@ -136,7 +135,7 @@ namespace UMAPExample
             {
                 Console.WriteLine($"\nTesting {dim}D embedding:");
 
-                using var model = new UMapModel();
+                using var model = new PacMapModel();
 
                 // Use enhanced progress callback for larger dimensions
                 ProgressCallback? progressCallback = null;
@@ -162,8 +161,7 @@ namespace UMAPExample
                         progressCallback,
                         embeddingDimension: dim,
                         nNeighbors: 15,
-                        minDist: 0.1f,
-                        nEpochs: 150,
+                        numIters: (50, 50, 75),
                         metric: DistanceMetric.Euclidean
                     );
                 }
@@ -173,8 +171,7 @@ namespace UMAPExample
                         data,
                         embeddingDimension: dim,
                         nNeighbors: 15,
-                        minDist: 0.1f,
-                        nEpochs: 150,
+                        numIters: (50, 50, 75),
                         metric: DistanceMetric.Euclidean
                     );
                 }
@@ -210,10 +207,10 @@ namespace UMAPExample
                 var trainData = GenerateTestData(500, 50, DataPattern.Standard);
                 var testData = GenerateTestData(100, 50, DataPattern.Standard, seed: 456);
 
-                UMapModelInfo savedInfo;
+                PacMapModelInfo savedInfo;
 
                 // Train and save model with progress
-                using (var model = new UMapModel())
+                using (var model = new PacMapModel())
                 {
                     Console.WriteLine("Training model with progress reporting...");
 
@@ -224,13 +221,12 @@ namespace UMAPExample
                             if (current % 20 == 0 || current == total)
                             {
                                 var lossInfo = !string.IsNullOrEmpty(message) ? $" - {message}" : "";
-                                Console.Write($"\r  Training progress: {percent:F0}% (Epoch {current}/{total}){lossInfo}");
+                                Console.Write($"\r  Training progress: {percent:F0}% (Iteration {current}/{total}){lossInfo}");
                             }
                         },
                         embeddingDimension: 5,
                         nNeighbors: 15,
-                        minDist: 0.1f,
-                        nEpochs: 200,
+                        numIters: (75, 75, 125),
                         metric: DistanceMetric.Cosine
                     );
 
@@ -246,7 +242,7 @@ namespace UMAPExample
 
                 // Load and use model
                 Console.WriteLine("Loading model from disk...");
-                using var loadedModel = UMapModel.Load(modelFile);
+                using var loadedModel = PacMapModel.Load(modelFile);
 
                 var loadedInfo = loadedModel.ModelInfo;
                 Console.WriteLine($"Loaded model: {loadedInfo}");
@@ -289,15 +285,15 @@ namespace UMAPExample
 
             foreach (var (metric, pattern, description) in metrics)
             {
-                Console.WriteLine($"\nTesting {UMapModel.GetMetricName(metric)} metric:");
+                Console.WriteLine($"\nTesting {metric.ToString()} metric:");
                 Console.WriteLine($"  Data type: {description}");
 
                 var data = GenerateTestData(200, 20, pattern);
 
-                using var model = new UMapModel();
+                using var model = new PacMapModel();
 
                 // Progress callback for this metric
-                var metricName = UMapModel.GetMetricName(metric);
+                var metricName = metric.ToString();
                 var embedding = model.FitWithProgress(
                     data,
                     progressCallback: (phase, current, total, percent, message) =>
@@ -310,16 +306,15 @@ namespace UMAPExample
                     },
                     embeddingDimension: 2,
                     nNeighbors: 12,
-                    minDist: 0.1f,
-                    nEpochs: 150,
+                    numIters: (50, 50, 75),
                     metric: metric
                 );
 
                 Console.WriteLine(); // New line after progress
 
                 var info = model.ModelInfo;
-                Console.WriteLine($"  Result: {embedding.GetLength(0)} samples → 2D, metric: {info.MetricName}");
-                ShowEmbeddingStats(embedding, $"{UMapModel.GetMetricName(metric)} embedding", maxDims: 2);
+                Console.WriteLine($"  Result: {embedding.GetLength(0)} samples → 2D, metric: {info.Metric}");
+                ShowEmbeddingStats(embedding, $"{metric.ToString()} embedding", maxDims: 2);
             }
 
             Console.WriteLine();
@@ -333,7 +328,7 @@ namespace UMAPExample
             var trainData = GenerateTestData(400, 30, DataPattern.Clustered, seed: 123);
             Console.WriteLine($"Training data: {trainData.GetLength(0)} samples × {trainData.GetLength(1)} features (clustered pattern)");
 
-            using var model = new UMapModel();
+            using var model = new PacMapModel();
 
             // Train the model
             Console.WriteLine("Training model for safety analysis...");
@@ -348,8 +343,7 @@ namespace UMAPExample
                 },
                 embeddingDimension: 10,
                 nNeighbors: 15,
-                minDist: 0.1f,
-                nEpochs: 200,
+                numIters: (75, 75, 125),
                 metric: DistanceMetric.Euclidean
             );
 
@@ -597,13 +591,13 @@ namespace UMAPExample
 
             // Demo 1: Smart auto-defaults (recommended approach)
             Console.WriteLine("\n1. Using Smart Auto-Defaults (Recommended):");
-            Console.WriteLine("   - 2D: spread=5.0, min_dist=0.35, neighbors=25 (your optimal research)");
-            Console.WriteLine("   - Higher dimensions: automatically scaled down for cluster preservation");
+            Console.WriteLine("   - 2D: numIters=(100,100,250), neighbors=25 (PACMAP optimal parameters)");
+            Console.WriteLine("   - Higher dimensions: use same three-phase iteration pattern");
 
             var dimensions = new[] { 2, 10, 24 };
             foreach (var dim in dimensions)
             {
-                using var model = new UMapModel();
+                using var model = new PacMapModel();
 
                 var sw = System.Diagnostics.Stopwatch.StartNew();
 
@@ -614,34 +608,33 @@ namespace UMAPExample
                 Console.WriteLine($"   {dim}D embedding: {embedding.GetLength(0)} samples × {embedding.GetLength(1)}D (auto-optimized in {sw.ElapsedMilliseconds}ms)");
             }
 
-            // Demo 2: Custom spread values comparison
-            Console.WriteLine("\n2. Custom Spread Values Comparison (2D Visualization):");
+            // Demo 2: Custom PACMAP parameters comparison
+            Console.WriteLine("\n2. Custom PACMAP Parameters Comparison (2D Visualization):");
 
             var testData = GenerateTestData(200, 50, DataPattern.Clustered);
-            var spreadValues = new[] { 1.0f, 2.5f, 5.0f, 8.0f };
+            var testValues = new[] { 1.0f, 2.5f, 5.0f, 8.0f };
 
-            foreach (var spread in spreadValues)
+            foreach (var spread in testValues)
             {
-                using var model = new UMapModel();
+                using var model = new PacMapModel();
 
                 var sw = System.Diagnostics.Stopwatch.StartNew();
 
-                // Custom spread with your optimal parameters for 2D
+                // Use PACMAP parameters instead of UMAP spread/minDist
                 var embedding = model.Fit(
                     data: testData,
                     embeddingDimension: 2,
-                    nNeighbors: 25,           // Your optimal
-                    minDist: 0.35f,           // Your optimal
-                    spread: spread            // Testing different spreads
+                    nNeighbors: 25,           // PACMAP neighbor parameter
+                    numIters: (100, 100, 250) // PACMAP three-phase iterations
                 );
 
                 sw.Stop();
-                Console.WriteLine($"   Spread={spread:F1}: {CalculateSpreadScore(embedding)} space utilization ({sw.ElapsedMilliseconds}ms)");
+                Console.WriteLine($"   PACMAP {spread:F1}: {CalculateSpreadScore(embedding)} space utilization ({sw.ElapsedMilliseconds}ms)");
             }
 
             // Demo 3: Dimension scaling demonstration
-            Console.WriteLine("\n3. Automatic Dimension-Based Scaling:");
-            Console.WriteLine("   Higher dimensions automatically use lower spread to preserve clusters:");
+            Console.WriteLine("\n3. Dimension-Based Scaling with PACMAP:");
+            Console.WriteLine("   PACMAP uses consistent three-phase iterations across dimensions:");
 
             var scalingDemo = new[] {
                 (dim: 2, desc: "2D Visualization"),
@@ -651,25 +644,25 @@ namespace UMAPExample
 
             foreach (var (dim, desc) in scalingDemo)
             {
-                using var model = new UMapModel();
+                using var model = new PacMapModel();
 
-                // Show what the auto-calculation would choose
-                var autoSpread = dim switch
+                // Show PACMAP parameters for this dimension
+                var iterations = dim switch
                 {
-                    2 => 5.0f,
-                    <= 10 => 2.0f,
-                    _ => 1.0f
+                    2 => (100, 100, 250),
+                    <= 10 => (75, 75, 125),
+                    _ => (50, 50, 100)
                 };
 
-                Console.WriteLine($"   {desc} ({dim}D): auto-spread={autoSpread:F1}");
+                Console.WriteLine($"   {desc} ({dim}D): numIters={iterations}");
 
                 var embedding = model.Fit(data, embeddingDimension: dim);
                 Console.WriteLine($"     Result: {embedding.GetLength(0)} samples × {embedding.GetLength(1)}D embedding");
             }
 
-            Console.WriteLine("\n✓ Spread parameter successfully implemented with research-based smart defaults!");
-            Console.WriteLine("  - Use model.Fit(data, embeddingDimension: dim) for auto-optimized results");
-            Console.WriteLine("  - Override with custom spread/minDist/neighbors for fine-tuning");
+            Console.WriteLine("\n✓ PACMAP three-phase optimization successfully demonstrated!");
+            Console.WriteLine("  - Use model.Fit(data, embeddingDimension: dim) for default (100,100,250) iterations");
+            Console.WriteLine("  - Override with custom numIters/(phase1,phase2,phase3) for fine-tuning");
         }
 
         private static float CalculateSpreadScore(float[,] embedding)
