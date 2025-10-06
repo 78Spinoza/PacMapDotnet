@@ -114,8 +114,12 @@ if exist build-linux (
     rmdir /s /q build-linux
 )
 
-REM Run Docker build - simplified to avoid quote parsing issues
-docker run --rm -v "%cd%":/src -w /src ubuntu:22.04 bash -c "apt-get update && apt-get install -y build-essential cmake libstdc++-11-dev && mkdir -p build-linux && cd build-linux && cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON -DBUILD_TESTS=ON -DCMAKE_POSITION_INDEPENDENT_CODE=ON && make pacmap run_all_tests test_minimal_standalone test_simple_minimal test_basic_integration -j4 && echo Build completed && ls -la && if [ -f libpacmap.so ]; then cp libpacmap.so libpacmap_backup.so && echo Library backup created; fi && echo Linux build finished successfully"
+REM Convert Windows path to Unix path for Docker
+set UNIX_PATH=%cd:\=/%
+set UNIX_PATH=%UNIX_PATH:C:=/c%
+
+REM Run Docker build with corrected paths
+docker run --rm -v "%UNIX_PATH%":/src -w /src ubuntu:22.04 bash -c "apt-get update && apt-get install -y build-essential cmake libstdc++-11-dev && mkdir -p build-linux && cd build-linux && cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON -DBUILD_TESTS=ON -DCMAKE_POSITION_INDEPENDENT_CODE=ON && make pacmap run_all_tests test_minimal_standalone test_simple_minimal test_basic_integration -j4 && echo Build completed && ls -la && if [ -f lib/libpacmap.so ]; then cp lib/libpacmap.so libpacmap_backup.so && echo Library backup created; fi && echo Linux build finished successfully"
 
 if !ERRORLEVEL! NEQ 0 (
     echo ERROR: Docker Linux build failed!
@@ -166,7 +170,33 @@ if exist "build-linux\libpacmap_final.so" (
     )
 )
 
-REM Check for versioned .so files (the actual library files)
+REM Try libpacmap.so from lib directory (Linux CMake default)
+if exist "build-linux\lib\libpacmap.so" (
+    for %%A in ("build-linux\lib\libpacmap.so") do (
+        if %%~zA GTR 1000 (
+            copy "build-linux\lib\libpacmap.so" "..\PACMAPCSharp\PACMAPCSharp\libpacmap.so"
+            echo [PASS] Copied lib/libpacmap.so as libpacmap.so to C# project base folder
+            set LINUX_LIB_COPIED=1
+            goto :linux_lib_done
+        )
+    )
+)
+
+REM Check for versioned .so files in lib directory
+for %%F in (build-linux\lib\libpacmap.so.*.*.*) do (
+    if exist "%%F" (
+        for %%A in ("%%F") do (
+            if %%~zA GTR 1000 (
+                copy "%%F" "..\PACMAPCSharp\PACMAPCSharp\libpacmap.so"
+                echo [PASS] Copied lib/%%~nxF as libpacmap.so to C# project base folder
+                set LINUX_LIB_COPIED=1
+                goto :linux_lib_done
+            )
+        )
+    )
+)
+
+REM Check for versioned .so files in root directory
 for %%F in (build-linux\libpacmap.so.*.*.*) do (
     if exist "%%F" (
         for %%A in ("%%F") do (
@@ -192,7 +222,22 @@ if exist "build-linux\libpacmap_backup.so" (
     )
 )
 
-REM Check for libpacmap.so (last resort)
+REM Check for libpacmap.so in lib directory
+if exist "build-linux\lib\libpacmap.so" (
+    for %%A in ("build-linux\lib\libpacmap.so") do (
+        if %%~zA GTR 1000 (
+            copy "build-linux\lib\libpacmap.so" "..\PACMAPCSharp\PACMAPCSharp\libpacmap.so"
+            if !ERRORLEVEL! EQU 0 (
+                echo [PASS] Copied Linux lib/libpacmap.so to C# project base folder
+                set LINUX_LIB_COPIED=1
+            ) else (
+                echo [FAIL] Failed to copy Linux libpacmap.so - Error: !ERRORLEVEL!
+            )
+        )
+    )
+)
+
+REM Check for libpacmap.so in root directory (last resort)
 if exist "build-linux\libpacmap.so" (
     for %%A in ("build-linux\libpacmap.so") do (
         if %%~zA GTR 1000 (
@@ -259,9 +304,10 @@ if exist "build-windows\bin\Release\test_basic_integration.exe" (
 echo.
 echo Linux libraries (build-linux\):
 if exist "build-linux" (
-    dir build-linux\libpacmap.so* build-linux\*.so /B 2>nul | findstr /R ".*"    if !ERRORLEVEL! EQU 0 (
+    dir build-linux\libpacmap.so* build-linux\*.so build-linux\lib\libpacmap.so* build-linux\lib\*.so /B 2>nul | findstr /R ".*" >nul
+    if !ERRORLEVEL! EQU 0 (
         echo   [PASS] Linux .so files found:
-        for %%F in (build-linux\libpacmap.so* build-linux\*.so) do (
+        for %%F in (build-linux\libpacmap.so* build-linux\*.so build-linux\lib\libpacmap.so* build-linux\lib\*.so) do (
             if exist "%%F" (
                 for %%A in ("%%F") do echo         %%~nxF (%%~zA bytes)
             )
