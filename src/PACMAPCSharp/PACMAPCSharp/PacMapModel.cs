@@ -251,6 +251,9 @@ namespace PACMAPuwotSharp
         [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_is_fitted")]
         private static extern int WindowsIsFitted(IntPtr model);
 
+        [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_get_version")]
+        private static extern IntPtr WindowsGetVersion();
+
         // Linux P/Invoke declarations
         [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_create")]
         private static extern IntPtr LinuxCreate();
@@ -288,6 +291,9 @@ namespace PACMAPuwotSharp
 
         [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_is_fitted")]
         private static extern int LinuxIsFitted(IntPtr model);
+
+        [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_get_version")]
+        private static extern IntPtr LinuxGetVersion();
 
         #endregion
 
@@ -863,6 +869,21 @@ namespace PACMAPuwotSharp
             return IsWindows ? WindowsIsFitted(model) : LinuxIsFitted(model);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static string CallGetVersion()
+        {
+            var ptr = IsWindows ? WindowsGetVersion() : LinuxGetVersion();
+            return Marshal.PtrToStringAnsi(ptr) ?? "Unknown";
+        }
+
+        /// <summary>
+        /// Gets the PACMAP library version
+        /// </summary>
+        public static string GetVersion()
+        {
+            return CallGetVersion();
+        }
+
         #endregion
 
         #region Utility Methods
@@ -896,9 +917,22 @@ namespace PACMAPuwotSharp
         {
             try
             {
-                // TODO: Add version checking when DLL is available
-                // For now, we'll just check if the DLL exists
-                Console.WriteLine($"✅ PACMAP DLL loading: {(RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "pacmap.dll" : "libpacmap.so")}");
+                // Get the actual version from the native library
+                var actualVersion = CallGetVersion();
+
+                // Verify version matches expected version
+                if (actualVersion != EXPECTED_DLL_VERSION)
+                {
+                    throw new InvalidOperationException(
+                        $"❌ CRITICAL: PACMAP library version mismatch!\n" +
+                        $"Expected version: {EXPECTED_DLL_VERSION}\n" +
+                        $"Actual version: {actualVersion}\n" +
+                        $"Platform: {RuntimeInformation.OSArchitecture} on {RuntimeInformation.OSDescription}\n" +
+                        $"Ensure the native library version matches the C# wrapper version.\n" +
+                        $"This can cause crashes, data corruption, or incorrect results.");
+                }
+
+                Console.WriteLine($"✅ PACMAP library version verified: {actualVersion}");
             }
             catch (DllNotFoundException ex)
             {
@@ -908,6 +942,13 @@ namespace PACMAPuwotSharp
                     $"Platform: {RuntimeInformation.OSArchitecture} on {RuntimeInformation.OSDescription}\n" +
                     $"Ensure the native library is in the application directory.\n" +
                     $"Original error: {ex.Message}");
+            }
+            catch (Exception ex) when (!(ex is InvalidOperationException))
+            {
+                // If we can't verify version (e.g., function not available), show warning but continue
+                Console.WriteLine($"⚠️  WARNING: Could not verify PACMAP library version: {ex.Message}");
+                Console.WriteLine($"   Expected version: {EXPECTED_DLL_VERSION}");
+                Console.WriteLine($"   This may indicate a version mismatch or older library.");
             }
         }
 
