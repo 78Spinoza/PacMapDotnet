@@ -41,57 +41,57 @@ cd Release
 REM Run all essential tests
 set WIN_ALL_TESTS_PASSED=1
 
-if exist "test_standard_comprehensive.exe" (
-    echo [TEST] Running standard comprehensive validation...
-    test_standard_comprehensive.exe
+if exist "run_all_tests.exe" (
+    echo [TEST] Running comprehensive PACMAP test suite...
+    run_all_tests.exe
     if !ERRORLEVEL! EQU 0 (
-        echo [PASS] Standard comprehensive test PASSED
+        echo [PASS] Comprehensive PACMAP test PASSED
     ) else (
-        echo [FAIL] Standard comprehensive test FAILED with code !ERRORLEVEL!
+        echo [FAIL] Comprehensive PACMAP test FAILED with code !ERRORLEVEL!
         set WIN_ALL_TESTS_PASSED=0
     )
 ) else (
-    echo [WARN] test_standard_comprehensive.exe not found
+    echo [WARN] run_all_tests.exe not found
     set WIN_ALL_TESTS_PASSED=0
 )
 
-if exist "test_error_fixes_simple.exe" (
-    echo [TEST] Running error fixes validation...
-    test_error_fixes_simple.exe
+if exist "test_minimal_standalone.exe" (
+    echo [TEST] Running minimal standalone PACMAP test...
+    test_minimal_standalone.exe
     if !ERRORLEVEL! EQU 0 (
-        echo [PASS] Error fixes test PASSED
+        echo [PASS] Minimal standalone test PASSED
     ) else (
-        echo [FAIL] Error fixes test FAILED with code !ERRORLEVEL!
+        echo [FAIL] Minimal standalone test FAILED with code !ERRORLEVEL!
         set WIN_ALL_TESTS_PASSED=0
     )
 ) else (
-    echo [WARN] test_error_fixes_simple.exe not found
+    echo [WARN] test_minimal_standalone.exe not found
 )
 
-if exist "test_comprehensive_pipeline.exe" (
-    echo [TEST] Running comprehensive pipeline validation...
-    test_comprehensive_pipeline.exe
+if exist "test_simple_minimal.exe" (
+    echo [TEST] Running simple minimal PACMAP test...
+    test_simple_minimal.exe
     if !ERRORLEVEL! EQU 0 (
-        echo [PASS] Comprehensive pipeline test PASSED
+        echo [PASS] Simple minimal test PASSED
     ) else (
-        echo [FAIL] Comprehensive pipeline test FAILED with code !ERRORLEVEL!
+        echo [FAIL] Simple minimal test FAILED with code !ERRORLEVEL!
         set WIN_ALL_TESTS_PASSED=0
     )
 ) else (
-    echo [WARN] test_comprehensive_pipeline.exe not found
+    echo [WARN] test_simple_minimal.exe not found
 )
 
-if exist "test_enhanced_wrapper.exe" (
-    echo [TEST] Running enhanced wrapper validation...
-    test_enhanced_wrapper.exe
+if exist "test_basic_integration.exe" (
+    echo [TEST] Running basic PACMAP integration test...
+    test_basic_integration.exe
     if !ERRORLEVEL! EQU 0 (
-        echo [PASS] Enhanced wrapper test PASSED
+        echo [PASS] Basic integration test PASSED
     ) else (
-        echo [FAIL] Enhanced wrapper test FAILED with code !ERRORLEVEL!
+        echo [FAIL] Basic integration test FAILED with code !ERRORLEVEL!
         set WIN_ALL_TESTS_PASSED=0
     )
 ) else (
-    echo [WARN] test_enhanced_wrapper.exe not found
+    echo [WARN] test_basic_integration.exe not found
     set WIN_ALL_TESTS_PASSED=0
 )
 
@@ -115,7 +115,7 @@ if exist build-linux (
 )
 
 REM Run Docker build - simplified to avoid quote parsing issues
-docker run --rm -v "%cd%":/src -w /src ubuntu:22.04 bash -c "apt-get update && apt-get install -y build-essential cmake libstdc++-11-dev && mkdir -p build-linux && cd build-linux && cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON -DBUILD_TESTS=ON -DCMAKE_POSITION_INDEPENDENT_CODE=ON && make -j4 && echo Build completed && ls -la && if [ -f libuwot.so ]; then cp libuwot.so libuwot_backup.so && echo Library backup created; fi && echo Linux build finished successfully"
+docker run --rm -v "%cd%":/src -w /src ubuntu:22.04 bash -c "apt-get update && apt-get install -y build-essential cmake libstdc++-11-dev && mkdir -p build-linux && cd build-linux && cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON -DBUILD_TESTS=ON -DCMAKE_POSITION_INDEPENDENT_CODE=ON && make pacmap run_all_tests test_minimal_standalone test_simple_minimal test_basic_integration -j4 && echo Build completed && ls -la && if [ -f libpacmap.so ]; then cp libpacmap.so libpacmap_backup.so && echo Library backup created; fi && echo Linux build finished successfully"
 
 if !ERRORLEVEL! NEQ 0 (
     echo ERROR: Docker Linux build failed!
@@ -154,12 +154,12 @@ if exist "build-windows\Release\uwot.dll" (
 REM Copy Linux .so file directly to project base folder
 set LINUX_LIB_COPIED=0
 
-REM Try libuwot_final.so first (our guaranteed backup from Docker)
-if exist "build-linux\libuwot_final.so" (
-    for %%A in ("build-linux\libuwot_final.so") do (
+REM Try libpacmap_final.so first (our guaranteed backup from Docker)
+if exist "build-linux\libpacmap_final.so" (
+    for %%A in ("build-linux\libpacmap_final.so") do (
         if %%~zA GTR 1000 (
-            copy "build-linux\libuwot_final.so" "..\UMAPuwotSharp\UMAPuwotSharp\libuwot.so"
-            echo [PASS] Copied libuwot_final.so as libuwot.so to C# project base folder
+            copy "build-linux\libpacmap_final.so" "..\PACMAPCSharp\PACMAPCSharp\libpacmap.so"
+            echo [PASS] Copied libpacmap_final.so as libpacmap.so to C# project base folder
             set LINUX_LIB_COPIED=1
             goto :linux_lib_done
         )
@@ -167,12 +167,12 @@ if exist "build-linux\libuwot_final.so" (
 )
 
 REM Check for versioned .so files (the actual library files)
-for %%F in (build-linux\libuwot.so.*.*.*) do (
+for %%F in (build-linux\libpacmap.so.*.*.*) do (
     if exist "%%F" (
         for %%A in ("%%F") do (
             if %%~zA GTR 1000 (
-                copy "%%F" "..\UMAPuwotSharp\UMAPuwotSharp\libuwot.so"
-                echo [PASS] Copied %%~nxF as libuwot.so to C# project base folder
+                copy "%%F" "..\PACMAPCSharp\PACMAPCSharp\libpacmap.so"
+                echo [PASS] Copied %%~nxF as libpacmap.so to C# project base folder
                 set LINUX_LIB_COPIED=1
                 goto :linux_lib_done
             )
@@ -181,27 +181,27 @@ for %%F in (build-linux\libuwot.so.*.*.*) do (
 )
 
 REM Try backup file if available
-if exist "build-linux\libuwot_backup.so" (
-    for %%A in ("build-linux\libuwot_backup.so") do (
+if exist "build-linux\libpacmap_backup.so" (
+    for %%A in ("build-linux\libpacmap_backup.so") do (
         if %%~zA GTR 1000 (
-            copy "build-linux\libuwot_backup.so" "..\UMAPuwotSharp\UMAPuwotSharp\libuwot.so"
-            echo [PASS] Copied libuwot_backup.so as libuwot.so to C# project base folder
+            copy "build-linux\libpacmap_backup.so" "..\PACMAPCSharp\PACMAPCSharp\libpacmap.so"
+            echo [PASS] Copied libpacmap_backup.so as libpacmap.so to C# project base folder
             set LINUX_LIB_COPIED=1
             goto :linux_lib_done
         )
     )
 )
 
-REM Check for libuwot.so (last resort)
-if exist "build-linux\libuwot.so" (
-    for %%A in ("build-linux\libuwot.so") do (
+REM Check for libpacmap.so (last resort)
+if exist "build-linux\libpacmap.so" (
+    for %%A in ("build-linux\libpacmap.so") do (
         if %%~zA GTR 1000 (
-            copy "build-linux\libuwot.so" "..\UMAPuwotSharp\UMAPuwotSharp\libuwot.so"
+            copy "build-linux\libpacmap.so" "..\PACMAPCSharp\PACMAPCSharp\libpacmap.so"
             if !ERRORLEVEL! EQU 0 (
-                echo [PASS] Copied Linux libuwot.so to C# project base folder
+                echo [PASS] Copied Linux libpacmap.so to C# project base folder
                 set LINUX_LIB_COPIED=1
             ) else (
-                echo [FAIL] Failed to copy Linux libuwot.so - Error: !ERRORLEVEL!
+                echo [FAIL] Failed to copy Linux libpacmap.so - Error: !ERRORLEVEL!
             )
         )
     )
@@ -209,7 +209,7 @@ if exist "build-linux\libuwot.so" (
 
 :linux_lib_done
 if !LINUX_LIB_COPIED! EQU 0 (
-    echo [FAIL] Linux libuwot.so not found in build-linux\
+    echo [FAIL] Linux libpacmap.so not found in build-linux\
     echo [INFO] Available files in build-linux:
     if exist "build-linux" (
         dir build-linux\ /B 2>nul || echo        Directory empty or not accessible
@@ -223,39 +223,45 @@ echo [PASS] Enhanced libraries setup completed
 REM === SUMMARY ===
 echo.
 echo ===========================================
-echo   Enhanced UMAP Build Summary
+echo   PACMAP Build Summary
 echo ===========================================
 echo.
-echo Windows libraries (build-windows\Release\):
-if exist "build-windows\Release\uwot.dll" (
-    echo   [PASS] uwot.dll (Enhanced UMAP with multiple metrics)
-    for %%A in ("build-windows\Release\uwot.dll") do echo         Size: %%~zA bytes
-) else (echo   [FAIL] uwot.dll)
+echo Windows libraries (build-windows\bin\Release\):
+if exist "build-windows\bin\Release\pacmap.dll" (
+    echo   [PASS] pacmap.dll (PACMAP library)
+    for %%A in ("build-windows\bin\Release\pacmap.dll") do echo         Size: %%~zA bytes
+) else (echo   [FAIL] pacmap.dll)
 
-if exist "build-windows\Release\test_standard_comprehensive.exe" (
-    echo   [PASS] test_standard_comprehensive.exe
+if exist "build-windows\bin\Release\run_all_tests.exe" (
+    echo   [PASS] run_all_tests.exe
 ) else (
-    echo   [FAIL] test_standard_comprehensive.exe
+    echo   [FAIL] run_all_tests.exe
 )
 
-if exist "build-windows\Release\test_error_fixes_simple.exe" (
-    echo   [PASS] test_error_fixes_simple.exe
+if exist "build-windows\bin\Release\test_minimal_standalone.exe" (
+    echo   [PASS] test_minimal_standalone.exe
 ) else (
-    echo   [FAIL] test_error_fixes_simple.exe
+    echo   [FAIL] test_minimal_standalone.exe
 )
 
-if exist "build-windows\Release\test_comprehensive_pipeline.exe" (
-    echo   [PASS] test_comprehensive_pipeline.exe
+if exist "build-windows\bin\Release\test_simple_minimal.exe" (
+    echo   [PASS] test_simple_minimal.exe
 ) else (
-    echo   [FAIL] test_comprehensive_pipeline.exe
+    echo   [FAIL] test_simple_minimal.exe
+)
+
+if exist "build-windows\bin\Release\test_basic_integration.exe" (
+    echo   [PASS] test_basic_integration.exe
+) else (
+    echo   [FAIL] test_basic_integration.exe
 )
 
 echo.
 echo Linux libraries (build-linux\):
 if exist "build-linux" (
-    dir build-linux\libuwot.so* build-linux\*.so /B 2>nul | findstr /R ".*"    if !ERRORLEVEL! EQU 0 (
+    dir build-linux\libpacmap.so* build-linux\*.so /B 2>nul | findstr /R ".*"    if !ERRORLEVEL! EQU 0 (
         echo   [PASS] Linux .so files found:
-        for %%F in (build-linux\libuwot.so* build-linux\*.so) do (
+        for %%F in (build-linux\libpacmap.so* build-linux\*.so) do (
             if exist "%%F" (
                 for %%A in ("%%F") do echo         %%~nxF (%%~zA bytes)
             )
@@ -267,58 +273,58 @@ if exist "build-linux" (
     echo   [FAIL] build-linux directory not found
 )
 
-if exist "build-linux\test_standard_comprehensive" (
-    echo   [PASS] test_standard_comprehensive
+if exist "build-linux\bin\run_all_tests" (
+    echo   [PASS] run_all_tests
 ) else (
-    echo   [FAIL] test_standard_comprehensive
+    echo   [FAIL] run_all_tests
 )
 
-if exist "build-linux\test_error_fixes_simple" (
-    echo   [PASS] test_error_fixes_simple
+if exist "build-linux\bin\test_minimal_standalone" (
+    echo   [PASS] test_minimal_standalone
 ) else (
-    echo   [FAIL] test_error_fixes_simple
+    echo   [FAIL] test_minimal_standalone
 )
 
-if exist "build-linux\test_comprehensive_pipeline" (
-    echo   [PASS] test_comprehensive_pipeline
+if exist "build-linux\bin\test_simple_minimal" (
+    echo   [PASS] test_simple_minimal
 ) else (
-    echo   [FAIL] test_comprehensive_pipeline
+    echo   [FAIL] test_simple_minimal
 )
 
 echo.
-echo UMAPuwotSharp C# project files:
-if exist "..\UMAPuwotSharp\UMAPuwotSharp\uwot.dll" (
-    echo   [PASS] Windows library: uwot.dll
-    for %%A in ("..\UMAPuwotSharp\UMAPuwotSharp\uwot.dll") do echo         Size: %%~zA bytes
+echo PACMAPCSharp C# project files:
+if exist "..\PACMAPCSharp\PACMAPCSharp\pacmap.dll" (
+    echo   [PASS] Windows library: pacmap.dll
+    for %%A in ("..\PACMAPCSharp\PACMAPCSharp\pacmap.dll") do echo         Size: %%~zA bytes
 ) else (echo   [FAIL] Windows library missing)
 
-if exist "..\UMAPuwotSharp\UMAPuwotSharp\libuwot.so" (
-    echo   [PASS] Linux library: libuwot.so
-    for %%A in ("..\UMAPuwotSharp\UMAPuwotSharp\libuwot.so") do echo         Size: %%~zA bytes
+if exist "..\PACMAPCSharp\PACMAPCSharp\libpacmap.so" (
+    echo   [PASS] Linux library: libpacmap.so
+    for %%A in ("..\PACMAPCSharp\PACMAPCSharp\libpacmap.so") do echo         Size: %%~zA bytes
 ) else (echo   [FAIL] Linux library missing)
 
 echo.
 echo Cross-platform libraries ready for direct deployment:
-if exist "..\UMAPuwotSharp\UMAPuwotSharp\uwot.dll" (
-    echo   [PASS] Windows library ready: uwot.dll
+if exist "..\PACMAPCSharp\PACMAPCSharp\pacmap.dll" (
+    echo   [PASS] Windows library ready: pacmap.dll
 ) else (echo   [WARN] Windows library missing)
 
-if exist "..\UMAPuwotSharp\UMAPuwotSharp\libuwot.so" (
-    echo   [PASS] Linux library ready: libuwot.so
+if exist "..\PACMAPCSharp\PACMAPCSharp\libpacmap.so" (
+    echo   [PASS] Linux library ready: libpacmap.so
 ) else (echo   [WARN] Linux library missing)
 
 echo.
 echo ===========================================
-echo   Enhanced UMAP Features Available
+echo   PACMAP Features Available
 echo ===========================================
 echo.
-echo Your Enhanced UMAPuwotSharp library now supports:
-echo   - Arbitrary embedding dimensions (1D to 50D, including 27D)
-echo   - Multiple distance metrics (Euclidean, Cosine, Manhattan, Correlation, Hamming)
+echo Your PACMAP library now supports:
+echo   - Fast and scalable dimensionality reduction
+echo   - Preserves both local and global structure
 echo   - Complete model save/load functionality
 echo   - True out-of-sample projection (transform new data)
 echo   - Progress reporting with callback support
-echo   - Based on proven uwot algorithms
+echo   - Based on proven PACMAP algorithms
 echo   - Cross-platform support (Windows + Linux)
 echo.
 echo ===========================================
@@ -326,9 +332,9 @@ echo   Ready for C# Development!
 echo ===========================================
 echo.
 echo Next steps:
-echo   1. Build C# library: dotnet build ..\UMAPuwotSharp\UMAPuwotSharp
-echo   2. Create NuGet package: dotnet pack ..\UMAPuwotSharp\UMAPuwotSharp --configuration Release
-echo   3. Test 27D embedding: var embedding27D = model.Fit(data, embeddingDimension: 27);
+echo   1. Build C# library: dotnet build ..\PACMAPCSharp\PACMAPCSharp
+echo   2. Create NuGet package: dotnet pack ..\PACMAPCSharp\PACMAPCSharp --configuration Release
+echo   3. Test PACMAP embedding: var embedding = model.Fit(data, embeddingDimension: 2);
 echo   4. Use progress reporting: model.FitWithProgress(data, progressCallback);
 echo.
 pause

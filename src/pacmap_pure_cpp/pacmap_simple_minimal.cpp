@@ -139,10 +139,13 @@ int impl_pacmap_save_model(PacMapModel* model, const char* filename) {
     }
 
     // Write basic model info
-    fwrite(&model->n_samples, sizeof(int), 1, file);
-    fwrite(&model->n_features, sizeof(int), 1, file);
-    fwrite(&model->n_components, sizeof(int), 1, file);
-    fwrite(&model->is_fitted, sizeof(bool), 1, file);
+    if (fwrite(&model->n_samples, sizeof(int), 1, file) != 1 ||
+        fwrite(&model->n_features, sizeof(int), 1, file) != 1 ||
+        fwrite(&model->n_components, sizeof(int), 1, file) != 1 ||
+        fwrite(&model->is_fitted, sizeof(bool), 1, file) != 1) {
+        fclose(file);
+        return PACMAP_ERROR_FILE_IO;
+    }
 
     fclose(file);
     return PACMAP_SUCCESS;
@@ -173,10 +176,14 @@ PacMapModel* impl_pacmap_load_model(const char* filename) {
     }
 
     // Read basic model info
-    fread(&model->n_samples, sizeof(int), 1, file);
-    fread(&model->n_features, sizeof(int), 1, file);
-    fread(&model->n_components, sizeof(int), 1, file);
-    fread(&model->is_fitted, sizeof(bool), 1, file);
+    if (fread(&model->n_samples, sizeof(int), 1, file) != 1 ||
+        fread(&model->n_features, sizeof(int), 1, file) != 1 ||
+        fread(&model->n_components, sizeof(int), 1, file) != 1 ||
+        fread(&model->is_fitted, sizeof(bool), 1, file) != 1) {
+        fclose(file);
+        delete model;
+        return nullptr;
+    }
 
     fclose(file);
     return model;
