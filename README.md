@@ -72,8 +72,10 @@ dotnet add package PacMapDotnet
 ```bash
 git clone https://github.com/78Spinoza/PacMapDotnet.git
 cd PacMapDotnet
-dotnet build src/PacMapDotnet.sln
+dotnet build src/PACMAPCSharp.sln
 ```
+
+**✅ Pre-built binaries included** - No C++ compilation required! The native PACMAP libraries for both Windows (`pacmap.dll`) and Linux (`libpacmap.so`) are included in this repository.
 
 ## 🎯 Quick Start
 
