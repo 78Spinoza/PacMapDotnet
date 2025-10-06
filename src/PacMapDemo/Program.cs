@@ -143,25 +143,75 @@ namespace PacMapDemo
             Console.WriteLine("🔬 Testing Basic PACMAP Functionality");
             Console.WriteLine(new string('-', 50));
 
-            // Convert to float for the new API
+            // Print data statistics for analysis
+            Console.WriteLine("   Data preprocessing:");
+            DataLoaders.PrintDataStatistics("Original mammoth data", data);
+
+            // Use original data without normalization
             var floatData = ConvertToFloat(data);
 
-            // Test 1: Basic embedding
-            Console.WriteLine("   Test 1: Basic 2D embedding...");
-            using var model = new PacMapModel();
-            var stopwatch = Stopwatch.StartNew();
+            float[,] embedding;
 
-            var embedding = model.Fit(
+            // Test 1: Test multiple PACMAP parameter combinations for better clustering
+            Console.WriteLine("   Test 1: Testing multiple PACMAP parameter combinations...");
+
+            float[,] bestEmbedding = null;
+            double bestQuality = double.MaxValue;
+            PacMapModel bestModel = null;
+            var bestParams = new { nNeighbors = 0, metric = DistanceMetric.Euclidean, name = "" };
+
+            // Test different parameter combinations
+            var testParams = new[]
+            {
+                new { nNeighbors = 10, metric = DistanceMetric.Euclidean, name = "Euclidean_10" },
+                new { nNeighbors = 30, metric = DistanceMetric.Euclidean, name = "Euclidean_30" },
+                new { nNeighbors = 50, metric = DistanceMetric.Euclidean, name = "Euclidean_50" },
+                new { nNeighbors = 15, metric = DistanceMetric.Manhattan, name = "Manhattan_15" },
+                new { nNeighbors = 25, metric = DistanceMetric.Cosine, name = "Cosine_25" }
+            };
+
+            foreach (var param in testParams)
+            {
+                using var testModel = new PacMapModel();
+                var testStopwatch = Stopwatch.StartNew();
+
+                var testEmbedding = testModel.Fit(
+                    data: floatData,
+                    embeddingDimension: 2,
+                    nNeighbors: param.nNeighbors,
+                    metric: param.metric,
+                    randomSeed: 42
+                );
+
+                testStopwatch.Stop();
+
+                // Calculate simple quality metric (average distance to nearest same-label neighbor)
+                double quality = CalculateEmbeddingQuality(testEmbedding, labels);
+
+                Console.WriteLine($"      ✅ {param.name}: n={param.nNeighbors}, quality={quality:F3}, time={testStopwatch.Elapsed.TotalSeconds:F2}s");
+
+                if (quality < bestQuality)
+                {
+                    bestQuality = quality;
+                    bestEmbedding = testEmbedding;
+                    bestParams = param;
+                }
+            }
+
+            Console.WriteLine($"      🏆 Best embedding: {bestParams.name} with quality {bestQuality:F3}");
+            Console.WriteLine();
+
+            // Create the best model for persistence testing
+            using var model = new PacMapModel();
+            embedding = model.Fit(
                 data: floatData,
                 embeddingDimension: 2,
-                nNeighbors: 15,
-                metric: DistanceMetric.Euclidean,
+                nNeighbors: bestParams.nNeighbors,
+                metric: bestParams.metric,
                 randomSeed: 42
             );
 
-            stopwatch.Stop();
-            Console.WriteLine($"      ✅ Embedding complete: {embedding.GetLength(0)} points → {embedding.GetLength(1)}D");
-            Console.WriteLine($"      ⏱️  Time: {stopwatch.Elapsed.TotalSeconds:F2} seconds");
+            Console.WriteLine($"      ✅ Final embedding complete: {embedding.GetLength(0)} points → {embedding.GetLength(1)}D");
             Console.WriteLine();
 
             // Test 2: Model persistence
@@ -230,13 +280,20 @@ namespace PacMapDemo
                 var plotPath = Path.Combine(outputDir, "mammoth_pacmap_embedding.png");
                 var paramInfo = new Dictionary<string, object>
                 {
-                    ["n_neighbors"] = 15,
-                    ["metric"] = "euclidean",
-                    ["random_seed"] = 42
+                    ["n_neighbors"] = bestParams.nNeighbors,
+                    ["metric"] = bestParams.metric.ToString().ToLower(),
+                    ["random_seed"] = 42,
+                    ["embedding_quality"] = bestQuality.ToString("F4"),
+                    ["data_points"] = embedding.GetLength(0),
+                    ["data_range_x"] = $"{data[0, 0]:F1} to {data[data.GetLength(0)-1, 0]:F1}",
+                    ["data_range_y"] = $"{data[0, 1]:F1} to {data[data.GetLength(0)-1, 1]:F1}",
+                    ["data_range_z"] = $"{data[0, 2]:F1} to {data[data.GetLength(0)-1, 2]:F1}"
                 };
 
-                Visualizer.PlotMammothPacMAP(embedding, data, "Mammoth PACMAP 2D Embedding", plotPath, paramInfo);
+                string title = $"Mammoth PACMAP 2D Embedding (n={bestParams.nNeighbors}, {bestParams.metric})";
+                Visualizer.PlotMammothPacMAP(embedding, data, title, plotPath, paramInfo);
                 Console.WriteLine($"      ✅ PACMAP visualization saved: {plotPath}");
+                Console.WriteLine($"      📝 Parameters: n_neighbors={bestParams.nNeighbors}, metric={bestParams.metric}, quality={bestQuality:F4}");
             }
             catch (Exception ex)
             {
@@ -265,6 +322,74 @@ namespace PacMapDemo
                     result[i, j] = (float)input[i, j];
 
             return result;
+        }
+
+        // Normalize data to zero mean and unit variance
+        static double[,] NormalizeData(double[,] data)
+        {
+            int rows = data.GetLength(0);
+            int cols = data.GetLength(1);
+            var normalized = new double[rows, cols];
+
+            for (int j = 0; j < cols; j++)
+            {
+                // Calculate mean and standard deviation for each feature
+                double sum = 0;
+                for (int i = 0; i < rows; i++)
+                    sum += data[i, j];
+                double mean = sum / rows;
+
+                double sumSquaredDiff = 0;
+                for (int i = 0; i < rows; i++)
+                    sumSquaredDiff += Math.Pow(data[i, j] - mean, 2);
+                double stdDev = Math.Sqrt(sumSquaredDiff / rows);
+
+                // Normalize each feature
+                for (int i = 0; i < rows; i++)
+                {
+                    if (stdDev > 1e-10) // Avoid division by zero
+                        normalized[i, j] = (data[i, j] - mean) / stdDev;
+                    else
+                        normalized[i, j] = data[i, j] - mean;
+                }
+            }
+
+            return normalized;
+        }
+
+        // Calculate embedding quality - lower is better (clusters of same labels should be close)
+        static double CalculateEmbeddingQuality(float[,] embedding, int[] labels)
+        {
+            int nSamples = embedding.GetLength(0);
+            double totalDistance = 0;
+            int count = 0;
+
+            for (int i = 0; i < nSamples; i++)
+            {
+                double minSameLabelDistance = double.MaxValue;
+
+                for (int j = 0; j < nSamples; j++)
+                {
+                    if (i != j && labels[i] == labels[j])
+                    {
+                        double dist = Math.Sqrt(
+                            Math.Pow(embedding[i, 0] - embedding[j, 0], 2) +
+                            Math.Pow(embedding[i, 1] - embedding[j, 1], 2)
+                        );
+
+                        if (dist < minSameLabelDistance)
+                            minSameLabelDistance = dist;
+                    }
+                }
+
+                if (minSameLabelDistance < double.MaxValue)
+                {
+                    totalDistance += minSameLabelDistance;
+                    count++;
+                }
+            }
+
+            return count > 0 ? totalDistance / count : double.MaxValue;
         }
     }
 }

@@ -8,6 +8,7 @@ using OxyPlot.Series;
 using OxyPlot.Axes;
 using OxyPlot.WindowsForms;
 using OxyPlot.Legends;
+using OxyPlot.Annotations;
 
 namespace PacMapDemo
 {
@@ -524,6 +525,28 @@ namespace PacMapDemo
                 LegendTextColor = OxyColors.Black
             };
             plotModel.Legends.Add(defaultLegend);
+
+            // Add parameter information as text annotation
+            if (paramInfo != null)
+            {
+                var paramText = new List<string>();
+                foreach (var kvp in paramInfo)
+                {
+                    paramText.Add($"{kvp.Key}: {kvp.Value}");
+                }
+
+                var annotation = new TextAnnotation
+                {
+                    Text = string.Join("\n", paramText),
+                    TextPosition = new DataPoint(0.02, 0.98), // Top-left corner
+                    TextColor = OxyColors.Black,
+                    Background = OxyColors.White,
+                    FontSize = 10,
+                    TextHorizontalAlignment = HorizontalAlignment.Left,
+                    TextVerticalAlignment = VerticalAlignment.Top
+                };
+                plotModel.Annotations.Add(annotation);
+            }
 
             // Export to PNG
             var exporter = new PngExporter { Width = 800, Height = 600 };

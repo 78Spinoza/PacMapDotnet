@@ -116,6 +116,8 @@ namespace PacMapDemo
                     maxZ = Math.Max(maxZ, mammothData[i, 2]);
                 }
 
+                Console.WriteLine($"   Data ranges: X=[{minX:F3}, {maxX:F3}], Y=[{minY:F3}, {maxY:F3}], Z=[{minZ:F3}, {maxZ:F3}]");
+                Console.WriteLine($"   Scale: X span={maxX-minX:F3}, Y span={maxY-minY:F3}, Z span={maxZ-minZ:F3}");
 
                 return mammothData;
             }
