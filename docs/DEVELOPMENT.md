@@ -288,7 +288,7 @@ public class PacMapModel : IDisposable
 
 ### Advantages of Using UMAP Infrastructure
 
-1. **HNSW Optimization**: 50-2000x speedup for neighbor finding
+1. **HNSW Optimization**: faster speedup for neighbor finding
 2. **Memory Efficiency**: 80-85% reduction vs brute force
 3. **Model Persistence**: Save/load with CRC32 validation
 4. **Safety Features**: Outlier detection and confidence scoring
@@ -390,7 +390,7 @@ public class PacMapModel : IDisposable
 ## Success Criteria
 
 1. **Functional Correctness**: Embeddings match Python reference within acceptable tolerance
-2. **Performance**: Maintain 50-2000x HNSW speedup, overall performance within 10% of UMAP
+2. **Performance**: Maintain faster HNSW speedup, overall performance within 10% of UMAP
 3. **API Compatibility**: Seamless migration from UMAP with minimal code changes
 4. **Code Quality**: All tests pass, comprehensive documentation, clean codebase
 5. **Cross-Platform**: Works on Windows and Linux with identical results

@@ -56,7 +56,7 @@ namespace hnsw_utils {
     // Space factory - creates appropriate space based on metric type
     struct SpaceFactory {
         std::unique_ptr<hnswlib::L2Space> l2_space;
-        std::unique_ptr<hnswlib::InnerProductSpace> ip_space;
+        std::unique_ptr<hnswlib::IPSpace> ip_space;
         std::unique_ptr<L1Space> l1_space;
         PacMapMetric current_metric;
         int current_dim;

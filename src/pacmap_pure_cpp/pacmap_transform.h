@@ -5,9 +5,9 @@
 
 // Main transformation functions
 extern int pacmap_fit_transform(PacMapModel* model, const float* X, float* embedding_out,
-                                uwot_progress_callback_v2 callback);
+                                pacmap_progress_callback_v2 callback);
 extern int pacmap_transform(PacMapModel* model, const float* X, float* embedding_out,
-                            uwot_progress_callback_v2 callback);
+                            pacmap_progress_callback_v2 callback);
 
 // Transform validation
 extern bool validate_transform_input(const PacMapModel* model, const float* X);
@@ -15,7 +15,7 @@ extern bool validate_transform_output(const PacMapModel* model, const float* emb
 
 // Batch processing for large datasets
 extern int batch_transform(PacMapModel* model, const float* X, float* embedding_out,
-                          int batch_size, uwot_progress_callback_v2 callback);
+                          int batch_size, pacmap_progress_callback_v2 callback);
 
 // Transform utilities
 extern void prepare_new_data(PacMapModel* model, const float* X, std::vector<float>& processed_data);
@@ -25,7 +25,7 @@ extern void apply_transform_preprocessing(const std::vector<float>& source_data,
 
 // Transform for new/unseen data points
 extern int transform_new_points(PacMapModel* model, const float* new_X, float* embedding_out,
-                               int n_new_points, uwot_progress_callback_v2 callback);
+                               int n_new_points, pacmap_progress_callback_v2 callback);
 
 // Distance computation in embedding space
 extern void compute_embedding_distances(const float* embedding, int n_samples, int n_components,
@@ -55,7 +55,7 @@ struct TransformDiagnostics {
 
 extern TransformDiagnostics run_transform_with_diagnostics(PacMapModel* model, const float* X,
                                                           float* embedding_out,
-                                                          uwot_progress_callback_v2 callback);
+                                                          pacmap_progress_callback_v2 callback);
 
 // Advanced transform features
 extern void incremental_transform_update(PacMapModel* model, const float* new_X,
@@ -65,3 +65,24 @@ extern void adaptive_transform_resolution(PacMapModel* model, const float* X, fl
 // Transform validation utilities
 extern bool check_embedding_integrity(const float* embedding, int n_samples, int n_components);
 extern void validate_embedding_statistics(const float* embedding, int n_samples, int n_components);
+
+// Internal implementation functions (called by wrapper)
+namespace transform_utils {
+    int internal_pacmap_transform(PacMapModel* model,
+        float* new_data,
+        int n_new_obs,
+        int n_dim,
+        float* embedding);
+
+    int internal_pacmap_transform_detailed(PacMapModel* model,
+        float* new_data,
+        int n_new_obs,
+        int n_dim,
+        float* embedding,
+        int* nn_indices,
+        float* nn_distances,
+        float* confidence_score,
+        int* outlier_level,
+        float* percentile_rank,
+        float* z_score);
+}

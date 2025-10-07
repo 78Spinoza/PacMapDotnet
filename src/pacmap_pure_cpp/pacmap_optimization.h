@@ -5,7 +5,7 @@
 #include <vector>
 
 // Main optimization function with Adam and three-phase weights
-extern void optimize_embedding(PacMapModel* model, float* embedding_out, uwot_progress_callback_v2 callback);
+extern void optimize_embedding(PacMapModel* model, float* embedding_out, pacmap_progress_callback_v2 callback);
 
 // Initialization utilities
 extern void initialize_random_embedding(std::vector<float>& embedding, int n_samples, int n_components, std::mt19937& rng);
@@ -15,7 +15,7 @@ extern void initialize_adam_optimization(PacMapModel* model, std::vector<float>&
 extern void run_optimization_phase(PacMapModel* model, std::vector<float>& embedding,
                                   std::vector<float>& m, std::vector<float>& v,
                                   int start_iter, int end_iter, const std::string& phase_name,
-                                  uwot_progress_callback_v2 callback);
+                                  pacmap_progress_callback_v2 callback);
 
 // Three-phase optimization control
 struct OptimizationPhase {
@@ -32,7 +32,7 @@ extern std::vector<OptimizationPhase> get_optimization_phases(int phase1_iters, 
 // Safety and monitoring
 extern void compute_safety_stats(PacMapModel* model, const std::vector<float>& embedding);
 extern void monitor_optimization_progress(int iter, int total_iters, float loss,
-                                         const std::string& phase, uwot_progress_callback_v2 callback);
+                                         const std::string& phase, pacmap_progress_callback_v2 callback);
 
 // Convergence and quality metrics
 extern float compute_embedding_quality(const std::vector<float>& embedding, const std::vector<Triplet>& triplets,
@@ -68,7 +68,7 @@ struct OptimizationDiagnostics {
 
 extern OptimizationDiagnostics run_optimization_with_diagnostics(PacMapModel* model,
                                                                std::vector<float>& embedding,
-                                                               uwot_progress_callback_v2 callback);
+                                                               pacmap_progress_callback_v2 callback);
 
 // Phase detection utilities
 extern std::string get_current_phase(int iter, int phase1_iters, int phase2_iters);

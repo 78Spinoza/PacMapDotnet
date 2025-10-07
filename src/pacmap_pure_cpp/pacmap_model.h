@@ -11,7 +11,7 @@
 #include "pacmap_simple_wrapper.h"
 
 // Forward declarations for callbacks
-typedef void (*uwot_progress_callback_v2)(const char* phase, int current, int total, float percent, const char* message);
+typedef void (*pacmap_progress_callback_internal)(const char* phase, int current, int total, float percent, const char* message);
 
 // Triplet types (PACMAP-specific)
 enum TripletType {
@@ -53,38 +53,33 @@ struct PerformanceStats {
     std::vector<OperationRecord> operation_history;
 };
 
-// Enhanced PACMAP Model Structure (review-optimized)
+// Enhanced PACMAP Model Structure (Pure PACMAP Implementation)
 struct PacMapModel {
-    // Core parameters
+    // Core PACMAP parameters
     int n_samples = 0;
     int n_features = 0;
     int n_components = 2;
     int n_neighbors = 10;
-    float mn_ratio = 0.5f;
-    float fp_ratio = 2.0f;
-    float learning_rate = 1.0f;
-    int phase1_iters = 100;
-    int phase2_iters = 100;
-    int phase3_iters = 250;
+    float mn_ratio = 0.5f;     // Mid-near pair ratio
+    float fp_ratio = 2.0f;     // Far pair ratio
+    float learning_rate = 1.0f; // Adam optimizer learning rate
+    int phase1_iters = 100;    // Global structure phase
+    int phase2_iters = 100;    // Balance phase
+    int phase3_iters = 250;    // Local structure phase
     PacMapMetric metric = PACMAP_METRIC_EUCLIDEAN;
-    int random_seed = -1;  // -1: non-deterministic, else seeded
+    int random_seed = -1;      // -1: non-deterministic, else seeded
 
-    // UMAP compatibility fields (for persistence)
-    int n_vertices = 0;        // Alias for n_samples
-    int n_dim = 0;            // Alias for n_features
-    int embedding_dim = 2;    // Alias for n_components
-    float min_dist = 0.0f;    // Not used in PACMAP but for compatibility
-    float spread = 1.0f;      // Not used in PACMAP but for compatibility
-    float a = 1.0f;           // UMAP curve parameters (for compatibility)
-    float b = 1.0f;           // UMAP curve parameters (for compatibility)
-    float mean_original_distance = 0.0f;  // For persistence compatibility
-
-    // HNSW parameters (from UMAP)
+    // HNSW parameters for efficient nearest neighbor search
     int hnsw_m = 16;
-    int hnsw_M = 16;  // Alternative naming for compatibility
     int hnsw_ef_construction = 200;
     int hnsw_ef_search = 200;
     bool use_quantization = false;
+
+    // PACMAP algorithm state
+    int total_triplets = 0;
+    int neighbor_triplets = 0;
+    int mid_near_triplets = 0;
+    int far_triplets = 0;
 
     // Dual HNSW information for enhanced persistence
     uint32_t original_space_crc = 0;
@@ -93,21 +88,20 @@ struct PacMapModel {
     float hnsw_recall_percentage = 0.0f;
     bool always_save_embedding_data = false;
 
-    // Additional UMAP compatibility fields
-    int normalization_mode = 0;
-    bool use_normalization = false;
-    std::vector<int> nn_indices;
-    std::vector<double> nn_distances;
-    std::vector<double> nn_weights;
-
     // Data preprocessing fields for transform consistency
     std::vector<float> feature_means;
     std::vector<float> feature_stds;
 
-    // Quantization fields (for future implementation)
-    std::vector<float> pq_centroids;
-    int pq_m = 0;
-    std::vector<uint16_t> pq_codes;
+    // Distance percentiles for triplet filtering
+    float p25_distance = 0.0f;  // 25th percentile distance
+    float p75_distance = 0.0f;  // 75th percentile distance
+
+    // Adam optimizer state
+    std::vector<float> adam_m;  // First moment vector
+    std::vector<float> adam_v;  // Second moment vector
+    float adam_beta1 = 0.9f;    // Adam beta1 parameter
+    float adam_beta2 = 0.999f;  // Adam beta2 parameter
+    float adam_eps = 1e-8f;     // Adam epsilon parameter
 
     // Factory fields for HNSW space creation
     std::unique_ptr<hnswlib::SpaceInterface<float>> original_space_factory;
@@ -136,6 +130,27 @@ struct PacMapModel {
     float std_embedding_distance = 0.0f;
     float mean_embedding_distance = 0.0f;
 
+    // Original space distance statistics for persistence
+    float min_original_distance = 0.0f;
+    float mean_original_distance = 0.0f;
+    float std_original_distance = 0.0f;
+    float p95_original_distance = 0.0f;
+    float p99_original_distance = 0.0f;
+    float mild_original_outlier_threshold = 0.0f;
+    float extreme_original_outlier_threshold = 0.0f;
+    float exact_match_threshold = 0.0f;
+
+    // Additional persistence fields for transform data
+    bool use_normalization = false;
+    std::vector<int> nn_indices;
+    std::vector<float> nn_distances;
+    std::vector<float> nn_weights;
+
+    // Quantization fields (PQ - Product Quantization)
+    int pq_m = 0;
+    std::vector<uint8_t> pq_codes;
+    std::vector<float> pq_centroids;
+
     // RNG for deterministic behavior (review requirement)
     std::mt19937 rng;
 
@@ -149,6 +164,7 @@ struct PacMapModel {
     // State tracking
     bool is_fitted = false;
     bool is_optimized = false;
+    bool force_exact_knn = false; // Override flag to force brute-force k-NN
 
     // Constructor
     PacMapModel() = default;

@@ -52,14 +52,14 @@ namespace model_utils {
             return PACMAP_ERROR_INVALID_PARAMS;
         }
 
-        if (n_vertices) *n_vertices = model->n_vertices;
-        if (n_dim) *n_dim = model->n_dim;
-        if (embedding_dim) *embedding_dim = model->embedding_dim;
+        if (n_vertices) *n_vertices = model->n_samples;
+        if (n_dim) *n_dim = model->n_features;
+        if (embedding_dim) *embedding_dim = model->n_components;
         if (n_neighbors) *n_neighbors = model->n_neighbors;
-        if (min_dist) *min_dist = model->min_dist;
-        if (spread) *spread = model->spread;
+        if (min_dist) *min_dist = model->median_original_distance;
+        if (spread) *spread = 1.0f; // Default spread
         if (metric) *metric = model->metric;
-        if (hnsw_M) *hnsw_M = model->hnsw_M;
+        if (hnsw_M) *hnsw_M = model->hnsw_m;
         if (hnsw_ef_construction) *hnsw_ef_construction = model->hnsw_ef_construction;
         if (hnsw_ef_search) *hnsw_ef_search = model->hnsw_ef_search;
 
@@ -76,14 +76,14 @@ namespace model_utils {
         if (!model) {
             return -1;
         }
-        return model->embedding_dim;
+        return model->n_components;
     }
 
     int get_n_vertices(PacMapModel* model) {
         if (!model) {
             return -1;
         }
-        return model->n_vertices;
+        return model->n_samples;
     }
 
     int is_fitted(PacMapModel* model) {

@@ -3,15 +3,12 @@
 #include <string>
 
 // Forward declaration of callback type to avoid circular dependency
-typedef void (*uwot_progress_callback_v2)(const char* phase, int current, int total, float percent, const char* message);
+typedef void (*pacmap_progress_callback_v2)(const char* phase, int current, int total, float percent, const char* message);
 
 // Global variables for passing information to v2 callbacks
 extern thread_local float g_current_epoch_loss;
-extern thread_local uwot_progress_callback_v2 g_v2_callback;
+extern thread_local pacmap_progress_callback_v2 g_v2_callback;
 
-// Helper functions to send warnings/errors to v2 callback
-void send_warning_to_callback(const char* warning_text);
-void send_error_to_callback(const char* error_text);
 
 // Cross-platform file utilities
 namespace temp_utils {
@@ -30,7 +27,7 @@ namespace progress_utils {
     std::string generate_complexity_warning(int n_obs, int n_dim, const std::string& operation);
 
     // Safe callback invoker - handles null callbacks gracefully
-    void safe_callback(uwot_progress_callback_v2 callback,
+    void safe_callback(pacmap_progress_callback_v2 callback,
         const char* phase, int current, int total, float percent,
         const char* message = nullptr);
 }

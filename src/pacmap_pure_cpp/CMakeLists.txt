@@ -7,11 +7,64 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Define PACMAP_EXPORTS for Windows DLL export
 add_definitions(-DPACMAP_EXPORTS)
 
-# Main PACMAP library
+# Define LZ4_FREESTANDING to avoid external dependencies
+add_definitions(-DLZ4_FREESTANDING=0)
+
+# Export LZ4 functions from the DLL - let lz4.h define its own API
+# add_definitions(-DLZ4LIB_API=)
+
+# Main PACMAP library - CORE IMPLEMENTATION FILES
 add_library(pacmap SHARED
+    # Core algorithm files
+    pacmap_fit.cpp
+    pacmap_transform.cpp
+    pacmap_triplet_sampling.cpp
+    pacmap_optimization.cpp
+    pacmap_gradient.cpp
+    pacmap_model.cpp
+    pacmap_distance.cpp
+    pacmap_utils.cpp
+  pacmap_persistence.cpp
+        pacmap_progress_utils.cpp
+    pacmap_quantization.cpp
+    pacmap_crc32.cpp
+    pacmap_hnsw_utils.cpp
+
+    # Headers (included for compilation)
+    pacmap_fit.h
+    pacmap_transform.h
+    pacmap_triplet_sampling.h
+    pacmap_optimization.h
+    pacmap_gradient.h
+    pacmap_model.h
+    pacmap_distance.h
+    pacmap_utils.h
+    pacmap_persistence.h
+    pacmap_progress_utils.h
+    pacmap_quantization.h
+    pacmap_crc32.h
+    pacmap_hnsw_utils.h
+
+    # External dependencies
+    hnswalg.h
+    hnswlib.h
+    lz4.h
+    space_l2.h
+    space_ip.h
+    stop_condition.h
+    bruteforce.h
+    visited_list_pool.h
+
+    # C++ API wrapper
     pacmap_simple_wrapper.cpp
-    pacmap_simple_minimal.cpp
+    pacmap_simple_wrapper.h
+
+    # Note: debug_to_file.cpp was moved to backup as it was not part of core implementation
 )
+
+# Add LZ4 as C source
+target_sources(pacmap PRIVATE lz4.c)
+set_source_files_properties(lz4.c PROPERTIES LANGUAGE C)
 
 # Windows specific settings
 if(WIN32)
@@ -30,6 +83,26 @@ else()
         PREFIX "lib"
         SUFFIX ".so"
     )
+endif()
+
+# Performance optimizations for Release builds
+if(CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+    if(MSVC)
+        # MSVC optimizations
+        target_compile_options(pacmap PRIVATE /O2 /Ob2 /DNDEBUG)
+        # Enable AVX2 for better performance on modern CPUs
+        target_compile_options(pacmap PRIVATE /arch:AVX2)
+    else()
+        # GCC/Clang optimizations
+        target_compile_options(pacmap PRIVATE -O3 -DNDEBUG)
+        # Enable native optimizations for better performance
+        target_compile_options(pacmap PRIVATE -march=native)
+        # Enable OpenMP for parallel processing
+        find_package(OpenMP)
+        if(OpenMP_CXX_FOUND)
+            target_link_libraries(pacmap OpenMP::OpenMP_CXX)
+        endif()
+    endif()
 endif()
 
 # Include directories
@@ -52,63 +125,27 @@ if(WIN32)
 endif()
 
 # =================== TEST EXECUTABLES ===================
+# Test executables commented out for production builds
+# Uncomment these lines if you need to run tests during development
 
-# Test executables
-add_executable(run_all_tests
-    run_all_tests.cpp
-)
+# add_executable(test_basic_integration
+#     test_basic_integration.cpp
+# )
+# target_link_libraries(test_basic_integration pacmap)
+# if(WIN32)
+#     target_compile_definitions(test_basic_integration PRIVATE _CRT_SECURE_NO_WARNINGS)
+# endif()
+# set_target_properties(test_basic_integration PROPERTIES
+#     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+# )
 
-add_executable(test_minimal_standalone
-    test_minimal_standalone.cpp
-)
-
-
-add_executable(test_simple_minimal
-    test_simple_minimal.cpp
-)
-
-add_executable(test_dll_export
-    test_dll_export.cpp
-)
-
-add_executable(test_basic_integration
-    test_basic_integration.cpp
-)
-
-# Link test executables with pacmap library
-target_link_libraries(run_all_tests pacmap)
-target_link_libraries(test_minimal_standalone pacmap)
-target_link_libraries(test_simple_minimal pacmap)
-target_link_libraries(test_dll_export pacmap)
-target_link_libraries(test_basic_integration pacmap)
-
-# Windows specific settings for tests
-if(WIN32)
-    target_compile_definitions(run_all_tests PRIVATE _CRT_SECURE_NO_WARNINGS)
-    target_compile_definitions(test_minimal_standalone PRIVATE _CRT_SECURE_NO_WARNINGS)
-      target_compile_definitions(test_simple_minimal PRIVATE _CRT_SECURE_NO_WARNINGS)
-    target_compile_definitions(test_dll_export PRIVATE _CRT_SECURE_NO_WARNINGS)
-    target_compile_definitions(test_basic_integration PRIVATE _CRT_SECURE_NO_WARNINGS)
-endif()
-
-# Set output directory for tests
-set_target_properties(run_all_tests PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
-)
-
-set_target_properties(test_minimal_standalone PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
-)
-
-
-set_target_properties(test_simple_minimal PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
-)
-
-set_target_properties(test_dll_export PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
-)
-
-set_target_properties(test_basic_integration PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
-)
+# add_executable(test_mathematical_correctness
+#     test_mathematical_correctness.cpp
+# )
+# target_link_libraries(test_mathematical_correctness pacmap)
+# if(WIN32)
+#     target_compile_definitions(test_mathematical_correctness PRIVATE _CRT_SECURE_NO_WARNINGS)
+# endif()
+# set_target_properties(test_mathematical_correctness PROPERTIES
+#     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+# )

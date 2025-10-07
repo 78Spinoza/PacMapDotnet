@@ -1,7 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
-using PACMAPuwotSharp;
+using PacMapSharp;
 
 namespace PACMAPExample
 {
@@ -9,7 +9,7 @@ namespace PACMAPExample
     {
         static void Main(string[] args)
         {
-            Console.WriteLine("=== Complete Enhanced UMAP Wrapper Demo ===\n");
+            Console.WriteLine("=== Complete Enhanced PACMAP Wrapper Demo ===\n");
 
             // Set up global callback to catch all warnings and errors
             // PacMapModel.SetGlobalCallback((phase, current, total, percent, message) => {
@@ -46,7 +46,7 @@ namespace PACMAPExample
                 DemoSpreadParameter();
 
                 Console.WriteLine("\nAll demos completed successfully!");
-                Console.WriteLine("Your enhanced UMAP wrapper is ready for production use!");
+                Console.WriteLine("Your enhanced PACMAP wrapper is ready for production use!");
             }
             catch (Exception ex)
             {
@@ -75,7 +75,7 @@ namespace PACMAPExample
 
             using var model = new PacMapModel();
 
-            Console.WriteLine("Training 27D UMAP embedding with progress reporting...");
+            Console.WriteLine("Training 27D PACMAP embedding with progress reporting...");
             var startTime = DateTime.Now;
 
             // Progress tracking variables
@@ -199,7 +199,7 @@ namespace PACMAPExample
         {
             Console.WriteLine("=== Demo 3: Model Persistence and Transform ===");
 
-            const string modelFile = "demo_model.umap";
+            const string modelFile = "demo_model.pmp";
 
             try
             {

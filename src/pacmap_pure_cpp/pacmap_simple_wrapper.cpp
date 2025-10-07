@@ -1,72 +1,35 @@
 #include "pacmap_simple_wrapper.h"
+#include "pacmap_fit.h"
+#include "pacmap_transform.h"
+#include "pacmap_persistence.h"
+#include "pacmap_distance.h"
+#include "pacmap_utils.h"
 #include <cstdlib>
 #include <iostream>
 
 extern "C" {
 
-    // Forward declarations of PACMAP implementation functions
-    extern PacMapModel* impl_pacmap_create();
-    extern void impl_pacmap_destroy(PacMapModel* model);
-    extern int impl_pacmap_fit_with_progress_v2(PacMapModel* model,
-        float* data, int n_obs, int n_dim, int embedding_dim,
-        int n_neighbors, float MN_ratio, float FP_ratio,
-        float learning_rate, int n_iters, int phase1_iters, int phase2_iters, int phase3_iters,
-        PacMapMetric metric, float* embedding, pacmap_progress_callback_v2 progress_callback,
-        int force_exact_knn, int M, int ef_construction, int ef_search,
-        int use_quantization, int random_seed, int autoHNSWParam);
-    extern int impl_pacmap_transform(PacMapModel* model, float* new_data, int n_new_obs, int n_dim, float* embedding);
-    extern int impl_pacmap_save_model(PacMapModel* model, const char* filename);
-    extern PacMapModel* impl_pacmap_load_model(const char* filename);
-    extern const char* impl_pacmap_get_error_message(int error_code);
-    extern const char* impl_pacmap_get_metric_name(PacMapMetric metric);
-    extern int impl_pacmap_get_n_components(PacMapModel* model);
-    extern int impl_pacmap_get_n_samples(PacMapModel* model);
-    extern int impl_pacmap_is_fitted(PacMapModel* model);
-    extern const char* impl_pacmap_get_version();
-    extern int impl_pacmap_get_n_features(PacMapModel* model);
-    extern int impl_pacmap_get_n_neighbors(PacMapModel* model);
-    extern float impl_pacmap_get_mn_ratio(PacMapModel* model);
-    extern float impl_pacmap_get_fp_ratio(PacMapModel* model);
-    extern PacMapMetric impl_pacmap_get_metric(PacMapModel* model);
+    // Simple static error storage
+    static thread_local char last_error[256] = {0};
 
     PACMAP_API PacMapModel* pacmap_create() {
-        return impl_pacmap_create();
+        try {
+            return new PacMapModel();
+        } catch (const std::exception& e) {
+            snprintf(last_error, sizeof(last_error), "Failed to create model: %s", e.what());
+            return nullptr;
+        }
     }
 
     PACMAP_API void pacmap_destroy(PacMapModel* model) {
-        impl_pacmap_destroy(model);
+        if (model) {
+            delete model;
+        }
     }
 
-    PACMAP_API int pacmap_fit_with_progress(
-        PacMapModel* model,
-        float* data,
-        int n_obs,
-        int n_dim,
-        int embedding_dim,
-        int n_neighbors,
-        float MN_ratio,
-        float FP_ratio,
-        float learning_rate,
-        int n_iters,
-        int phase1_iters,
-        int phase2_iters,
-        int phase3_iters,
-        PacMapMetric metric,
-        float* embedding,
-        pacmap_progress_callback progress_callback,
-        int force_exact_knn,
-        int M,
-        int ef_construction,
-        int ef_search,
-        int use_quantization
-    ) {
-        // Convert v1 callback to v2 format (simplified)
-        return impl_pacmap_fit_with_progress_v2(model, data, n_obs, n_dim, embedding_dim,
-            n_neighbors, MN_ratio, FP_ratio, learning_rate, n_iters, phase1_iters, phase2_iters, phase3_iters,
-            metric, embedding, nullptr, force_exact_knn, M, ef_construction, ef_search,
-            use_quantization, -1, 1);
-    }
-
+    
+    
+    
     PACMAP_API int pacmap_fit_with_progress_v2(PacMapModel* model,
         float* data, int n_obs, int n_dim, int embedding_dim,
         int n_neighbors, float MN_ratio, float FP_ratio,
@@ -74,40 +37,10 @@ extern "C" {
         PacMapMetric metric, float* embedding, pacmap_progress_callback_v2 progress_callback,
         int force_exact_knn, int M, int ef_construction, int ef_search,
         int use_quantization, int random_seed, int autoHNSWParam) {
-        return impl_pacmap_fit_with_progress_v2(model, data, n_obs, n_dim, embedding_dim,
+        // Direct call to internal PACMAP implementation
+        return fit_utils::internal_pacmap_fit_with_progress_v2(model, data, n_obs, n_dim, embedding_dim,
             n_neighbors, MN_ratio, FP_ratio, learning_rate, n_iters, phase1_iters, phase2_iters, phase3_iters,
             metric, embedding, progress_callback, force_exact_knn, M, ef_construction, ef_search,
-            use_quantization, random_seed, autoHNSWParam);
-    }
-
-    PACMAP_API int pacmap_fit_with_progress_v3(PacMapModel* model,
-        float* data,
-        int n_obs,
-        int n_dim,
-        int embedding_dim,
-        int n_neighbors,
-        float MN_ratio,
-        float FP_ratio,
-        float learning_rate,
-        int n_iters,
-        int phase1_iters,
-        int phase2_iters,
-        int phase3_iters,
-        PacMapMetric metric,
-        float* embedding,
-        pacmap_progress_callback_v3 progress_callback,
-        void* user_data,
-        int force_exact_knn,
-        int M,
-        int ef_construction,
-        int ef_search,
-        int use_quantization,
-        int random_seed,
-        int autoHNSWParam) {
-        // Convert v3 callback to v2 format (simplified - ignore user_data)
-        return impl_pacmap_fit_with_progress_v2(model, data, n_obs, n_dim, embedding_dim,
-            n_neighbors, MN_ratio, FP_ratio, learning_rate, n_iters, phase1_iters, phase2_iters, phase3_iters,
-            metric, embedding, nullptr, force_exact_knn, M, ef_construction, ef_search,
             use_quantization, random_seed, autoHNSWParam);
     }
 
@@ -116,7 +49,8 @@ extern "C" {
         int n_new_obs,
         int n_dim,
         float* embedding) {
-        return impl_pacmap_transform(model, new_data, n_new_obs, n_dim, embedding);
+        // Direct call to internal transform implementation
+        return transform_utils::internal_pacmap_transform(model, new_data, n_new_obs, n_dim, embedding);
     }
 
     PACMAP_API int pacmap_transform_detailed(PacMapModel* model,
@@ -130,54 +64,14 @@ extern "C" {
         int* outlier_level,
         float* percentile_rank,
         float* z_score) {
-        // Simplified implementation - just call basic transform
-        return impl_pacmap_transform(model, new_data, n_new_obs, n_dim, embedding);
+        // Direct call to internal detailed transform implementation
+        return transform_utils::internal_pacmap_transform_detailed(model, new_data, n_new_obs, n_dim, embedding,
+            nn_indices, nn_distances, confidence_score, outlier_level, percentile_rank, z_score);
     }
 
-    PACMAP_API int pacmap_save_model(PacMapModel* model, const char* filename) {
-        return impl_pacmap_save_model(model, filename);
-    }
-
-    PACMAP_API PacMapModel* pacmap_load_model(const char* filename) {
-        return impl_pacmap_load_model(filename);
-    }
-
-    PACMAP_API int pacmap_get_model_info(PacMapModel* model,
-        int* n_samples,
-        int* n_features,
-        int* n_components,
-        int* n_neighbors,
-        float* MN_ratio,
-        float* FP_ratio,
-        float* learning_rate,
-        int* n_iters,
-        int* phase1_iters,
-        int* phase2_iters,
-        int* phase3_iters,
-        PacMapMetric* metric,
-        int* hnsw_M,
-        int* hnsw_ef_construction,
-        int* hnsw_ef_search) {
-        // Simplified implementation
-        if (model && n_samples) *n_samples = impl_pacmap_get_n_samples(model);
-        if (model && n_features) *n_features = 0; // Not stored in minimal implementation
-        if (model && n_components) *n_components = impl_pacmap_get_n_components(model);
-        if (model && n_neighbors) *n_neighbors = 0; // Not stored in minimal implementation
-        if (model && MN_ratio) *MN_ratio = 0.0f; // Not stored in minimal implementation
-        if (model && FP_ratio) *FP_ratio = 0.0f; // Not stored in minimal implementation
-        if (model && learning_rate) *learning_rate = 0.0f; // Not stored in minimal implementation
-        if (model && n_iters) *n_iters = 0; // Not stored in minimal implementation
-        if (model && phase1_iters) *phase1_iters = 0; // Not stored in minimal implementation
-        if (model && phase2_iters) *phase2_iters = 0; // Not stored in minimal implementation
-        if (model && phase3_iters) *phase3_iters = 0; // Not stored in minimal implementation
-        if (model && metric) *metric = PACMAP_METRIC_EUCLIDEAN; // Default
-        if (model && hnsw_M) *hnsw_M = 0; // Not stored in minimal implementation
-        if (model && hnsw_ef_construction) *hnsw_ef_construction = 0; // Not stored in minimal implementation
-        if (model && hnsw_ef_search) *hnsw_ef_search = 0; // Not stored in minimal implementation
-        return PACMAP_SUCCESS;
-    }
-
+    
     // Simplified version for C# interface (matches C# WindowsGetModelInfo signature)
+    // Enhanced to include all persistence fields for complete model information
     PACMAP_API int pacmap_get_model_info_simple(PacMapModel* model,
         int* n_samples,
         int* n_features,
@@ -188,51 +82,99 @@ extern "C" {
         PacMapMetric* metric,
         int* hnsw_M,
         int* hnsw_ef_construction,
-        int* hnsw_ef_search) {
-        // Simplified implementation for C# interface
-        if (model && n_samples) *n_samples = impl_pacmap_get_n_samples(model);
-        if (model && n_features) *n_features = impl_pacmap_get_n_features(model); // Use accessor function
-        if (model && n_components) *n_components = impl_pacmap_get_n_components(model);
-        if (model && n_neighbors) *n_neighbors = impl_pacmap_get_n_neighbors(model); // Use accessor function
-        if (model && MN_ratio) *MN_ratio = impl_pacmap_get_mn_ratio(model); // Use accessor function
-        if (model && FP_ratio) *FP_ratio = impl_pacmap_get_fp_ratio(model); // Use accessor function
-        if (model && metric) *metric = impl_pacmap_get_metric(model); // Use accessor function
-        if (model && hnsw_M) *hnsw_M = 0; // Not stored in minimal implementation
-        if (model && hnsw_ef_construction) *hnsw_ef_construction = 0; // Not stored in minimal implementation
-        if (model && hnsw_ef_search) *hnsw_ef_search = 0; // Not stored in minimal implementation
+        int* hnsw_ef_search,
+        int* force_exact_knn,
+        int* random_seed,
+        float* min_embedding_distance,
+        float* p95_embedding_distance,
+        float* p99_embedding_distance,
+        float* mild_embedding_outlier_threshold,
+        float* extreme_embedding_outlier_threshold,
+        float* mean_embedding_distance,
+        float* std_embedding_distance,
+        uint32_t* original_space_crc,
+        uint32_t* embedding_space_crc,
+        uint32_t* model_version_crc) {
+        // Direct access to model fields including all persistence fields
+        if (!model) return PACMAP_ERROR_INVALID_PARAMS;
+
+        if (n_samples) *n_samples = model->n_samples;
+        if (n_features) *n_features = model->n_features;
+        if (n_components) *n_components = model->n_components;
+        if (n_neighbors) *n_neighbors = model->n_neighbors;
+        if (MN_ratio) *MN_ratio = model->mn_ratio;
+        if (FP_ratio) *FP_ratio = model->fp_ratio;
+        if (metric) *metric = model->metric;
+        if (hnsw_M) *hnsw_M = model->hnsw_m;
+        if (hnsw_ef_construction) *hnsw_ef_construction = model->hnsw_ef_construction;
+        if (hnsw_ef_search) *hnsw_ef_search = model->hnsw_ef_search;
+
+        // New persistence fields
+        if (force_exact_knn) *force_exact_knn = model->force_exact_knn ? 1 : 0;
+        if (random_seed) *random_seed = model->random_seed;
+        if (min_embedding_distance) *min_embedding_distance = model->min_embedding_distance;
+        if (p95_embedding_distance) *p95_embedding_distance = model->p95_embedding_distance;
+        if (p99_embedding_distance) *p99_embedding_distance = model->p99_embedding_distance;
+        if (mild_embedding_outlier_threshold) *mild_embedding_outlier_threshold = model->mild_embedding_outlier_threshold;
+        if (extreme_embedding_outlier_threshold) *extreme_embedding_outlier_threshold = model->extreme_embedding_outlier_threshold;
+        if (mean_embedding_distance) *mean_embedding_distance = model->mean_embedding_distance;
+        if (std_embedding_distance) *std_embedding_distance = model->std_embedding_distance;
+        if (original_space_crc) *original_space_crc = model->original_space_crc;
+        if (embedding_space_crc) *embedding_space_crc = model->embedding_space_crc;
+        if (model_version_crc) *model_version_crc = model->model_version_crc;
+
         return PACMAP_SUCCESS;
     }
 
-    PACMAP_API const char* pacmap_get_error_message(int error_code) {
-        return impl_pacmap_get_error_message(error_code);
+    
+  PACMAP_API const char* pacmap_get_error_message(int error_code) {
+        // Call the internal implementation
+        return internal_pacmap_get_error_message(error_code);
     }
 
     PACMAP_API const char* pacmap_get_metric_name(PacMapMetric metric) {
-        return impl_pacmap_get_metric_name(metric);
+        switch (metric) {
+            case PACMAP_METRIC_EUCLIDEAN: return "euclidean";
+            case PACMAP_METRIC_COSINE: return "cosine";
+            case PACMAP_METRIC_MANHATTAN: return "manhattan";
+            case PACMAP_METRIC_CORRELATION: return "correlation";
+            case PACMAP_METRIC_HAMMING: return "hamming";
+            default: return "unknown";
+        }
     }
 
     PACMAP_API int pacmap_get_n_components(PacMapModel* model) {
-        return impl_pacmap_get_n_components(model);
+        return model ? model->n_components : 0;
     }
 
     PACMAP_API int pacmap_get_n_samples(PacMapModel* model) {
-        return impl_pacmap_get_n_samples(model);
+        return model ? model->n_samples : 0;
     }
 
     PACMAP_API int pacmap_is_fitted(PacMapModel* model) {
-        return impl_pacmap_is_fitted(model);
+        return model && model->is_fitted ? 1 : 0;
     }
 
     PACMAP_API const char* pacmap_get_version() {
-        return impl_pacmap_get_version();
+        return "1.0.0";
     }
 
     PACMAP_API void pacmap_set_always_save_embedding_data(PacMapModel* model, bool always_save) {
-        // No-op in minimal implementation
+        if (model) {
+            model->always_save_embedding_data = always_save;
+        }
     }
 
     PACMAP_API bool pacmap_get_always_save_embedding_data(PacMapModel* model) {
-        return false; // Default in minimal implementation
+        return model ? model->always_save_embedding_data : false;
+    }
+
+    PACMAP_API int pacmap_save_model(PacMapModel* model, const char* filename) {
+        return persistence_utils::save_model(model, filename);
+    }
+
+    PACMAP_API PacMapModel* pacmap_load_model(const char* filename) {
+        return persistence_utils::load_model(filename);
     }
 
     PACMAP_API void pacmap_set_global_callback(pacmap_progress_callback_v2 callback) {
@@ -243,50 +185,5 @@ extern "C" {
         // No-op in minimal implementation
     }
 
-    PACMAP_API int pacmap_get_model_info_v2(
-        PacMapModel* model,
-        int* n_samples,
-        int* n_features,
-        int* n_components,
-        int* n_neighbors,
-        float* MN_ratio,
-        float* FP_ratio,
-        float* learning_rate,
-        int* n_iters,
-        int* phase1_iters,
-        int* phase2_iters,
-        int* phase3_iters,
-        PacMapMetric* metric,
-        int* hnsw_M,
-        int* hnsw_ef_construction,
-        int* hnsw_ef_search,
-        int* total_triplets,
-        uint32_t* model_crc,
-        uint32_t* triplets_crc,
-        uint32_t* embedding_crc,
-        float* hnsw_recall_percentage) {
-        // Simplified implementation
-        if (model && n_samples) *n_samples = impl_pacmap_get_n_samples(model);
-        if (model && n_features) *n_features = 0; // Not stored in minimal implementation
-        if (model && n_components) *n_components = impl_pacmap_get_n_components(model);
-        if (model && n_neighbors) *n_neighbors = 0; // Not stored in minimal implementation
-        if (model && MN_ratio) *MN_ratio = 0.0f; // Not stored in minimal implementation
-        if (model && FP_ratio) *FP_ratio = 0.0f; // Not stored in minimal implementation
-        if (model && learning_rate) *learning_rate = 0.0f; // Not stored in minimal implementation
-        if (model && n_iters) *n_iters = 0; // Not stored in minimal implementation
-        if (model && phase1_iters) *phase1_iters = 0; // Not stored in minimal implementation
-        if (model && phase2_iters) *phase2_iters = 0; // Not stored in minimal implementation
-        if (model && phase3_iters) *phase3_iters = 0; // Not stored in minimal implementation
-        if (model && metric) *metric = PACMAP_METRIC_EUCLIDEAN; // Default
-        if (model && hnsw_M) *hnsw_M = 0; // Not stored in minimal implementation
-        if (model && hnsw_ef_construction) *hnsw_ef_construction = 0; // Not stored in minimal implementation
-        if (model && hnsw_ef_search) *hnsw_ef_search = 0; // Not stored in minimal implementation
-        if (total_triplets) *total_triplets = 0; // Not stored in minimal implementation
-        if (model_crc) *model_crc = 0; // Not stored in minimal implementation
-        if (triplets_crc) *triplets_crc = 0; // Not stored in minimal implementation
-        if (embedding_crc) *embedding_crc = 0; // Not stored in minimal implementation
-        if (hnsw_recall_percentage) *hnsw_recall_percentage = 0.0f; // Not stored in minimal implementation
-        return PACMAP_SUCCESS;
-    }
-
+    
 } // extern "C"

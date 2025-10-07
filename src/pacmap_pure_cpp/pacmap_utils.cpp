@@ -10,7 +10,7 @@
 #include <iomanip>
 
 // Callback functions for progress reporting and warnings
-static uwot_progress_callback_v2 g_progress_callback = nullptr;
+static pacmap_progress_callback_v2 g_progress_callback = nullptr;
 
 void send_warning_to_callback(const char* message) {
     if (g_progress_callback && message) {
@@ -28,7 +28,7 @@ void send_error_to_callback(const char* message) {
     }
 }
 
-void set_global_callback(uwot_progress_callback_v2 callback) {
+void set_global_callback(pacmap_progress_callback_v2 callback) {
     g_progress_callback = callback;
 }
 
@@ -67,10 +67,11 @@ int validate_parameters(PacMapModel* model) {
         return PACMAP_ERROR_INVALID_PARAMS;
     }
 
-    if (!is_supported_metric(model->metric)) {
-        set_last_error(model, PACMAP_ERROR_MEMORY,
-                      "unsupported distance metric");
-        return PACMAP_ERROR_MEMORY;
+    // FIXED: Restrict to Euclidean metric only (error analysis #4)
+    if (model->metric != PACMAP_METRIC_EUCLIDEAN) {
+        std::cout << "WARNING: Non-Euclidean metric detected. PACMAP officially supports Euclidean only." << std::endl;
+        std::cout << "WARNING: Automatically switching to EUCLIDEAN metric for algorithmic correctness." << std::endl;
+        model->metric = PACMAP_METRIC_EUCLIDEAN;  // Force Euclidean for correct PACMAP behavior
     }
 
     return PACMAP_SUCCESS;
@@ -432,7 +433,7 @@ void set_last_error(PacMapModel* model, int error_code, const std::string& messa
     model->last_error_message = message;
 }
 
-const char* pacmap_get_error_message(int error_code) {
+const char* internal_pacmap_get_error_message(int error_code) {
     switch (error_code) {
         case PACMAP_SUCCESS: return "Success";
         case PACMAP_ERROR_INVALID_PARAMS: return "Invalid parameters provided";

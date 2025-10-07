@@ -1,6 +1,7 @@
 #pragma once
 
 #include "pacmap_model.h"
+#include "pacmap_progress_utils.h"
 #include <string>
 #include <vector>
 #include <algorithm>
@@ -42,6 +43,9 @@ extern void aligned_free(void* ptr);
 extern std::string format_bytes(size_t bytes);
 extern std::string format_duration(double milliseconds);
 
+// Internal error message function
+extern const char* internal_pacmap_get_error_message(int error_code);
+
 // Validation utilities
 extern bool is_valid_parameter_combination(float mn_ratio, float fp_ratio, int n_neighbors);
 extern bool is_supported_metric(PacMapMetric metric);
@@ -55,4 +59,4 @@ extern void print_performance_stats(const PerformanceStats& stats);
 // Callback utilities
 extern void send_warning_to_callback(const char* message);
 extern void send_error_to_callback(const char* message);
-extern void set_global_callback(uwot_progress_callback_v2 callback);
+extern void set_global_callback(pacmap_progress_callback_v2 callback);

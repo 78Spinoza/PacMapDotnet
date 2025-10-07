@@ -36,7 +36,7 @@ namespace distance_metrics {
 
     // Build distance matrix with progress reporting (all-to-all distances)
     void build_distance_matrix(const float* data, int n_obs, int n_dim, PacMapMetric metric,
-                              float* distance_matrix, uwot_progress_callback_v2 progress_callback = nullptr,
+                              float* distance_matrix, pacmap_progress_callback_v2 progress_callback = nullptr,
                               int current_obs = 0, int total_obs = 0);
 
 }

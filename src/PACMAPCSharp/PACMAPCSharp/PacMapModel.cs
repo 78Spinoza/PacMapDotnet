@@ -3,7 +3,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
 
-namespace PACMAPuwotSharp
+namespace PacMapSharp
 {
     /// <summary>
     /// Distance metrics supported by PACMAP
@@ -213,7 +213,7 @@ namespace PACMAPuwotSharp
             [MarshalAs(UnmanagedType.LPStr)] string message
         );
 
-        // Windows P/Invoke declarations - updated to use available UMAP functions
+        // Windows P/Invoke declarations - updated to use available PACMAP functions
         [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_create")]
         private static extern IntPtr WindowsCreate();
 
@@ -246,7 +246,12 @@ namespace PACMAPuwotSharp
         [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_get_model_info_simple")]
         private static extern int WindowsGetModelInfo(IntPtr model, out int nVertices, out int nDim, out int embeddingDim,
                                                       out int nNeighbors, out float mnRatio, out float fpRatio,
-                                                      out DistanceMetric metric, out int hnswM, out int hnswEfConstruction, out int hnswEfSearch);
+                                                      out DistanceMetric metric, out int hnswM, out int hnswEfConstruction, out int hnswEfSearch,
+                                                      out int forceExactKnn, out int randomSeed,
+                                                      out float minEmbeddingDistance, out float p95EmbeddingDistance, out float p99EmbeddingDistance,
+                                                      out float mildEmbeddingOutlierThreshold, out float extremeEmbeddingOutlierThreshold,
+                                                      out float meanEmbeddingDistance, out float stdEmbeddingDistance,
+                                                      out uint originalSpaceCrc, out uint embeddingSpaceCrc, out uint modelVersionCrc);
 
         [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_is_fitted")]
         private static extern int WindowsIsFitted(IntPtr model);
@@ -287,7 +292,12 @@ namespace PACMAPuwotSharp
         [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_get_model_info_simple")]
         private static extern int LinuxGetModelInfo(IntPtr model, out int nVertices, out int nDim, out int embeddingDim,
                                                     out int nNeighbors, out float mnRatio, out float fpRatio,
-                                                    out DistanceMetric metric, out int hnswM, out int hnswEfConstruction, out int hnswEfSearch);
+                                                    out DistanceMetric metric, out int hnswM, out int hnswEfConstruction, out int hnswEfSearch,
+                                                    out int forceExactKnn, out int randomSeed,
+                                                    out float minEmbeddingDistance, out float p95EmbeddingDistance, out float p99EmbeddingDistance,
+                                                    out float mildEmbeddingOutlierThreshold, out float extremeEmbeddingOutlierThreshold,
+                                                    out float meanEmbeddingDistance, out float stdEmbeddingDistance,
+                                                    out uint originalSpaceCrc, out uint embeddingSpaceCrc, out uint modelVersionCrc);
 
         [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_is_fitted")]
         private static extern int LinuxIsFitted(IntPtr model);
@@ -371,10 +381,20 @@ namespace PACMAPuwotSharp
 
                 var result = CallGetModelInfo(_nativeModel, out var nVertices, out var nDim, out var embeddingDim,
                                                   out var nNeighbors, out var mnRatio, out var fpRatio,
-                                                  out var metric, out var hnswM, out var hnswEfConstruction, out var hnswEfSearch);
+                                                  out var metric, out var hnswM, out var hnswEfConstruction, out var hnswEfSearch,
+                                                  out var forceExactKnn, out var randomSeed,
+                                                  out var minEmbeddingDistance, out var p95EmbeddingDistance, out var p99EmbeddingDistance,
+                                                  out var mildEmbeddingOutlierThreshold, out var extremeEmbeddingOutlierThreshold,
+                                                  out var meanEmbeddingDistance, out var stdEmbeddingDistance,
+                                                  out var originalSpaceCrc, out var embeddingSpaceCrc, out var modelVersionCrc);
                 ThrowIfError(result);
 
-                return new PacMapModelInfo(nVertices, nDim, embeddingDim, nNeighbors, mnRatio, fpRatio, metric, hnswM, hnswEfConstruction, hnswEfSearch);
+                return new PacMapModelInfo(nVertices, nDim, embeddingDim, nNeighbors, mnRatio, fpRatio, metric, hnswM, hnswEfConstruction, hnswEfSearch,
+                                          forceExactKnn != 0, randomSeed,
+                                          minEmbeddingDistance, p95EmbeddingDistance, p99EmbeddingDistance,
+                                          mildEmbeddingOutlierThreshold, extremeEmbeddingOutlierThreshold,
+                                          meanEmbeddingDistance, stdEmbeddingDistance,
+                                          originalSpaceCrc, embeddingSpaceCrc, modelVersionCrc);
             }
         }
 
@@ -855,12 +875,25 @@ namespace PACMAPuwotSharp
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static int CallGetModelInfo(IntPtr model, out int nVertices, out int nDim, out int embeddingDim,
                                               out int nNeighbors, out float mnRatio, out float fpRatio,
-                                              out DistanceMetric metric, out int hnswM, out int hnswEfConstruction, out int hnswEfSearch)
+                                              out DistanceMetric metric, out int hnswM, out int hnswEfConstruction, out int hnswEfSearch,
+                                              out int forceExactKnn, out int randomSeed,
+                                              out float minEmbeddingDistance, out float p95EmbeddingDistance, out float p99EmbeddingDistance,
+                                              out float mildEmbeddingOutlierThreshold, out float extremeEmbeddingOutlierThreshold,
+                                              out float meanEmbeddingDistance, out float stdEmbeddingDistance,
+                                              out uint originalSpaceCrc, out uint embeddingSpaceCrc, out uint modelVersionCrc)
         {
             return IsWindows ? WindowsGetModelInfo(model, out nVertices, out nDim, out embeddingDim, out nNeighbors,
-                                                      out mnRatio, out fpRatio, out metric, out hnswM, out hnswEfConstruction, out hnswEfSearch)
+                                                      out mnRatio, out fpRatio, out metric, out hnswM, out hnswEfConstruction, out hnswEfSearch,
+                                                      out forceExactKnn, out randomSeed, out minEmbeddingDistance, out p95EmbeddingDistance, out p99EmbeddingDistance,
+                                                      out mildEmbeddingOutlierThreshold, out extremeEmbeddingOutlierThreshold,
+                                                      out meanEmbeddingDistance, out stdEmbeddingDistance,
+                                                      out originalSpaceCrc, out embeddingSpaceCrc, out modelVersionCrc)
                              : LinuxGetModelInfo(model, out nVertices, out nDim, out embeddingDim, out nNeighbors,
-                                                     out mnRatio, out fpRatio, out metric, out hnswM, out hnswEfConstruction, out hnswEfSearch);
+                                                     out mnRatio, out fpRatio, out metric, out hnswM, out hnswEfConstruction, out hnswEfSearch,
+                                                     out forceExactKnn, out randomSeed, out minEmbeddingDistance, out p95EmbeddingDistance, out p99EmbeddingDistance,
+                                                     out mildEmbeddingOutlierThreshold, out extremeEmbeddingOutlierThreshold,
+                                                     out meanEmbeddingDistance, out stdEmbeddingDistance,
+                                                     out originalSpaceCrc, out embeddingSpaceCrc, out modelVersionCrc);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -932,7 +965,7 @@ namespace PACMAPuwotSharp
                         $"This can cause crashes, data corruption, or incorrect results.");
                 }
 
-                Console.WriteLine($"✅ PACMAP library version verified: {actualVersion}");
+                // Version verified silently
             }
             catch (DllNotFoundException ex)
             {
@@ -991,7 +1024,7 @@ namespace PACMAPuwotSharp
     }
 
     /// <summary>
-    /// Comprehensive information about a fitted PACMAP model
+    /// Comprehensive information about a fitted PACMAP model with enhanced persistence fields
     /// </summary>
     public readonly struct PacMapModelInfo
     {
@@ -1045,9 +1078,83 @@ namespace PACMAPuwotSharp
         /// </summary>
         public int HnswEfSearch { get; }
 
+        // Enhanced persistence fields
+
+        /// <summary>
+        /// Gets whether exact k-NN search is forced instead of HNSW approximation
+        /// </summary>
+        public bool ForceExactKnn { get; }
+
+        /// <summary>
+        /// Gets the random seed used during training for reproducibility
+        /// </summary>
+        public int RandomSeed { get; }
+
+        /// <summary>
+        /// Gets the minimum embedding distance in the training data
+        /// Used for transform outlier detection
+        /// </summary>
+        public float MinEmbeddingDistance { get; }
+
+        /// <summary>
+        /// Gets the 95th percentile embedding distance in the training data
+        /// Used for transform confidence scoring
+        /// </summary>
+        public float P95EmbeddingDistance { get; }
+
+        /// <summary>
+        /// Gets the 99th percentile embedding distance in the training data
+        /// Used for transform outlier detection
+        /// </summary>
+        public float P99EmbeddingDistance { get; }
+
+        /// <summary>
+        /// Gets the mild outlier threshold (2.5 standard deviations from mean)
+        /// Points beyond this are considered mild outliers
+        /// </summary>
+        public float MildEmbeddingOutlierThreshold { get; }
+
+        /// <summary>
+        /// Gets the extreme outlier threshold (4.0 standard deviations from mean)
+        /// Points beyond this are considered extreme outliers
+        /// </summary>
+        public float ExtremeEmbeddingOutlierThreshold { get; }
+
+        /// <summary>
+        /// Gets the mean embedding distance across all training sample pairs
+        /// Used for transform z-score calculation
+        /// </summary>
+        public float MeanEmbeddingDistance { get; }
+
+        /// <summary>
+        /// Gets the standard deviation of embedding distances across training data
+        /// Used for transform statistical analysis
+        /// </summary>
+        public float StdEmbeddingDistance { get; }
+
+        /// <summary>
+        /// Gets the CRC32 checksum of the original space data for integrity validation
+        /// </summary>
+        public uint OriginalSpaceCrc { get; }
+
+        /// <summary>
+        /// Gets the CRC32 checksum of the embedding space data for integrity validation
+        /// </summary>
+        public uint EmbeddingSpaceCrc { get; }
+
+        /// <summary>
+        /// Gets the CRC32 checksum of the model version and structure for integrity validation
+        /// </summary>
+        public uint ModelVersionCrc { get; }
+
         internal PacMapModelInfo(int trainingSamples, int inputDimension, int outputDimension, int neighbors,
                                float mnRatio, float fpRatio, DistanceMetric metric,
-                               int hnswM, int hnswEfConstruction, int hnswEfSearch)
+                               int hnswM, int hnswEfConstruction, int hnswEfSearch,
+                               bool forceExactKnn, int randomSeed,
+                               float minEmbeddingDistance, float p95EmbeddingDistance, float p99EmbeddingDistance,
+                               float mildEmbeddingOutlierThreshold, float extremeEmbeddingOutlierThreshold,
+                               float meanEmbeddingDistance, float stdEmbeddingDistance,
+                               uint originalSpaceCrc, uint embeddingSpaceCrc, uint modelVersionCrc)
         {
             TrainingSamples = trainingSamples;
             InputDimension = inputDimension;
@@ -1059,6 +1166,20 @@ namespace PACMAPuwotSharp
             HnswM = hnswM;
             HnswEfConstruction = hnswEfConstruction;
             HnswEfSearch = hnswEfSearch;
+
+            // Enhanced persistence fields
+            ForceExactKnn = forceExactKnn;
+            RandomSeed = randomSeed;
+            MinEmbeddingDistance = minEmbeddingDistance;
+            P95EmbeddingDistance = p95EmbeddingDistance;
+            P99EmbeddingDistance = p99EmbeddingDistance;
+            MildEmbeddingOutlierThreshold = mildEmbeddingOutlierThreshold;
+            ExtremeEmbeddingOutlierThreshold = extremeEmbeddingOutlierThreshold;
+            MeanEmbeddingDistance = meanEmbeddingDistance;
+            StdEmbeddingDistance = stdEmbeddingDistance;
+            OriginalSpaceCrc = originalSpaceCrc;
+            EmbeddingSpaceCrc = embeddingSpaceCrc;
+            ModelVersionCrc = modelVersionCrc;
         }
 
         /// <summary>
@@ -1069,7 +1190,10 @@ namespace PACMAPuwotSharp
         {
             return $"PACMAP Model: {TrainingSamples} samples, {InputDimension}D → {OutputDimension}D, " +
                    $"k={Neighbors}, MN_ratio={MN_ratio:F2}, FP_ratio={FP_ratio:F2}, metric={Metric}, " +
-                   $"HNSW(M={HnswM}, ef_c={HnswEfConstruction}, ef_s={HnswEfSearch})";
+                   $"HNSW(M={HnswM}, ef_c={HnswEfConstruction}, ef_s={HnswEfSearch}), " +
+                   $"ExactKNN={ForceExactKnn}, Seed={RandomSeed}, " +
+                   $"EmbedStats(min={MinEmbeddingDistance:F3}, p95={P95EmbeddingDistance:F3}, p99={P99EmbeddingDistance:F3}), " +
+                   $"CRC(Orig={OriginalSpaceCrc:X8}, Emb={EmbeddingSpaceCrc:X8}, Ver={ModelVersionCrc:X8})";
         }
     }
 }

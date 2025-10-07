@@ -4,7 +4,7 @@ using System.Diagnostics;
 using System.Collections.Generic;
 using System.Linq;
 using System.Drawing;
-using PACMAPuwotSharp;
+using PacMapSharp;
 
 namespace PacMapDemo
 {
@@ -1308,7 +1308,7 @@ namespace PacMapDemo
         /// <summary>
         /// Create comprehensive parameter information string for image display
         /// </summary>
-        static string CreateDetailedParameterInfo(PACMAPuwotSharp.PacMapModelInfo modelInfo, string method, double timingSeconds)
+        static string CreateDetailedParameterInfo(PacMapSharp.PacMapModelInfo modelInfo, string method, double timingSeconds)
         {
             var lines = new List<string>();
 

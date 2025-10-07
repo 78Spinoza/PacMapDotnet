@@ -1,4 +1,5 @@
 #include "pacmap_progress_utils.h"
+#include "pacmap_utils.h"
 #include <iostream>
 #include <iomanip>
 #include <sstream>
@@ -7,28 +8,7 @@
 
 // Global variables for passing information to v2 callbacks
 thread_local float g_current_epoch_loss = 0.0f;
-thread_local uwot_progress_callback_v2 g_v2_callback = nullptr;
-
-// Helper functions to send warnings/errors to v2 callback
-void send_warning_to_callback(const char* warning_text) {
-    if (g_v2_callback) {
-        g_v2_callback("Warning", 0, 1, 0.0f, warning_text);
-    }
-    else {
-        // Fallback to console if no callback
-        printf("[WARNING] %s\n", warning_text);
-    }
-}
-
-void send_error_to_callback(const char* error_text) {
-    if (g_v2_callback) {
-        g_v2_callback("Error", 0, 1, 0.0f, error_text);
-    }
-    else {
-        // Fallback to console if no callback
-        printf("[ERROR] %s\n", error_text);
-    }
-}
+thread_local pacmap_progress_callback_v2 g_v2_callback = nullptr;
 
 // Cross-platform file utilities
 namespace temp_utils {
@@ -98,7 +78,7 @@ namespace progress_utils {
     }
 
     // Safe callback invoker - handles null callbacks gracefully
-    void safe_callback(uwot_progress_callback_v2 callback,
+    void safe_callback(pacmap_progress_callback_v2 callback,
         const char* phase, int current, int total, float percent,
         const char* message) {
         if (callback != nullptr) {

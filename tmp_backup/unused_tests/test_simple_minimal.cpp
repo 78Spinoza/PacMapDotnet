@@ -16,7 +16,7 @@ void test_progress_callback(const char* phase, int current, int total, float per
 }
 
 int main() {
-    std::cout << "=== PACMAP Simple Minimal Test ===" << std::endl;
+    std::cout << "=== PACMAP DEBUG TEST - THIS SHOULD SHOW INTERNALS ===" << std::endl;
 
     // Test 1: Model creation and destruction
     std::cout << "\n1. Testing model creation..." << std::endl;

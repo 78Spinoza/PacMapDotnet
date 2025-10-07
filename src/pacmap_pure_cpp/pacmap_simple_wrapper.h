@@ -28,6 +28,8 @@ extern "C" {
 #define PACMAP_ERROR_MODEL_NOT_FITTED -5
 #define PACMAP_ERROR_INVALID_MODEL_FILE -6
 #define PACMAP_ERROR_CRC_MISMATCH -7
+#define PACMAP_ERROR_QUANTIZATION_FAILURE -8
+#define PACMAP_ERROR_OPTIMIZATION_FAILURE -9
 
 // Version information
 #define PACMAP_WRAPPER_VERSION_STRING "1.0.0"
@@ -79,29 +81,9 @@ extern "C" {
     PACMAP_API PacMapModel* pacmap_create();
     PACMAP_API void pacmap_destroy(PacMapModel* model);
 
-    // PACMAP TRAINING PIPELINE - PACMAP-specific implementation with triplet sampling
-    PACMAP_API int pacmap_fit_with_progress(PacMapModel* model,
-        float* data,
-        int n_obs,
-        int n_dim,
-        int embedding_dim,
-        int n_neighbors,
-        float MN_ratio,
-        float FP_ratio,
-        float learning_rate,
-        int n_iters,
-        int phase1_iters,
-        int phase2_iters,
-        int phase3_iters,
-        PacMapMetric metric,
-        float* embedding,
-        pacmap_progress_callback progress_callback,
-        int force_exact_knn = 0,
-        int M = -1,
-        int ef_construction = -1,
-        int ef_search = -1,
-        int use_quantization = 0);
-
+    
+    
+    
     PACMAP_API int pacmap_fit_with_progress_v2(PacMapModel* model,
         float* data,
         int n_obs,
@@ -118,32 +100,6 @@ extern "C" {
         PacMapMetric metric,
         float* embedding,
         pacmap_progress_callback_v2 progress_callback,
-        int force_exact_knn = 0,
-        int M = -1,
-        int ef_construction = -1,
-        int ef_search = -1,
-        int use_quantization = 0,
-        int random_seed = -1,
-        int autoHNSWParam = 1);
-
-    // Thread-safe training with user data pointer
-    PACMAP_API int pacmap_fit_with_progress_v3(PacMapModel* model,
-        float* data,
-        int n_obs,
-        int n_dim,
-        int embedding_dim,
-        int n_neighbors,
-        float MN_ratio,
-        float FP_ratio,
-        float learning_rate,
-        int n_iters,
-        int phase1_iters,
-        int phase2_iters,
-        int phase3_iters,
-        PacMapMetric metric,
-        float* embedding,
-        pacmap_progress_callback_v3 progress_callback,
-        void* user_data = nullptr,
         int force_exact_knn = 0,
         int M = -1,
         int ef_construction = -1,
@@ -189,29 +145,41 @@ extern "C" {
     PACMAP_API int pacmap_save_model(PacMapModel* model, const char* filename);
     PACMAP_API PacMapModel* pacmap_load_model(const char* filename);
 
-    // Model information
-    PACMAP_API int pacmap_get_model_info(PacMapModel* model,
-        int* n_samples,
-        int* n_features,
-        int* n_components,
-        int* n_neighbors,
-        float* MN_ratio,
-        float* FP_ratio,
-        float* learning_rate,
-        int* n_iters,
-        int* phase1_iters,
-        int* phase2_iters,
-        int* phase3_iters,
-        PacMapMetric* metric,
-        int* hnsw_M,
-        int* hnsw_ef_construction,
-        int* hnsw_ef_search);
+    // Enhanced model information APIs - PACMAP-specific
+    PACMAP_API int pacmap_get_model_info_simple(PacMapModel* model,
+        int* n_samples, int* n_features, int* n_components,
+        int* n_neighbors, float* mn_ratio, float* fp_ratio,
+        PacMapMetric* metric, int* hnsw_M, int* hnsw_ef_construction, int* hnsw_ef_search,
+        int* force_exact_knn, int* random_seed,
+        float* min_embedding_distance, float* p95_embedding_distance, float* p99_embedding_distance,
+        float* mild_embedding_outlier_threshold, float* extreme_embedding_outlier_threshold,
+        float* mean_embedding_distance, float* std_embedding_distance,
+        uint32_t* original_space_crc, uint32_t* embedding_space_crc, uint32_t* model_version_crc);
+
+    
+    PACMAP_API int pacmap_get_triplet_info(PacMapModel* model,
+        int* total_triplets, int* neighbor_triplets, int* mid_near_triplets, int* far_triplets);
+
+    PACMAP_API int pacmap_get_optimization_info(PacMapModel* model,
+        int* phase1_iters, int* phase2_iters, int* phase3_iters,
+        float* learning_rate, int* is_fitted);
 
     // Utility functions
     PACMAP_API const char* pacmap_get_error_message(int error_code);
     PACMAP_API const char* pacmap_get_metric_name(PacMapMetric metric);
     PACMAP_API int pacmap_get_n_components(PacMapModel* model);
     PACMAP_API int pacmap_get_n_samples(PacMapModel* model);
+    PACMAP_API int pacmap_get_n_features(PacMapModel* model);
+    PACMAP_API float pacmap_get_mn_ratio(PacMapModel* model);
+    PACMAP_API float pacmap_get_fp_ratio(PacMapModel* model);
+    PACMAP_API PacMapMetric pacmap_get_metric(PacMapModel* model);
+    PACMAP_API int pacmap_get_random_seed(PacMapModel* model);
+    PACMAP_API float pacmap_get_learning_rate(PacMapModel* model);
+    PACMAP_API int pacmap_get_phase_iters(PacMapModel* model, int* phase1_iters, int* phase2_iters, int* phase3_iters);
+    PACMAP_API int pacmap_set_random_seed(PacMapModel* model, int seed);
+    PACMAP_API int pacmap_set_learning_rate(PacMapModel* model, float learning_rate);
+    PACMAP_API int pacmap_reset_model(PacMapModel* model);
+    PACMAP_API int pacmap_copy_model(PacMapModel* source, PacMapModel** destination);
     PACMAP_API int pacmap_is_fitted(PacMapModel* model);
     PACMAP_API const char* pacmap_get_version();
 
@@ -219,32 +187,16 @@ extern "C" {
     PACMAP_API void pacmap_set_always_save_embedding_data(PacMapModel* model, bool always_save);
     PACMAP_API bool pacmap_get_always_save_embedding_data(PacMapModel* model);
 
-    // Enhanced model information with triplet information and HNSW indices
-    PACMAP_API int pacmap_get_model_info_v2(
-        PacMapModel* model,
-        int* n_samples,
-        int* n_features,
-        int* n_components,
-        int* n_neighbors,
-        float* MN_ratio,
-        float* FP_ratio,
-        float* learning_rate,
-        int* n_iters,
-        int* phase1_iters,
-        int* phase2_iters,
-        int* phase3_iters,
-        PacMapMetric* metric,
-        int* hnsw_M,
-        int* hnsw_ef_construction,
-        int* hnsw_ef_search,
-        int* total_triplets,
-        uint32_t* model_crc,
-        uint32_t* triplets_crc,
-        uint32_t* embedding_crc,
-        float* hnsw_recall_percentage
-    );
-
+    
 #ifdef __cplusplus
+
+// Forward declarations for implementation namespaces
+namespace transform_utils {
+    int pacmap_transform(PacMapModel* model, float* new_data, int n_new_obs, int n_dim, float* embedding);
+    int pacmap_transform_detailed(PacMapModel* model, float* new_data, int n_new_obs, int n_dim, float* embedding,
+        int* nn_indices, float* nn_distances, float* confidence_score, int* outlier_level, float* percentile_rank, float* z_score);
+}
+
 }
 #endif
 

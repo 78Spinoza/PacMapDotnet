@@ -11,11 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial PACMAP implementation based on proven UMAPCSharp infrastructure
 - Three-phase optimization with dynamic weight adjustment
 - Triplet-based structure preservation using neighbor, mid-near, and far pairs
-- HNSW optimization for 50-2000x faster nearest neighbor search
+- HNSW optimization for faster nearest neighbor search
 - Cross-platform support (Windows x64, Linux x64)
 - Model persistence with CRC32 validation
 - 16-bit quantization for 85-95% file size reduction
-- Production safety features with 5-level outlier detection
+- Production safety features with outlier detection
 - Multiple distance metrics: Euclidean, Manhattan, Cosine, Correlation, Chebyshev
 - Comprehensive test suite with >95% coverage
 - Professional documentation and examples

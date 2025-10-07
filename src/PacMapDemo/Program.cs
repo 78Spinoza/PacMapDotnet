@@ -4,7 +4,8 @@ using System.Diagnostics;
 using System.Collections.Generic;
 using System.Linq;
 using System.Drawing;
-using PACMAPuwotSharp;
+using System.Threading;
+using PacMapSharp;
 
 namespace PacMapDemo
 {
@@ -54,6 +55,38 @@ namespace PacMapDemo
                 Console.WriteLine();
                 Console.WriteLine("✅ DEMO COMPLETED SUCCESSFULLY!");
                 Console.WriteLine("The PacMapDemo now works with the new PACMAPCSharp library!");
+
+                // Auto-open Results folder on Windows
+                if (Environment.OSVersion.Platform == PlatformID.Win32NT)
+                {
+                    try
+                    {
+                        var fullPath = Path.GetFullPath(outputDir);
+                        Process.Start(new ProcessStartInfo
+                        {
+                            FileName = "explorer.exe",
+                            Arguments = fullPath,
+                            UseShellExecute = true,
+                            CreateNoWindow = false,
+                            WindowStyle = ProcessWindowStyle.Normal
+                        });
+                        Console.WriteLine($"📂 Opened Results folder: {fullPath}");
+
+                        // Alternative method if explorer doesn't work
+                        Thread.Sleep(500); // Give explorer time to open
+                        Process.Start(new ProcessStartInfo
+                        {
+                            FileName = fullPath,
+                            UseShellExecute = true,
+                            Verb = "open"
+                        });
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"⚠️  Could not open Results folder: {ex.Message}");
+                        Console.WriteLine($"   Manually navigate to: {Path.GetFullPath(outputDir)}");
+                    }
+                }
             }
             catch (Exception ex)
             {
@@ -152,30 +185,68 @@ namespace PacMapDemo
 
             float[,] embedding;
 
-            // Test 1: Test multiple PACMAP parameter combinations for better clustering
-            Console.WriteLine("   Test 1: Testing multiple PACMAP parameter combinations...");
+            // Test 1: Debug PACMAP with simple test data first
+            Console.WriteLine("   Test 1: Debugging PACMAP with simple test data...");
+
+            // Create simple test data with clear clusters
+            var testData = CreateSimpleTestData();
+            var testLabels = CreateSimpleTestLabels();
+            var floatTestData = ConvertToFloat(testData);
+
+            Console.WriteLine($"   Test data: {testData.GetLength(0)} points, {testData.GetLength(1)} dimensions");
+
+            // Test PACMAP on simple data
+            using var testModel = new PacMapModel();
+            var testEmbedding = testModel.Fit(
+                data: floatTestData,
+                embeddingDimension: 2,
+                nNeighbors: 5,
+                metric: DistanceMetric.Euclidean,
+                randomSeed: 42
+            );
+
+            Console.WriteLine($"   ✅ Test embedding created: {testEmbedding.GetLength(0)}x{testEmbedding.GetLength(1)}");
+
+            // Check if simple test data produces reasonable results
+            double testQuality = CalculateEmbeddingQuality(testEmbedding, testLabels);
+            Console.WriteLine($"   📊 Simple test quality: {testQuality:F4}");
+
+            if (testQuality > 0.1) // If even simple data fails, PACMAP implementation has issues
+            {
+                Console.WriteLine("   ❌ WARNING: Simple test data also produces poor clustering!");
+                Console.WriteLine("   🔍 This suggests a fundamental issue with the PACMAP implementation");
+            }
+            else
+            {
+                Console.WriteLine("   ✅ Simple test data works - issue is with mammoth data complexity");
+            }
+            Console.WriteLine();
+
+            // Test 2: Now try mammoth data with different approaches
+            Console.WriteLine("   Test 2: Testing mammoth data with PACMAP...");
 
             float[,] bestEmbedding = null;
             double bestQuality = double.MaxValue;
-            PacMapModel bestModel = null;
             var bestParams = new { nNeighbors = 0, metric = DistanceMetric.Euclidean, name = "" };
 
-            // Test different parameter combinations
+            // Test more aggressive parameter combinations
             var testParams = new[]
             {
+                new { nNeighbors = 5, metric = DistanceMetric.Euclidean, name = "Euclidean_5" },
                 new { nNeighbors = 10, metric = DistanceMetric.Euclidean, name = "Euclidean_10" },
-                new { nNeighbors = 30, metric = DistanceMetric.Euclidean, name = "Euclidean_30" },
+                new { nNeighbors = 20, metric = DistanceMetric.Euclidean, name = "Euclidean_20" },
                 new { nNeighbors = 50, metric = DistanceMetric.Euclidean, name = "Euclidean_50" },
-                new { nNeighbors = 15, metric = DistanceMetric.Manhattan, name = "Manhattan_15" },
-                new { nNeighbors = 25, metric = DistanceMetric.Cosine, name = "Cosine_25" }
+                new { nNeighbors = 100, metric = DistanceMetric.Euclidean, name = "Euclidean_100" },
+                new { nNeighbors = 10, metric = DistanceMetric.Manhattan, name = "Manhattan_10" },
+                new { nNeighbors = 10, metric = DistanceMetric.Cosine, name = "Cosine_10" }
             };
 
             foreach (var param in testParams)
             {
-                using var testModel = new PacMapModel();
+                using var testModelMammoth = new PacMapModel();
                 var testStopwatch = Stopwatch.StartNew();
 
-                var testEmbedding = testModel.Fit(
+                var testEmbeddingMammoth = testModelMammoth.Fit(
                     data: floatData,
                     embeddingDimension: 2,
                     nNeighbors: param.nNeighbors,
@@ -185,20 +256,26 @@ namespace PacMapDemo
 
                 testStopwatch.Stop();
 
-                // Calculate simple quality metric (average distance to nearest same-label neighbor)
-                double quality = CalculateEmbeddingQuality(testEmbedding, labels);
+                // Calculate simple quality metric
+                double quality = CalculateEmbeddingQuality(testEmbeddingMammoth, labels);
 
-                Console.WriteLine($"      ✅ {param.name}: n={param.nNeighbors}, quality={quality:F3}, time={testStopwatch.Elapsed.TotalSeconds:F2}s");
+                Console.WriteLine($"      ✅ {param.name}: n={param.nNeighbors}, quality={quality:F4}, time={testStopwatch.Elapsed.TotalSeconds:F2}s");
 
                 if (quality < bestQuality)
                 {
                     bestQuality = quality;
-                    bestEmbedding = testEmbedding;
+                    bestEmbedding = testEmbeddingMammoth;
                     bestParams = param;
                 }
             }
 
-            Console.WriteLine($"      🏆 Best embedding: {bestParams.name} with quality {bestQuality:F3}");
+            Console.WriteLine($"      🏆 Best mammoth embedding: {bestParams.name} with quality {bestQuality:F4}");
+
+            if (bestQuality > 0.05)
+            {
+                Console.WriteLine("   ❌ ALL mammoth embeddings show poor quality (>0.05)");
+                Console.WriteLine("   🔍 PACMAP may not be suitable for this type of 3D spatial data");
+            }
             Console.WriteLine();
 
             // Create the best model for persistence testing
@@ -355,6 +432,57 @@ namespace PacMapDemo
             }
 
             return normalized;
+        }
+
+        // Create simple test data with clear clusters
+        static double[,] CreateSimpleTestData()
+        {
+            var data = new double[300, 3]; // 3 clusters, 100 points each
+            var random = new Random(42);
+
+            // Cluster 1: Centered at (0,0,0)
+            for (int i = 0; i < 100; i++)
+            {
+                data[i, 0] = NextGaussian(random) * 0.5;
+                data[i, 1] = NextGaussian(random) * 0.5;
+                data[i, 2] = NextGaussian(random) * 0.5;
+            }
+
+            // Cluster 2: Centered at (3,3,3)
+            for (int i = 100; i < 200; i++)
+            {
+                data[i, 0] = 3 + NextGaussian(random) * 0.5;
+                data[i, 1] = 3 + NextGaussian(random) * 0.5;
+                data[i, 2] = 3 + NextGaussian(random) * 0.5;
+            }
+
+            // Cluster 3: Centered at (-3,-3,-3)
+            for (int i = 200; i < 300; i++)
+            {
+                data[i, 0] = -3 + NextGaussian(random) * 0.5;
+                data[i, 1] = -3 + NextGaussian(random) * 0.5;
+                data[i, 2] = -3 + NextGaussian(random) * 0.5;
+            }
+
+            return data;
+        }
+
+        // Create simple test labels
+        static int[] CreateSimpleTestLabels()
+        {
+            var labels = new int[300];
+            for (int i = 0; i < 100; i++) labels[i] = 0;      // Cluster 1
+            for (int i = 100; i < 200; i++) labels[i] = 1;   // Cluster 2
+            for (int i = 200; i < 300; i++) labels[i] = 2;   // Cluster 3
+            return labels;
+        }
+
+        // Simple Gaussian random number generator
+        public static double NextGaussian(Random random)
+        {
+            double u1 = random.NextDouble();
+            double u2 = random.NextDouble();
+            return Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
         }
 
         // Calculate embedding quality - lower is better (clusters of same labels should be close)

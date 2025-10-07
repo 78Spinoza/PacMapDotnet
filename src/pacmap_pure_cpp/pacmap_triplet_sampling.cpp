@@ -8,14 +8,14 @@
 #include <memory>
 #include <iostream>
 
-// Utility function for RNG management
-std::mt19937 get_seeded_rng(int seed) {
-    return seed >= 0 ? std::mt19937(seed) : std::mt19937(std::random_device{}());
-}
 
-void sample_triplets(PacMapModel* model, float* data, uwot_progress_callback_v2 callback) {
+void sample_triplets(PacMapModel* model, float* data, pacmap_progress_callback_internal callback) {
+
+    // CRITICAL DEBUG: Add more detailed triplet analysis
+
     // Validate parameters first
     if (validate_parameters(model) != PACMAP_SUCCESS) {
+        if (callback) callback("Error", 0, 100, 0.0f, "Parameter validation failed");
         return;
     }
 
@@ -38,6 +38,11 @@ void sample_triplets(PacMapModel* model, float* data, uwot_progress_callback_v2 
                                                     model->metric,
                                                     model->hnsw_m,
                                                     model->hnsw_ef_construction);
+
+    if (!model->original_space_index) {
+        if (callback) callback("Error", 0, 100, 0.0f, "Failed to create HNSW index");
+        return;
+    }
 
     // Initialize RNG for deterministic behavior
     model->rng = get_seeded_rng(model->random_seed);
@@ -63,6 +68,28 @@ void sample_triplets(PacMapModel* model, float* data, uwot_progress_callback_v2 
     model->triplets.insert(model->triplets.end(), mn_triplets.begin(), mn_triplets.end());
     model->triplets.insert(model->triplets.end(), fp_triplets.begin(), fp_triplets.end());
 
+              
+    // CRITICAL DEBUG: Analyze triplet quality
+    if (model->triplets.size() > 0) {
+        // Check if triplets have good diversity in indices
+        std::unordered_set<int> unique_anchors, unique_neighbors;
+        for (const auto& triplet : model->triplets) {
+            unique_anchors.insert(triplet.anchor);
+            unique_neighbors.insert(triplet.neighbor);
+        }
+                  
+        // Sample first few triplets for inspection
+        for (int i = 0; i < std::min(10, (int)model->triplets.size()); ++i) {
+            const auto& t = model->triplets[i];
+        }
+    }
+
+    // Update triplet counts
+    model->total_triplets = static_cast<int>(model->triplets.size());
+    model->neighbor_triplets = static_cast<int>(neighbor_triplets.size());
+    model->mid_near_triplets = static_cast<int>(mn_triplets.size());
+    model->far_triplets = static_cast<int>(fp_triplets.size());
+
     callback("Sampling Triplets", 100, 100, 100.0f, nullptr);
 }
 
@@ -80,7 +107,7 @@ void sample_neighbors_pair(PacMapModel* model, const std::vector<float>& normali
             model->n_neighbors + 1);
 
         // Convert priority_queue to vector for access
-        std::vector<std::pair<float, int>> knn;
+        std::vector<std::pair<float, size_t>> knn;
         while (!knn_results.empty()) {
             knn.push_back(knn_results.top());
             knn_results.pop();
@@ -109,7 +136,8 @@ void sample_MN_pair(PacMapModel* model, const std::vector<float>& normalized_dat
     // Compute distance percentiles for mid-near range (25th-75th percentile)
     auto percentiles = compute_distance_percentiles(normalized_data,
                                                    std::min(model->n_samples, 1000),
-                                                   model->n_features);
+                                                   model->n_features,
+                                                   model->metric);
     float p25_dist = percentiles[0];
     float p75_dist = percentiles[1];
 
@@ -128,7 +156,8 @@ void sample_FP_pair(PacMapModel* model, const std::vector<float>& normalized_dat
     // Compute 90th percentile for far pairs
     auto percentiles = compute_distance_percentiles(normalized_data,
                                                    std::min(model->n_samples, 500),
-                                                   model->n_features);
+                                                   model->n_features,
+                                                   model->metric);
     float p90_dist = percentiles[2];  // 90th percentile
 
     // Distance-based sampling for far pairs
@@ -175,7 +204,7 @@ void distance_based_sampling(PacMapModel* model, const std::vector<float>& data,
     }
 }
 
-std::vector<float> compute_distance_percentiles(const std::vector<float>& data, int n_samples, int n_features) {
+std::vector<float> compute_distance_percentiles(const std::vector<float>& data, int n_samples, int n_features, PacMapMetric metric) {
     std::vector<float> distances;
 
     // Sample distances for percentile estimation (optimize for large datasets)
@@ -184,7 +213,7 @@ std::vector<float> compute_distance_percentiles(const std::vector<float>& data, 
         for (int j = i + 1; j < sample_size; ++j) {
             float dist = compute_sampling_distance(data.data() + i * n_features,
                                                  data.data() + j * n_features,
-                                                 n_features, PACMAP_METRIC_EUCLIDEAN);
+                                                 n_features, metric);  // CRITICAL FIX: Use actual metric!
             distances.push_back(dist);
         }
     }
@@ -276,9 +305,4 @@ void print_sampling_statistics(const std::vector<Triplet>& triplets) {
         }
     }
 
-    std::cout << "Triplet Sampling Statistics:" << std::endl;
-    std::cout << "  Total triplets: " << triplets.size() << std::endl;
-    std::cout << "  Neighbor pairs: " << neighbor_count << std::endl;
-    std::cout << "  Mid-near pairs: " << mn_count << std::endl;
-    std::cout << "  Far pairs: " << fp_count << std::endl;
-}
+    }

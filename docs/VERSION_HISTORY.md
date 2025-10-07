@@ -71,7 +71,7 @@ Console.WriteLine($"Embedding space CRC: {info.EmbeddingSpaceCRC32:X8}");
 ### 🧠 REVOLUTIONARY AI INFERENCE CAPABILITIES
 - **Dual HNSW architecture**: Original space + embedding space indices
 - **AI pattern similarity search**: Find similar learned behaviors, not raw features
-- **Enhanced AI safety**: 5-level outlier detection in embedding space
+- **Enhanced AI safety**: outlier detection in embedding space
 - **Sub-millisecond AI inference**: Real-time confidence scoring for AI systems
 - **Production AI validation**: Know when AI predictions are unreliable
 
@@ -169,7 +169,7 @@ var customEmbedding = model.Fit(data,
 ## Version 3.1.0 - Revolutionary HNSW k-NN Optimization
 
 ### 🚀 BREAKTHROUGH PERFORMANCE
-- **Complete HNSW k-NN optimization**: 50-2000x training speedup
+- **Complete HNSW k-NN optimization**: faster training speedup
 - **Lightning-fast transforms**: <3ms per sample (vs 50-200ms before)
 - **Massive memory reduction**: 80-85% less RAM usage (15-45MB vs 240MB)
 - **Training optimization**: Hours → Minutes → Seconds for large datasets
@@ -201,7 +201,7 @@ v3.0.1 includes the complete Linux library (174KB) with full HNSW acceleration.
 
 ### 🎯 MAJOR FEATURES
 - **First HNSW implementation**: Revolutionary k-NN acceleration
-- **Production safety features**: 5-level outlier detection (Normal → No Man's Land)
+- **Production safety features**: outlier detection (Normal → No Man's Land)
 - **Enhanced transform capability**: TransformDetailed with confidence scoring
 - **Model persistence**: Complete save/load with HNSW indices
 - **Multi-dimensional support**: 1D-50D embeddings all HNSW-optimized
@@ -275,7 +275,7 @@ var embedding = model.Fit(data, embeddingDimension: 2);
 var embedding = model.Fit(data,
     embeddingDimension: 2,
     spread: 5.0f,              // Optimal 2D visualization
-    forceExactKnn: false,      // Enable HNSW for 50-2000x speedup
+    forceExactKnn: false,      // Enable HNSW for faster speedup
     useQuantization: true);    // Enable 85-95% file size reduction
 
 // Critical fix: Perfect consistency for training data
@@ -297,7 +297,7 @@ var embedding = model.Fit(data, embeddingDimension: 2);
 var embedding = model.Fit(data,
     embeddingDimension: 2,
     spread: 5.0f,              // Optimal 2D visualization
-    forceExactKnn: false,      // Enable HNSW for 50-2000x speedup
+    forceExactKnn: false,      // Enable HNSW for faster speedup
     useQuantization: true);    // Enable 85-95% file size reduction
 
 // Save with stream-based serialization and CRC32 validation
@@ -333,8 +333,8 @@ foreach (var result in aiResults) {
 | Version | Transform Speed | Memory Usage | Serialization | Storage | Safety Features |
 |---------|----------------|--------------|---------------|----------|-----------------|
 | **2.x** | 50-200ms | 240MB | Basic | Full size | None |
-| **3.0.0** | <3ms | 15-45MB | HNSW indices | Full size | 5-level outlier detection |
-| **3.13.0** | <3ms | 15-45MB | HNSW + quantized | 85-95% reduced | 5-level outlier detection |
+| **3.0.0** | <3ms | 15-45MB | HNSW indices | Full size | outlier detection |
+| **3.13.0** | <3ms | 15-45MB | HNSW + quantized | 85-95% reduced | outlier detection |
 | **3.14.0** | <1ms | ~50MB | Dual HNSW | 85-95% reduced | AI inference safety |
 | **3.15.0** | <1ms | ~50MB | Stream + CRC32 | 85-95% reduced | AI inference + integrity validation |
 | **3.16.0** | <1ms | ~50MB | Stream + CRC32 | 85-95% reduced | AI inference + critical bug fixes |

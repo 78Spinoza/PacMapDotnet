@@ -1,7 +1,7 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using System.Diagnostics;
-using PACMAPuwotSharp;
+using PacMapSharp;
 
 namespace PACMAPCSharp.Tests
 {
@@ -593,7 +593,7 @@ namespace PACMAPCSharp.Tests
 
             // Create deterministic test data matching C++ test exactly (3 samples for precise debugging)
             var data = CreateCppMatchingTestData(); // Same 3 samples × 305 dimensions as C++ test
-            string modelPath = Path.Combine(Path.GetTempPath(), $"test_quantization_pipeline_{Guid.NewGuid()}.umap");
+            string modelPath = Path.Combine(Path.GetTempPath(), $"test_quantization_pipeline_{Guid.NewGuid()}.pmp");
 
             try
             {
@@ -644,7 +644,7 @@ namespace PACMAPCSharp.Tests
 
                     int mismatchCount = 0;
                     double maxDifference = 0.0;
-                    const double tolerance = 0.5; // UMAP training vs transform naturally differs - check reasonable similarity
+                    const double tolerance = 0.5; // PACMAP training vs transform naturally differs - check reasonable similarity
 
                     // Test first 10 points for comprehensive validation with large dataset
                     int pointsToTest = Math.Min(10, Math.Min(trainingEmbeddings.GetLength(0), transformResult.GetLength(0)));

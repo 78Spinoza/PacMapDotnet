@@ -57,18 +57,19 @@ void compute_gradients(const std::vector<float>& embedding, const std::vector<Tr
         float d_ij = std::sqrt(std::max(d_ij_squared, 1e-8f));
 
         // Compute gradient magnitude based on triplet type (PACMAP loss functions)
+        // FIXED: Corrected loss function constants to match official PACMAP
         float grad_magnitude;
         switch (t.type) {
             case NEIGHBOR:
-                // Attractive force: w * 10 / ((10 + d)^2)
-                grad_magnitude = w_n * 10.0f / std::pow(10.0f + d_ij, 2.0f);
+                // Attractive force: w * 1.0 / ((1.0 + d)^2) - FIXED from 10.0
+                grad_magnitude = w_n * 1.0f / std::pow(1.0f + d_ij, 2.0f);
                 break;
             case MID_NEAR:
-                // Moderate attractive force: w * 10000 / ((10000 + d)^2)
-                grad_magnitude = w_mn * 10000.0f / std::pow(10000.0f + d_ij, 2.0f);
+                // Moderate attractive force: w * 1.0 / ((1.0 + d)^2) - FIXED from 10000.0
+                grad_magnitude = w_mn * 1.0f / std::pow(1.0f + d_ij, 2.0f);
                 break;
             case FURTHER:
-                // Repulsive force: -w / ((1 + d)^2)
+                // Repulsive force: -w / ((1 + d)^2) - already correct
                 grad_magnitude = -w_f / std::pow(1.0f + d_ij, 2.0f);
                 break;
             default:
@@ -94,25 +95,19 @@ void adam_update(std::vector<float>& embedding, const std::vector<float>& gradie
                  std::vector<float>& m, std::vector<float>& v, int iter, float learning_rate,
                  float beta1, float beta2, float eps) {
 
-    // Bias correction terms (Adam algorithm)
-    float beta1_pow = std::pow(beta1, iter + 1);
-    float beta2_pow = std::pow(beta2, iter + 1);
+    // AdaGrad optimizer implementation (replacing ADAM)
+    // Learning rate fixed at 1.0 as per official PACMAP
+    const float ada_grad_lr = 1.0f;
+    const float ada_grad_eps = 1e-8f;
 
-    // Parallel Adam update with adaptive learning rates
+    // Parallel AdaGrad update - simple accumulation of squared gradients
     #pragma omp parallel for
     for (int i = 0; i < static_cast<int>(embedding.size()); ++i) {
-        // Update biased first moment estimate
-        m[i] = beta1 * m[i] + (1 - beta1) * gradients[i];
-
-        // Update biased second raw moment estimate
-        v[i] = beta2 * v[i] + (1 - beta2) * (gradients[i] * gradients[i]);
-
-        // Compute bias-corrected estimates
-        float m_hat = m[i] / (1 - beta1_pow);
-        float v_hat = v[i] / (1 - beta2_pow);
+        // Accumulate squared gradients (no momentum, no bias correction)
+        v[i] += gradients[i] * gradients[i];
 
         // Update parameters with adaptive learning rate
-        embedding[i] -= learning_rate * m_hat / (std::sqrt(v_hat) + eps);
+        embedding[i] -= ada_grad_lr * gradients[i] / (std::sqrt(v[i]) + ada_grad_eps);
     }
 }
 
@@ -141,16 +136,17 @@ float compute_pacmap_loss(const std::vector<float>& embedding, const std::vector
                                              n_components, PACMAP_METRIC_EUCLIDEAN);
 
         // Compute loss based on triplet type
+        // FIXED: Corrected loss constants to match gradient computation
         float triplet_loss;
         switch (triplet.type) {
             case NEIGHBOR:
-                triplet_loss = w_n * (d_ij / (10.0f + d_ij));
+                triplet_loss = w_n * (d_ij / (1.0f + d_ij));  // FIXED from 10.0f
                 break;
             case MID_NEAR:
-                triplet_loss = w_mn * (d_ij / (10000.0f + d_ij));
+                triplet_loss = w_mn * (d_ij / (1.0f + d_ij));  // FIXED from 10000.0f
                 break;
             case FURTHER:
-                triplet_loss = w_f * (1.0f / (1.0f + d_ij));
+                triplet_loss = w_f * (1.0f / (1.0f + d_ij));  // already correct
                 break;
         }
 

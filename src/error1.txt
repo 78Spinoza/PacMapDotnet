@@ -1,0 +1,420 @@
+Below is a summarized list of the four key issues in your C++ PaCMAP implementation that need to be addressed, presented as logical steps with concise explanations. These steps focus on fixing potential errors and optimizing the implementation, particularly for HNSW integration, random initialization, and the AdaGrad naming issue, as discussed previously. Each step includes the issue, why it matters, and the specific actions to take, streamlined for clarity and actionability.
+
+---
+
+### Step 1: Fix Gradient/Loss Function Constants
+- **Issue**: The `compute_gradients` and `compute_pacmap_loss` functions in `pacmap_gradient.cpp` use `1.0f / pow(1.0f + d_ij, 2)` for neighbor and mid-near triplets, but the official PaCMAP Python implementation [web:0, web:46] uses `10.0 / (10 + d)^2` for neighbors and `10000.0 / (10000 + d)^2` for mid-near to balance local and global structure preservation. Your code’s “FIXED” comments suggest an incorrect assumption that the Python constants were errors.
+- **Why It Matters**: The corrected constants weaken attractive forces (by ~10x for neighbors), leading to slow convergence or collapsed embeddings (points clumping), especially with random initialization, which relies on strong early gradients to spread points.
+- **Actions**:
+  1. Update `compute_gradients` in `pacmap_gradient.cpp`:
+     ```cpp:disable-run
+     case NEIGHBOR:
+         grad_magnitude = w_n * 10.0f / std::pow(10.0f + d_ij, 2.0f);
+         break;
+     case MID_NEAR:
+         grad_magnitude = w_mn * 10000.0f / std::pow(10000.0f + d_ij, 2.0f);
+         break;
+     case FURTHER:
+         grad_magnitude = -w_f / std::pow(1.0f + d_ij, 2.0f);
+         break;
+     ```
+  2. Update `compute_pacmap_loss` in `pacmap_gradient.cpp`:
+     ```cpp
+     case NEIGHBOR:
+         triplet_loss = w_n * (d_ij / (10.0f + d_ij));
+         break;
+     case MID_NEAR:
+         triplet_loss = w_mn * (d_ij / (10000.0f + d_ij));
+         break;
+     case FURTHER:
+         triplet_loss = w_f * (1.0f / (1.0f + d_ij));
+         break;
+     ```
+  3. Test on a small dataset (e.g., Iris, n=150, d=4). Expect loss <0.1 within 100 iterations (with `num_iters=(100,100,250)`). If loss >0.5, gradients are still too weak.
+
+---
+
+### Step 2: Rename Adam to AdaGrad for Clarity
+- **Issue**: The `adam_update` function in `pacmap_gradient.cpp` implements AdaGrad (accumulating squared gradients, fixed learning rate=1.0), but is misnamed as Adam, with unused Adam-specific parameters (`beta1`, `beta2`, `eps`). Comments and variables (`adam_m`, `adam_v`) in `pacmap_fit.cpp` and `pacmap_optimization.cpp` also reference Adam, despite using AdaGrad, which matches the official PaCMAP’s stable optimization [web:0].
+- **Why It Matters**: Misnaming risks confusion for developers maintaining or extending the code (e.g., expecting momentum terms). It reflects an earlier intent to use Adam, likely abandoned for AdaGrad’s stability with PaCMAP’s triplet-based loss.
+- **Actions**:
+  1. Rename the function in `pacmap_gradient.cpp` and simplify the signature:
+     ```cpp
+     void adagrad_update(std::vector<float>& embedding, const std::vector<float>& gradients,
+                         std::vector<float>& m, std::vector<float>& v, int iter, float learning_rate) {
+         const float ada_grad_lr = 1.0f;
+         const float ada_grad_eps = 1e-8f;
+         #pragma omp parallel for
+         for (int i = 0; i < static_cast<int>(embedding.size()); ++i) {
+             v[i] += gradients[i] * gradients[i];
+             embedding[i] -= ada_grad_lr * gradients[i] / (std::sqrt(v[i]) + ada_grad_eps);
+         }
+     }
+     ```
+  2. Update the header (assumed `pacmap_gradient.h`):
+     ```cpp
+     void adagrad_update(std::vector<float>& embedding, const std::vector<float>& gradients,
+                         std::vector<float>& m, std::vector<float>& v, int iter, float learning_rate);
+     ```
+  3. Update calls in `pacmap_optimization.cpp` (`optimize_embedding`, `run_optimization_phase`):
+     ```cpp
+     adagrad_update(embedding, gradients, m, v, iter, model->learning_rate);
+     ```
+  4. In `pacmap_fit.cpp`, rename variables and comment:
+     ```cpp
+     // Initialize AdaGrad optimizer state
+     model->adagrad_m.resize(embedding_size, 0.0f);
+     model->adagrad_v.resize(embedding_size, 0.0f);
+     ```
+     Update `PacMapModel` struct (assumed in `pacmap.h`):
+     ```cpp
+     std::vector<float> adagrad_m;
+     std::vector<float> adagrad_v;
+     ```
+  5. Test compilation and verify unchanged loss behavior (<0.05 on COIL-20, n=1440, d=1024, after 450 iterations).
+
+---
+
+### Step 3: Optimize Triplet Sampling
+- **Issue**: In `pacmap_triplet_sampling.cpp`, `sample_MN_pair` and `sample_FP_pair` oversample (`n_mn * 2`, `n_fp * 3`) with rejection sampling to ensure unique pairs, which is slow for large datasets (`n_obs > 10k`). The Python reference samples exactly `n_neighbors * MN_ratio` and `FP_ratio` using simpler random sampling [web:0].
+- **Why It Matters**: Oversampling increases runtime (>10s for n=100k, d=100) and risks low triplet diversity if `max_attempts` is hit, weakening global structure preservation, especially with random initialization.
+- **Actions**:
+  1. Modify `sample_MN_pair` to use HNSW for efficient sampling, querying k=50 neighbors and filtering by distance (25th–75th percentiles):
+     ```cpp
+     void sample_MN_pair(PacMapModel* model, const std::vector<float>& normalized_data,
+                         std::vector<Triplet>& mn_triplets, int n_mn) {
+         mn_triplets.clear();
+         mn_triplets.reserve(model->n_samples * n_mn);
+         auto percentiles = compute_distance_percentiles(normalized_data, std::min(model->n_samples, 1000),
+                                                        model->n_features, model->metric);
+         float p25_dist = percentiles[0], p75_dist = percentiles[1];
+         std::unordered_set<long long> used_pairs;
+
+         #pragma omp parallel for
+         for (int i = 0; i < model->n_samples; ++i) {
+             auto knn_results = model->original_space_index->searchKnn(
+                 normalized_data.data() + i * model->n_features, 50);
+             std::vector<std::pair<float, int>> knn;
+             while (!knn_results.empty()) {
+                 float dist = knn_results.top().first;
+                 dist = model->metric == PACMAP_METRIC_EUCLIDEAN ? std::sqrt(std::max(0.0f, dist)) : dist;
+                 if (dist >= p25_dist && dist <= p75_dist) {
+                     knn.push_back(knn_results.top());
+                 }
+                 knn_results.pop();
+             }
+             std::shuffle(knn.begin(), knn.end(), model->rng);
+             std::vector<Triplet> local_triplets;
+             for (size_t j = 0; j < knn.size() && local_triplets.size() < n_mn; ++j) {
+                 long long pair_key = ((long long)std::min(i, knn[j].second) << 32) | std::max(i, knn[j].second);
+                 if (used_pairs.find(pair_key) == used_pairs.end()) {
+                     local_triplets.emplace_back(i, knn[j].second, MID_NEAR);
+                     used_pairs.insert(pair_key);
+                 }
+             }
+             #pragma omp critical
+             mn_triplets.insert(mn_triplets.end(), local_triplets.begin(), local_triplets.end());
+         }
+     }
+     ```
+  2. Apply similar logic to `sample_FP_pair` with `p90_dist` as the minimum.
+  3. Reduce oversampling to 1.5x if needed (e.g., `n_mn * 1.5`).
+  4. Test on MNIST (n=70k, d=784): Sampling should take <5s, with `unique_anchors.size()` ~90% of `n_samples`.
+
+---
+
+### Step 4: Improve Random Initialization Variance
+- **Issue**: Random initialization in `pacmap_fit.cpp` and `pacmap_optimization.cpp` uses `std::normal_distribution<float> dist(0.0f, 1e-4f)`, which is too small for PaCMAP’s loss scale (distances ~1). Web searches [web:3, web:4] recommend std=0.01–0.1 with normalization for better exploration in manifold learning.
+- **Why It Matters**: Small variance (1e-4) leads to weak early gradients, slowing convergence or causing clumping, especially without PCA initialization, as you require.
+- **Actions**:
+  1. Update initialization in `pacmap_fit.cpp` (`internal_pacmap_fit_with_progress_v2`):
+     ```cpp
+     std::mt19937 generator(random_seed >= 0 ? random_seed : 42);
+     std::normal_distribution<float> dist(0.0f, 0.01f); // Increased from 1e-4
+     size_t embedding_size = static_cast<size_t>(n_obs) * static_cast<size_t>(embedding_dim);
+     for (size_t i = 0; i < embedding_size; i++) {
+         embedding[i] = dist(generator);
+     }
+     // Center and scale to std=1e-4
+     float mean = std::accumulate(embedding, embedding + embedding_size, 0.0f) / embedding_size;
+     for (size_t i = 0; i < embedding_size; i++) embedding[i] -= mean;
+     float variance = 0.0f;
+     for (size_t i = 0; i < embedding_size; i++) variance += embedding[i] * embedding[i];
+     float std_dev = std::sqrt(variance / embedding_size);
+     if (std_dev > 1e-8f) {
+         for (size_t i = 0; i < embedding_size; i++) embedding[i] = embedding[i] / std_dev * 1e-4f;
+     }
+     ```
+  2. Apply the same change in `initialize_random_embedding` in `pacmap_optimization.cpp`.
+  3. Test on COIL-20 (n=1440, d=1024): Loss should drop to <0.05 within 300 iterations (vs. 450+ with 1e-4). Visualize 2D embeddings to confirm spread.
+
+---
+
+### Additional Notes
+- **HNSW Integration**: Your use of HNSW (via hnswlib) for triplet sampling and transform is correct and efficient, as it replaces the Python reference’s Annoy-based kNN [web:0]. Ensure `ef_construction=400` and `ef_search=min(n_obs/10, 400)` for large datasets (`n_obs > 10k`) to maintain >95% kNN recall, tested on 1k sampled points.
+- **Testing**: After applying all fixes, run on a benchmark dataset (e.g., MNIST, n=70k, d=784). Monitor `loss_history` in `pacmap_optimization.cpp`. Expect loss <0.05 after 450 iterations. If issues persist, enable `print_gradient_stats` every 50 iterations to check for NaN/Inf or weak gradients.
+- **Chart Option**: If you provide loss data (e.g., from `loss_history`), I can generate a Chart.js plot to visualize convergence. Let me know!
+- **Why These Steps**: The gradient fix (Step 1) restores proper force balance, AdaGrad renaming (Step 2) ensures code clarity, triplet sampling optimization (Step 3) boosts efficiency, and initialization improvement (Step 4) enhances convergence with random init, aligning with PaCMAP’s design and your HNSW-based approach.
+
+Let me know if you need a unified code patch, help with testing, or a specific focus (e.g., debugging convergence issues)!
+```
+
+
+In Step 3 of the summarized fixes for your C++ PaCMAP implementation, the goal is to optimize triplet sampling in `pacmap_triplet_sampling.cpp` by reducing oversampling and leveraging HNSW for efficiency in generating mid-near and far pairs. However, you’ve raised a valid question about what to do if the `exact_knn` flag is enabled, which likely indicates a preference for exact nearest neighbor searches instead of approximate methods like HNSW. Below, I’ll explain how to handle the `exact_knn` flag in Step 3, ensuring compatibility with your implementation while maintaining efficiency and correctness. I’ll also integrate this into the context of the other steps for clarity.
+
+---
+
+### Step 3: Optimize Triplet Sampling with `exact_knn` Handling
+
+- **Issue**: The `sample_MN_pair` and `sample_FP_pair` functions in `pacmap_triplet_sampling.cpp` oversample (`n_mn * 2`, `n_fp * 3`) with rejection sampling to ensure unique mid-near and far pairs, which is slow for large datasets (`n_obs > 10k`). The Python reference samples exactly `n_neighbors * MN_ratio` and `FP_ratio` pairs [web:0]. Your code uses HNSW for neighbor searches (in `sample_neighbors_pair` and potentially others), but if the `exact_knn` flag is enabled, you need to bypass HNSW and use exact kNN (e.g., brute-force distance calculations) for all triplet sampling, which impacts performance and implementation.
+
+- **Why It Matters**: Oversampling increases runtime (>10s for `n_obs=100k`, `d=100`) and risks low triplet diversity if `max_attempts` is hit. With `exact_knn=true`, HNSW is disabled, and brute-force kNN is computationally expensive (O(n²) per query), especially for mid-near and far pairs, which require distance filtering. This could make sampling impractical for large datasets, but `exact_knn` ensures perfect recall, critical for small datasets (`n_obs < 1k`) or high-precision tasks.
+
+- **Actions**:
+  1. **Check for `exact_knn` Flag**:
+     - Assume `exact_knn` is a boolean field in `PacMapModel` (e.g., `model->exact_knn`), as implied by typical PaCMAP/UMAP implementations. If enabled, bypass HNSW and compute exact distances for all kNN queries in `sample_neighbors_pair`, `sample_MN_pair`, and `sample_FP_pair`.
+
+  2. **Modify `sample_neighbors_pair` for Exact kNN**:
+     - In `sample_neighbors_pair`, replace HNSW with a brute-force kNN search when `exact_knn=true`. Compute Euclidean or Cosine distances for all points, sort, and select the top `n_neighbors`.
+     - Example:
+       ```cpp:disable-run
+       void sample_neighbors_pair(PacMapModel* model, const std::vector<float>& normalized_data,
+                                 std::vector<Triplet>& neighbor_triplets, int n_neighbors) {
+           neighbor_triplets.clear();
+           neighbor_triplets.reserve(model->n_samples * n_neighbors);
+           std::unordered_set<long long> used_pairs;
+
+           #pragma omp parallel for
+           for (int i = 0; i < model->n_samples; ++i) {
+               std::vector<std::pair<float, int>> knn;
+               if (model->exact_knn) {
+                   // Brute-force kNN
+                   for (int j = 0; j < model->n_samples; ++j) {
+                       if (i == j) continue;
+                       float dist = compute_distance(
+                           normalized_data.data() + i * model->n_features,
+                           normalized_data.data() + j * model->n_features,
+                           model->n_features, model->metric);
+                       knn.emplace_back(dist, j);
+                   }
+                   std::sort(knn.begin(), knn.end());
+                   knn.resize(std::min(n_neighbors, static_cast<int>(knn.size())));
+               } else {
+                   // Existing HNSW code
+                   auto knn_results = model->original_space_index->searchKnn(
+                       normalized_data.data() + i * model->n_features, n_neighbors + 1);
+                   while (!knn_results.empty()) {
+                       if (knn_results.top().second != i) {
+                           float dist = knn_results.top().first;
+                           dist = model->metric == PACMAP_METRIC_EUCLIDEAN ? std::sqrt(std::max(0.0f, dist)) : dist;
+                           knn.emplace_back(dist, knn_results.top().second);
+                       }
+                       knn_results.pop();
+                   }
+               }
+               std::vector<Triplet> local_triplets;
+               for (const auto& pair : knn) {
+                   long long pair_key = ((long long)std::min(i, pair.second) << 32) | std::max(i, pair.second);
+                   if (used_pairs.find(pair_key) == used_pairs.end()) {
+                       local_triplets.emplace_back(i, pair.second, NEIGHBOR);
+                       used_pairs.insert(pair_key);
+                   }
+               }
+               #pragma omp critical
+               neighbor_triplets.insert(neighbor_triplets.end(), local_triplets.begin(), local_triplets.end());
+           }
+       }
+       ```
+     - Add `compute_distance` helper (assumed in your codebase or add):
+       ```cpp
+       float compute_distance(const float* a, const float* b, int n_features, PacMapMetric metric) {
+           float dist = 0.0f;
+           if (metric == PACMAP_METRIC_EUCLIDEAN) {
+               for (int i = 0; i < n_features; ++i) {
+                   float diff = a[i] - b[i];
+                   dist += diff * diff;
+               }
+               return std::sqrt(dist);
+           } else { // COSINE
+               float dot = 0.0f, norm_a = 0.0f, norm_b = 0.0f;
+               for (int i = 0; i < n_features; ++i) {
+                   dot += a[i] * b[i];
+                   norm_a += a[i] * a[i];
+                   norm_b += b[i] * b[i];
+               }
+               return 1.0f - dot / (std::sqrt(norm_a) * std::sqrt(norm_b) + 1e-8f);
+           }
+       }
+       ```
+
+  3. **Modify `sample_MN_pair` for Exact kNN**:
+     - Replace HNSW with brute-force distance calculations, filtering pairs in the 25th–75th percentile range:
+       ```cpp
+       void sample_MN_pair(PacMapModel* model, const std::vector<float>& normalized_data,
+                           std::vector<Triplet>& mn_triplets, int n_mn) {
+           mn_triplets.clear();
+           mn_triplets.reserve(model->n_samples * n_mn);
+           auto percentiles = compute_distance_percentiles(normalized_data, std::min(model->n_samples, 1000),
+                                                          model->n_features, model->metric);
+           float p25_dist = percentiles[0], p75_dist = percentiles[1];
+           std::unordered_set<long long> used_pairs;
+
+           #pragma omp parallel for
+           for (int i = 0; i < model->n_samples; ++i) {
+               std::vector<std::pair<float, int>> knn;
+               if (model->exact_knn) {
+                   // Brute-force: compute all distances
+                   for (int j = 0; j < model->n_samples; ++j) {
+                       if (i == j) continue;
+                       float dist = compute_distance(
+                           normalized_data.data() + i * model->n_features,
+                           normalized_data.data() + j * model->n_features,
+                           model->n_features, model->metric);
+                       if (dist >= p25_dist && dist <= p75_dist) {
+                           knn.emplace_back(dist, j);
+                       }
+                   }
+               } else {
+                   // Existing HNSW code
+                   auto knn_results = model->original_space_index->searchKnn(
+                       normalized_data.data() + i * model->n_features, 50);
+                   while (!knn_results.empty()) {
+                       float dist = knn_results.top().first;
+                       dist = model->metric == PACMAP_METRIC_EUCLIDEAN ? std::sqrt(std::max(0.0f, dist)) : dist;
+                       if (dist >= p25_dist && dist <= p75_dist) {
+                           knn.emplace_back(dist, knn_results.top().second);
+                       }
+                       knn_results.pop();
+                   }
+               }
+               std::shuffle(knn.begin(), knn.end(), model->rng);
+               std::vector<Triplet> local_triplets;
+               for (size_t j = 0; j < knn.size() && local_triplets.size() < n_mn; ++j) {
+                   long long pair_key = ((long long)std::min(i, knn[j].second) << 32) | std::max(i, knn[j].second);
+                   if (used_pairs.find(pair_key) == used_pairs.end()) {
+                       local_triplets.emplace_back(i, knn[j].second, MID_NEAR);
+                       used_pairs.insert(pair_key);
+                   }
+               }
+               #pragma omp critical
+               mn_triplets.insert(mn_triplets.end(), local_triplets.begin(), local_triplets.end());
+           }
+       }
+       ```
+
+  4. **Modify `sample_FP_pair` for Exact kNN**:
+     - Similar to `sample_MN_pair`, compute all distances and filter for >90th percentile:
+       ```cpp
+       void sample_FP_pair(PacMapModel* model, const std::vector<float>& normalized_data,
+                           std::vector<Triplet>& fp_triplets, int n_fp) {
+           fp_triplets.clear();
+           fp_triplets.reserve(model->n_samples * n_fp);
+           auto percentiles = compute_distance_percentiles(normalized_data, std::min(model->n_samples, 1000),
+                                                          model->n_features, model->metric);
+           float p90_dist = percentiles[2];
+           std::unordered_set<long long> used_pairs;
+
+           #pragma omp parallel for
+           for (int i = 0; i < model->n_samples; ++i) {
+               std::vector<std::pair<float, int>> knn;
+               if (model->exact_knn) {
+                   for (int j = 0; j < model->n_samples; ++j) {
+                       if (i == j) continue;
+                       float dist = compute_distance(
+                           normalized_data.data() + i * model->n_features,
+                           normalized_data.data() + j * model->n_features,
+                           model->n_features, model->metric);
+                       if (dist >= p90_dist) {
+                           knn.emplace_back(dist, j);
+                       }
+                   }
+               } else {
+                   auto knn_results = model->original_space_index->searchKnn(
+                       normalized_data.data() + i * model->n_features, 50);
+                   while (!knn_results.empty()) {
+                       float dist = knn_results.top().first;
+                       dist = model->metric == PACMAP_METRIC_EUCLIDEAN ? std::sqrt(std::max(0.0f, dist)) : dist;
+                       if (dist >= p90_dist) {
+                           knn.emplace_back(dist, knn_results.top().second);
+                       }
+                       knn_results.pop();
+                   }
+               }
+               std::shuffle(knn.begin(), knn.end(), model->rng);
+               std::vector<Triplet> local_triplets;
+               for (size_t j = 0; j < knn.size() && local_triplets.size() < n_fp; ++j) {
+                   long long pair_key = ((long long)std::min(i, knn[j].second) << 32) | std::max(i, knn[j].second);
+                   if (used_pairs.find(pair_key) == used_pairs.end()) {
+                       local_triplets.emplace_back(i, knn[j].second, FURTHER);
+                       used_pairs.insert(pair_key);
+                   }
+               }
+               #pragma omp critical
+               fp_triplets.insert(fp_triplets.end(), local_triplets.begin(), local_triplets.end());
+           }
+       }
+       ```
+
+  5. **Optimize for Performance**:
+     - For `exact_knn=true`, brute-force kNN is O(n²) per point, so warn users for large datasets (`n_obs > 1k`). Add a check in `sample_triplets`:
+       ```cpp
+       if (model->exact_knn && model->n_samples > 1000) {
+           std::cerr << "Warning: exact_knn enabled for n_samples=" << model->n_samples
+                     << ". This may be slow. Consider disabling exact_knn for large datasets." << std::endl;
+       }
+       ```
+     - Parallelize distance computations with OpenMP (already in your code via `#pragma omp parallel for`).
+     - For small datasets (`n_obs < 1k`), exact kNN is feasible and ensures 100% recall, improving triplet quality.
+
+  6. **Update Index Creation**:
+     - In `sample_triplets` or `pacmap_fit.cpp`, skip HNSW index creation if `exact_knn=true`:
+       ```cpp
+       if (!model->exact_knn) {
+           model->original_space_index = create_hnsw_index(model->n_samples, model->n_features,
+                                                           model->metric, model->ef_construction);
+           // ... add points to index
+       }
+       ```
+
+  7. **Test**:
+     - On MNIST (n=70k, d=784) with `exact_knn=false`, expect sampling <5s. With `exact_knn=true`, expect >30s but perfect recall.
+     - On Iris (n=150, d=4), both modes should yield similar triplets (`unique_anchors.size()` ~90% of `n_samples`).
+     - Compare loss curves: `exact_knn=true` may slightly improve loss (<0.05 vs. <0.06) for small datasets due to better triplets.
+
+- **Search Insight**: The Python reference uses Annoy for approximate kNN [web:0], but exact kNN is supported in UMAP-like implementations for small datasets [web:47]. Exact kNN is impractical for large datasets, so your `exact_knn` flag is a good feature for flexibility.
+
+---
+
+### Summary of All Steps (Including Step 3 with `exact_knn`)
+
+1. **Fix Gradient/Loss Function Constants**:
+   - **Why**: Incorrect constants (`1.0 / (1 + d)^2` vs. `10.0 / (10 + d)^2`) weaken gradients, slowing convergence or causing clumping.
+   - **Do**: Update `compute_gradients` and `compute_pacmap_loss` in `pacmap_gradient.cpp` to use `10.0 / (10 + d)^2` for neighbors, `10000.0 / (10000 + d)^2` for mid-near. Test loss <0.1 on Iris within 100 iterations.
+
+2. **Rename Adam to AdaGrad for Clarity**:
+   - **Why**: `adam_update` implements AdaGrad but is misnamed, risking confusion. Matches PaCMAP’s stable optimization [web:0].
+   - **Do**: Rename to `adagrad_update`, remove unused parameters (`beta1`, `beta2`, `eps`), update comments and variables (`adagrad_m`, `adagrad_v`) in `pacmap_fit.cpp`, `pacmap_optimization.cpp`, and headers. Test unchanged loss (<0.05 on COIL-20 after 450 iterations).
+
+3. **Optimize Triplet Sampling with `exact_knn` Handling**:
+   - **Why**: Oversampling slows triplet generation; `exact_knn=true` requires brute-force kNN, which is slow but precise for small datasets.
+   - **Do**:
+     - Add `exact_knn` check in `sample_neighbors_pair`, `sample_MN_pair`, `sample_FP_pair`.
+     - For `exact_knn=true`, use brute-force distance calculations, filtering by distance ranges for mid-near (25th–75th) and far (>90th) pairs.
+     - For `exact_knn=false`, use HNSW with k=50, reduce oversampling to 1.5x.
+     - Skip HNSW index creation if `exact_knn=true`.
+     - Test: Sampling <5s with HNSW on MNIST; <1s on Iris with `exact_knn=true`.
+
+4. **Improve Random Initialization Variance**:
+   - **Why**: Small variance (std=1e-4) leads to weak gradients, slowing convergence with random init.
+   - **Do**: Increase std to 0.01, center, and scale to std=1e-4 in `pacmap_fit.cpp` and `pacmap_optimization.cpp`. Test loss <0.05 on COIL-20 within 300 iterations.
+
+---
+
+### Additional Notes
+- **HNSW and `exact_knn`**: Your HNSW usage is correct for approximate kNN [web:47]. The `exact_knn` flag ensures flexibility for small datasets or high-precision tasks, but warn users about O(n²) complexity for large `n_obs`.
+- **Testing**: Run on Iris (n=150) with `exact_knn=true` and `false`. Compare triplet counts and loss curves. For MNIST (n=70k), use `exact_knn=false` to avoid excessive runtime.
+- **Chart Option**: If you provide triplet counts or loss data, I can create a Chart.js plot to compare `exact_knn` modes. Let me know!
+- **Next Steps**: Apply these changes, test on a small dataset first, and monitor `loss_history`. If convergence issues persist, enable `print_gradient_stats` or share loss curves for further debugging.
+
+Let me know if you need a unified code patch, specific `exact_knn` test cases, or help with another aspect!
+```

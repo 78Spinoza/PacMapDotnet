@@ -1,8 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
-    <RootNamespace>PACMAPuwotSharp</RootNamespace>
-    <AssemblyName>PACMAPuwotSharp</AssemblyName>
+    <RootNamespace>PacMapSharp</RootNamespace>
+    <AssemblyName>PacMapSharp</AssemblyName>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
@@ -11,11 +11,11 @@
 
     <!-- Enhanced NuGet metadata -->
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <PackageId>PACMAPuwotSharp</PackageId>
+    <PackageId>PacMapSharp</PackageId>
     <Version>1.0.0</Version>
     <Authors>Amin Gholiha</Authors>
     <Company>ID Soft AB</Company>
-    <Product>PACMAPuwotSharp Enhanced with HNSW</Product>
+    <Product>PacMapSharp Enhanced with HNSW</Product>
     <Title>PACMAP for .NET with HNSW Optimization &amp; AI Safety</Title>
     <Description>Revolutionary PACMAP library with HNSW optimization providing 50-2000x faster transforms and production safety features. Features: PACMAP (Pairwise Controlled Manifold Approximation and Projection) algorithm, Adam optimizer with three-phase weight schedule, HNSW (Hierarchical Navigable Small World) optimization, 5-level outlier detection (Normal to No Man's Land), 80% memory reduction, AI/ML data validation, arbitrary dimensions (1D-50D), multiple metrics, enhanced progress reporting, and complete model persistence. Perfect for production AI pipelines requiring data quality assessment.</Description>
     <PackageTags>pacmap;hnsw;ai-safety;outlier-detection;dimensionality-reduction;machine-learning;embedding;manifold-learning;production-ml;data-validation;nearest-neighbors;performance-optimization;memory-efficient;multi-dimensional;progress-reporting;model-persistence;adam-optimizer</PackageTags>

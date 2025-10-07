@@ -14,7 +14,7 @@ Complete API documentation for the Enhanced UMAP implementation with revolutiona
 ### Dual HNSW Architecture for AI Inference
 - **Original space HNSW**: For traditional fitting and k-NN graph construction
 - **Embedding space HNSW**: For revolutionary AI pattern similarity search
-- **AI safety features**: 5-level outlier detection in learned embedding space
+- **AI safety features**: outlier detection in learned embedding space
 - **Sub-millisecond inference**: Real-time AI confidence assessment
 
 ### 16-bit Quantization Integration
@@ -60,7 +60,7 @@ public float[,] Fit(float[,] data,
 
 **Enhanced Parameters:**
 - `spread`: Smart scale parameter (auto-optimized by dimension)
-- `forceExactKnn`: Force exact k-NN instead of HNSW optimization (50-2000x speedup)
+- `forceExactKnn`: Force exact k-NN instead of HNSW optimization (faster speedup)
 - `hnswM`: HNSW graph degree parameter (-1 = auto-select based on dataset size)
 - `hnswEfConstruction`: HNSW build quality parameter (-1 = auto-select)
 - `hnswEfSearch`: HNSW query quality parameter (-1 = auto-select)
@@ -86,7 +86,7 @@ var optimizedEmbedding = model.Fit(data,
     minDist: 0.1f,                   // Optimal for clustering
     nNeighbors: 30,                  // Good for 20D
     metric: DistanceMetric.Cosine,   // HNSW accelerated
-    forceExactKnn: false,            // Enable 50-2000x speedup
+    forceExactKnn: false,            // Enable faster speedup
     useQuantization: true,           // Enable 85-95% compression
     randomSeed: 42,                  // Reproducible training
     autoHNSWParam: true);            // Auto-optimize HNSW parameters
@@ -259,7 +259,7 @@ public class TransformResult
     public int[] NearestNeighborIndices;       // Training sample indices
     public float[] NearestNeighborDistances;   // Distances in original space
     public float ConfidenceScore;              // 0.0-1.0 safety confidence
-    public OutlierLevel Severity;              // 5-level outlier detection
+    public OutlierLevel Severity;              // outlier detection
     public float PercentileRank;               // 0-100% distance ranking
     public float ZScore;                       // Standard deviations from mean
 }
@@ -662,7 +662,7 @@ foreach (var result in aiResults) {
 
 ### Training Best Practices
 
-1. **Use HNSW by default**: Set `forceExactKnn: false` for 50-2000x speedup
+1. **Use HNSW by default**: Set `forceExactKnn: false` for faster speedup
 2. **Enable quantization for storage**: Set `useQuantization: true` for 85-95% file size reduction
 3. **Choose optimal metrics**: Euclidean/Cosine/Manhattan get HNSW acceleration
 4. **Use progress callbacks**: Monitor training with enhanced phase reporting

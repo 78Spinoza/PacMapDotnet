@@ -11,12 +11,12 @@ extern std::tuple<float, float, float> get_weights(int current_iter, int total_i
 extern void compute_gradients(const std::vector<float>& embedding, const std::vector<Triplet>& triplets,
                              std::vector<float>& gradients, float w_n, float w_mn, float w_f, int n_components);
 
-// Adam optimizer with bias correction and adaptive learning rates
+// AdaGrad optimizer (FIXED: Replaced ADAM to match official PACMAP)
 extern void adam_update(std::vector<float>& embedding, const std::vector<float>& gradients,
                        std::vector<float>& m, std::vector<float>& v, int iter, float learning_rate,
                        float beta1 = 0.9f, float beta2 = 0.999f, float eps = 1e-8f);
 
-// Adam state management
+// AdaGrad state management (simplified - no first moment, only squared gradients)
 extern void initialize_adam_state(std::vector<float>& m, std::vector<float>& v, size_t size);
 extern void reset_adam_state(std::vector<float>& m, std::vector<float>& v);
 

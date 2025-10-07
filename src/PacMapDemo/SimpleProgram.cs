@@ -1,5 +1,5 @@
 using System;
-using PACMAPuwotSharp;
+using PacMapSharp;
 
 namespace PacMapDemo
 {

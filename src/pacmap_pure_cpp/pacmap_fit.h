@@ -30,7 +30,7 @@ namespace fit_utils {
         std::vector<int>& nn_indices,
         std::vector<double>& nn_distances,
         int force_exact_knn,
-        uwot_progress_callback_v2 progress_callback = nullptr,
+        pacmap_progress_callback_v2 progress_callback = nullptr,
         int autoHNSWParam = 1
     );
 
@@ -71,7 +71,7 @@ namespace fit_utils {
         int n_epochs,
         PacMapMetric metric,
         float* embedding,
-        uwot_progress_callback_v2 progress_callback,
+        pacmap_progress_callback_v2 progress_callback,
         int force_exact_knn,
         int M,
         int ef_construction,
@@ -94,7 +94,7 @@ namespace fit_utils {
         int n_epochs,
         PacMapMetric metric,
         float* embedding,
-        uwot_progress_callback_v2 progress_callback,
+        pacmap_progress_callback_v2 progress_callback,
         int force_exact_knn,
         int M,
         int ef_construction,
@@ -104,15 +104,42 @@ namespace fit_utils {
         int autoHNSWParam = 1
     );
 
+    // Main PACMAP fitting function with proper PACMAP workflow (internal implementation)
+    int internal_pacmap_fit_with_progress_v2(
+        PacMapModel* model,
+        float* data,
+        int n_obs,
+        int n_dim,
+        int embedding_dim,
+        int n_neighbors,
+        float mn_ratio,
+        float fp_ratio,
+        float learning_rate,
+        int n_iters,
+        int phase1_iters,
+        int phase2_iters,
+        int phase3_iters,
+        PacMapMetric metric,
+        float* embedding,
+        pacmap_progress_callback_v2 progress_callback,
+        int force_exact_knn,
+        int M,
+        int ef_construction,
+        int ef_search,
+        int use_quantization,
+        int random_seed,
+        int autoHNSWParam
+    );
+
     // Helper functions for uwot_fit refactoring
     namespace fit_helpers {
         // HNSW recall validation and auto-tuning
         bool validate_hnsw_recall(PacMapModel* model, const float* data, int n_obs, int n_dim,
-                                  int n_neighbors, PacMapMetric metric, uwot_progress_callback_v2 progress_callback);
+                                  int n_neighbors, PacMapMetric metric, pacmap_progress_callback_v2 progress_callback);
 
         // Auto-tune ef_search parameter based on recall measurement
         bool auto_tune_ef_search(PacMapModel* model, const float* data, int n_obs, int n_dim,
-                                 int n_neighbors, PacMapMetric metric, uwot_progress_callback_v2 progress_callback);
+                                 int n_neighbors, PacMapMetric metric, pacmap_progress_callback_v2 progress_callback);
 
         // Initialize random number generators with seed
         void initialize_random_generators(PacMapModel* model);

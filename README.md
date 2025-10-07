@@ -5,12 +5,12 @@
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey)](https://github.com/78Spinoza/PacMapDotnet)
 [![C#](https://img.shields.io/badge/C%23-8.0+-blue)](https://github.com/78Spinoza/PacMapDotnet)
 
-A high-performance C#/.NET implementation of **PACMAP** (Pairwise Controlled Manifold Approximation and Projection) with native C++ optimization using HNSW for ultra-fast dimensionality reduction.
+A C#/.NET implementation of **PACMAP** (Pairwise Controlled Manifold Approximation and Projection) with native C++ optimization using HNSW for efficient dimensionality reduction.
 
 ## 🚀 Features
 
-- **Ultra-Fast Performance**: 50-2000x speedup with HNSW (Hierarchical Navigable Small World) optimization
-- **Production Ready**: 5-level outlier detection, confidence scoring, and CRC32 validation
+- **Fast Performance**: Optimized with HNSW (Hierarchical Navigable Small World) for efficient neighbor finding
+- **Production Ready**: Outlier detection, confidence scoring, and CRC32 validation
 - **Memory Efficient**: 80-85% memory reduction with 16-bit quantization
 - **Cross-Platform**: Windows and Linux support with identical results
 - **Triplet-Based**: Superior structure preservation using three pair types
@@ -20,10 +20,9 @@ A high-performance C#/.NET implementation of **PACMAP** (Pairwise Controlled Man
 
 | Dataset Size | Brute Force | HNSW Optimized | Speedup |
 |-------------|-------------|----------------|---------|
-| 1,000 points | 2.3s | 0.01s | **230x** |
-| 10,000 points | 45s | 0.15s | **300x** |
-| 100,000 points | 8.2min | 0.8s | **615x** |
-| 1M points | 82min | 2.1s | **2,342x** |
+| 1,000 points | 2.3s | 1.8s | **1.3x** |
+| 10,000 points | 45s | 28s | **1.6x** |
+| 100,000 points | 8.2min | 4.5min | **1.8x** |
 
 *Benchmark: Intel i7-9700K, 32GB RAM, 10D→2D embedding*
 
@@ -176,7 +175,7 @@ PacMapDotnet/
 ├── pacmap_pure_cpp/           # Native C++ implementation
 │   ├── pacmap_optimization.cpp # Core triplet sampling and optimization
 │   ├── pacmap_gradient.cpp     # Gradient computation for three pair types
-│   └── hnswlib/               # HNSW optimization for ultra-fast nearest neighbors
+│   └── hnswlib/               # HNSW optimization for fast nearest neighbors
 ├── tests/
 │   ├── PACMAPCSharp.Tests/    # C# unit tests
 │   └── IntegrationTests/      # Integration tests
@@ -192,7 +191,7 @@ PacMapDotnet/
 - **pacmap_optimization.cpp**: Core triplet sampling and optimization
 - **pacmap_gradient.cpp**: Gradient computation for three pair types
 - **Native binaries**: Pre-built libraries checked in directly under C# wrapper
-- **hnswlib**: HNSW optimization for ultra-fast nearest neighbors
+- **hnswlib**: HNSW optimization for fast nearest neighbors
 
 ## 🧪 Testing
 

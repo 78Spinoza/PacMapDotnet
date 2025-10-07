@@ -7,13 +7,19 @@
 #include <cmath>
 #include <chrono>
 
-void optimize_embedding(PacMapModel* model, float* embedding_out, uwot_progress_callback_v2 callback) {
+void optimize_embedding(PacMapModel* model, float* embedding_out, pacmap_progress_callback_internal callback) {
+
     std::vector<float> embedding(model->n_samples * model->n_components);
 
     // Initialize with random normal distribution (review specification)
     initialize_random_embedding(embedding, model->n_samples, model->n_components, model->rng);
 
     int total_iters = model->phase1_iters + model->phase2_iters + model->phase3_iters;
+
+    if (model->triplets.empty()) {
+        if (callback) callback("Error", 0, 100, 0.0f, "No triplets available for optimization");
+        return;
+    }
 
     // Initialize Adam optimizer state
     std::vector<float> gradients(embedding.size());
@@ -25,6 +31,8 @@ void optimize_embedding(PacMapModel* model, float* embedding_out, uwot_progress_
     loss_history.reserve(total_iters);
 
     callback("Starting Optimization", 0, 0, 0.0f, nullptr);
+
+    auto loop_start = std::chrono::high_resolution_clock::now();
 
     // Main optimization loop with three phases
     for (int iter = 0; iter < total_iters; ++iter) {
@@ -38,13 +46,21 @@ void optimize_embedding(PacMapModel* model, float* embedding_out, uwot_progress_
         // Update embedding using Adam optimizer
         adam_update(embedding, gradients, m, v, iter, model->learning_rate);
 
-        // Monitor progress and compute loss
-        if (iter % 50 == 0 || iter == total_iters - 1) {
+        // Monitor progress and compute loss - CRITICAL DEBUG: More frequent logging
+        if (iter % 10 == 0 || iter == total_iters - 1) {
             float loss = compute_pacmap_loss(embedding, model->triplets,
                                            w_n, w_mn, w_f, model->n_components);
             loss_history.push_back(loss);
 
             std::string phase = get_current_phase(iter, model->phase1_iters, model->phase2_iters);
+
+            // CRITICAL DEBUG: Check embedding spread
+            float min_emb = embedding[0], max_emb = embedding[0];
+            for (float val : embedding) {
+                min_emb = std::min(min_emb, val);
+                max_emb = std::max(max_emb, val);
+            }
+
             monitor_optimization_progress(iter, total_iters, loss, phase, callback);
 
             // Early termination check
@@ -55,6 +71,11 @@ void optimize_embedding(PacMapModel* model, float* embedding_out, uwot_progress_
                 break;
             }
         }
+    }
+
+    auto loop_end = std::chrono::high_resolution_clock::now();
+    auto loop_duration = std::chrono::duration_cast<std::chrono::milliseconds>(loop_end - loop_start);
+    if (!loss_history.empty()) {
     }
 
     // Compute final safety statistics
@@ -70,7 +91,10 @@ void optimize_embedding(PacMapModel* model, float* embedding_out, uwot_progress_
 }
 
 void initialize_random_embedding(std::vector<float>& embedding, int n_samples, int n_components, std::mt19937& rng) {
-    std::normal_distribution<float> normal_dist(0.0f, 1e-4f);  // Small random values
+    // FIXED: Proper variance for random embedding initialization (error analysis #3)
+    // Use variance of 10.0f / sqrt(n_components) for better initial spread
+    float std_dev = 10.0f / std::sqrt(static_cast<float>(n_components));
+    std::normal_distribution<float> normal_dist(0.0f, std_dev);
 
     for (auto& val : embedding) {
         val = normal_dist(rng);
@@ -84,7 +108,7 @@ void initialize_adam_optimization(PacMapModel* model, std::vector<float>& m, std
 void run_optimization_phase(PacMapModel* model, std::vector<float>& embedding,
                           std::vector<float>& m, std::vector<float>& v,
                           int start_iter, int end_iter, const std::string& phase_name,
-                          uwot_progress_callback_v2 callback) {
+                          pacmap_progress_callback_internal callback) {
 
     for (int iter = start_iter; iter < end_iter; ++iter) {
         auto [w_n, w_mn, w_f] = get_weights(iter, model->phase1_iters + model->phase2_iters + model->phase3_iters);
@@ -132,6 +156,7 @@ void compute_safety_stats(PacMapModel* model, const std::vector<float>& embeddin
     int sample_size = std::min(model->n_samples, 1000);
     for (int i = 0; i < sample_size; ++i) {
         for (int j = i + 1; j < sample_size; ++j) {
+            // FIXED: Use Euclidean metric consistently (error analysis #4)
             float dist = compute_sampling_distance(embedding.data() + i * model->n_components,
                                                  embedding.data() + j * model->n_components,
                                                  model->n_components, PACMAP_METRIC_EUCLIDEAN);
@@ -146,7 +171,7 @@ void compute_safety_stats(PacMapModel* model, const std::vector<float>& embeddin
 }
 
 void monitor_optimization_progress(int iter, int total_iters, float loss,
-                                  const std::string& phase, uwot_progress_callback_v2 callback) {
+                                  const std::string& phase, pacmap_progress_callback_internal callback) {
     float progress = static_cast<float>(iter) / total_iters * 100.0f;
     std::string message = phase + " - Loss: " + std::to_string(loss);
     callback(phase.c_str(), iter, total_iters, progress, message.c_str());
@@ -256,13 +281,12 @@ void dynamic_learning_rate_adjustment(PacMapModel* model, int iter, float curren
 void early_stopping_check(PacMapModel* model, const std::vector<float>& loss_history, int patience) {
     if (should_terminate_early(loss_history, patience)) {
         // Early stopping would be triggered
-        std::cout << "Early stopping triggered after " << loss_history.size() << " iterations" << std::endl;
     }
 }
 
 OptimizationDiagnostics run_optimization_with_diagnostics(PacMapModel* model,
                                                        std::vector<float>& embedding,
-                                                       uwot_progress_callback_v2 callback) {
+                                                       pacmap_progress_callback_internal callback) {
     OptimizationDiagnostics diagnostics;
 
     auto start_time = std::chrono::high_resolution_clock::now();
@@ -303,7 +327,6 @@ float get_phase_weight(int iter, int total_iters, float start_weight, float end_
 
 void assess_embedding_quality(const std::vector<float>& embedding, const PacMapModel* model) {
     float quality = compute_embedding_quality(embedding, model->triplets, model->n_components);
-    std::cout << "Embedding Quality Assessment: " << quality << std::endl;
 }
 
 float compute_trustworthiness(const std::vector<float>& embedding, const std::vector<Triplet>& triplets,
@@ -371,20 +394,10 @@ void validate_optimization_state(const PacMapModel* model, const std::vector<flo
     }
 
     if (nan_count > 0 || inf_count > 0) {
-        std::cerr << "Error: " << nan_count << " NaN and " << inf_count << " Inf values in embedding" << std::endl;
+        std::cerr << "Warning: " << nan_count << " NaN and " << inf_count << " Inf values in embedding" << std::endl;
     }
 }
 
 void print_optimization_summary(const OptimizationDiagnostics& diagnostics) {
-    std::cout << "\n=== Optimization Summary ===" << std::endl;
-    std::cout << "Initial Loss: " << diagnostics.initial_loss << std::endl;
-    std::cout << "Final Loss: " << diagnostics.final_loss << std::endl;
-    std::cout << "Loss Reduction: " << diagnostics.loss_reduction << std::endl;
-    std::cout << "Total Iterations: " << diagnostics.total_iterations << std::endl;
-    std::cout << "Optimization Time: " << diagnostics.optimization_time_ms << " ms" << std::endl;
-    std::cout << "Converged: " << (diagnostics.converged ? "Yes" : "No") << std::endl;
-    if (diagnostics.converged) {
-        std::cout << "Convergence Iteration: " << diagnostics.convergence_iteration << std::endl;
-    }
-    std::cout << "==========================\n" << std::endl;
+    // Summary would be reported via callback in production
 }
