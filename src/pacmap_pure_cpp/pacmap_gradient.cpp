@@ -57,16 +57,16 @@ void compute_gradients(const std::vector<float>& embedding, const std::vector<Tr
         float d_ij = std::sqrt(std::max(d_ij_squared, 1e-8f));
 
         // Compute gradient magnitude based on triplet type (PACMAP loss functions)
-        // FIXED: Corrected loss function constants to match official PACMAP
+        // CORRECTED: Use official PACMAP constants for proper attractive forces
         float grad_magnitude;
         switch (t.type) {
             case NEIGHBOR:
-                // Attractive force: w * 1.0 / ((1.0 + d)^2) - FIXED from 10.0
-                grad_magnitude = w_n * 1.0f / std::pow(1.0f + d_ij, 2.0f);
+                // Attractive force: w * 10.0 / ((10.0 + d)^2) - PACMAP official constant
+                grad_magnitude = w_n * 10.0f / std::pow(10.0f + d_ij, 2.0f);
                 break;
             case MID_NEAR:
-                // Moderate attractive force: w * 1.0 / ((1.0 + d)^2) - FIXED from 10000.0
-                grad_magnitude = w_mn * 1.0f / std::pow(1.0f + d_ij, 2.0f);
+                // Moderate attractive force: w * 10000.0 / ((10000.0 + d)^2) - PACMAP official constant
+                grad_magnitude = w_mn * 10000.0f / std::pow(10000.0f + d_ij, 2.0f);
                 break;
             case FURTHER:
                 // Repulsive force: -w / ((1 + d)^2) - already correct
@@ -91,9 +91,9 @@ void compute_gradients(const std::vector<float>& embedding, const std::vector<Tr
     }
 }
 
-void adam_update(std::vector<float>& embedding, const std::vector<float>& gradients,
-                 std::vector<float>& m, std::vector<float>& v, int iter, float learning_rate,
-                 float beta1, float beta2, float eps) {
+void adagrad_update(std::vector<float>& embedding, const std::vector<float>& gradients,
+                  std::vector<float>& m, std::vector<float>& v, int iter, float learning_rate,
+                  float beta1, float beta2, float eps) {
 
     // AdaGrad optimizer implementation (replacing ADAM)
     // Learning rate fixed at 1.0 as per official PACMAP
@@ -111,12 +111,12 @@ void adam_update(std::vector<float>& embedding, const std::vector<float>& gradie
     }
 }
 
-void initialize_adam_state(std::vector<float>& m, std::vector<float>& v, size_t size) {
+void initialize_adagrad_state(std::vector<float>& m, std::vector<float>& v, size_t size) {
     m.assign(size, 0.0f);
     v.assign(size, 0.0f);
 }
 
-void reset_adam_state(std::vector<float>& m, std::vector<float>& v) {
+void reset_adagrad_state(std::vector<float>& m, std::vector<float>& v) {
     std::fill(m.begin(), m.end(), 0.0f);
     std::fill(v.begin(), v.end(), 0.0f);
 }
@@ -136,14 +136,14 @@ float compute_pacmap_loss(const std::vector<float>& embedding, const std::vector
                                              n_components, PACMAP_METRIC_EUCLIDEAN);
 
         // Compute loss based on triplet type
-        // FIXED: Corrected loss constants to match gradient computation
+        // CORRECTED: Use official PACMAP loss constants to match gradient computation
         float triplet_loss;
         switch (triplet.type) {
             case NEIGHBOR:
-                triplet_loss = w_n * (d_ij / (1.0f + d_ij));  // FIXED from 10.0f
+                triplet_loss = w_n * (d_ij / (10.0f + d_ij));  // PACMAP official constant
                 break;
             case MID_NEAR:
-                triplet_loss = w_mn * (d_ij / (1.0f + d_ij));  // FIXED from 10000.0f
+                triplet_loss = w_mn * (d_ij / (10000.0f + d_ij));  // PACMAP official constant
                 break;
             case FURTHER:
                 triplet_loss = w_f * (1.0f / (1.0f + d_ij));  // already correct
@@ -212,11 +212,11 @@ void compute_triplet_gradients(const Triplet& triplet, const float* embedding,
     }
 }
 
-void apply_adam_params(AdamParams& params, float learning_rate,
-                     float beta1, float beta2, float eps) {
+void apply_adagrad_params(AdaGradParams& params, float learning_rate,
+                         float beta1, float beta2, float eps) {
     params.learning_rate = learning_rate;
-    params.beta1 = beta1;
-    params.beta2 = beta2;
+    params.beta1 = beta1;     // Note: Not used in AdaGrad, kept for compatibility
+    params.beta2 = beta2;     // Note: Not used in AdaGrad, kept for compatibility
     params.epsilon = eps;
 }
 
@@ -297,7 +297,7 @@ void print_gradient_stats(const std::vector<float>& gradients) {
     std::cout << "  Std Dev: " << std_dev << std::endl;
 }
 
-void print_adam_state(const std::vector<float>& m, const std::vector<float>& v, int iter) {
+void print_adagrad_state(const std::vector<float>& m, const std::vector<float>& v, int iter) {
     if (m.empty() || v.empty()) return;
 
     float m_mean = 0.0f, v_mean = 0.0f;
@@ -308,9 +308,9 @@ void print_adam_state(const std::vector<float>& m, const std::vector<float>& v, 
     m_mean /= m.size();
     v_mean /= v.size();
 
-    std::cout << "Adam State (iter " << iter << "):" << std::endl;
-    std::cout << "  First moment mean: " << m_mean << std::endl;
-    std::cout << "  Second moment mean: " << v_mean << std::endl;
+    std::cout << "AdaGrad State (iter " << iter << "):" << std::endl;
+    std::cout << "  First moment mean: " << m_mean << " (Note: Not used in AdaGrad)" << std::endl;
+    std::cout << "  Second moment mean: " << v_mean << " (Squared gradients accumulator)" << std::endl;
 }
 
 void validate_gradients(const std::vector<float>& gradients, const std::vector<float>& embedding) {

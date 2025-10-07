@@ -96,12 +96,12 @@ struct PacMapModel {
     float p25_distance = 0.0f;  // 25th percentile distance
     float p75_distance = 0.0f;  // 75th percentile distance
 
-    // Adam optimizer state
-    std::vector<float> adam_m;  // First moment vector
-    std::vector<float> adam_v;  // Second moment vector
-    float adam_beta1 = 0.9f;    // Adam beta1 parameter
-    float adam_beta2 = 0.999f;  // Adam beta2 parameter
-    float adam_eps = 1e-8f;     // Adam epsilon parameter
+    // AdaGrad optimizer state
+    std::vector<float> adagrad_m;  // First moment vector (Note: Not used in AdaGrad, kept for compatibility)
+    std::vector<float> adagrad_v;  // Second moment vector (Squared gradients accumulator)
+    float adagrad_beta1 = 0.9f;    // AdaGrad beta1 parameter (Note: Not used in AdaGrad, kept for compatibility)
+    float adagrad_beta2 = 0.999f;  // AdaGrad beta2 parameter (Note: Not used in AdaGrad, kept for compatibility)
+    float adagrad_eps = 1e-8f;     // AdaGrad epsilon parameter
 
     // Factory fields for HNSW space creation
     std::unique_ptr<hnswlib::SpaceInterface<float>> original_space_factory;

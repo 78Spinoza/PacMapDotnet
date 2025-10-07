@@ -21,7 +21,7 @@ void optimize_embedding(PacMapModel* model, float* embedding_out, pacmap_progres
         return;
     }
 
-    // Initialize Adam optimizer state
+    // Initialize AdaGrad optimizer state
     std::vector<float> gradients(embedding.size());
     std::vector<float> m(embedding.size(), 0.0f);  // First moment
     std::vector<float> v(embedding.size(), 0.0f);  // Second moment
@@ -43,8 +43,8 @@ void optimize_embedding(PacMapModel* model, float* embedding_out, pacmap_progres
         compute_gradients(embedding, model->triplets, gradients,
                          w_n, w_mn, w_f, model->n_components);
 
-        // Update embedding using Adam optimizer
-        adam_update(embedding, gradients, m, v, iter, model->learning_rate);
+        // Update embedding using AdaGrad optimizer
+        adagrad_update(embedding, gradients, m, v, iter, model->learning_rate);
 
         // Monitor progress and compute loss - CRITICAL DEBUG: More frequent logging
         if (iter % 10 == 0 || iter == total_iters - 1) {
@@ -101,8 +101,8 @@ void initialize_random_embedding(std::vector<float>& embedding, int n_samples, i
     }
 }
 
-void initialize_adam_optimization(PacMapModel* model, std::vector<float>& m, std::vector<float>& v) {
-    initialize_adam_state(m, v, model->n_samples * model->n_components);
+void initialize_adagrad_optimization(PacMapModel* model, std::vector<float>& m, std::vector<float>& v) {
+    initialize_adagrad_state(m, v, model->n_samples * model->n_components);
 }
 
 void run_optimization_phase(PacMapModel* model, std::vector<float>& embedding,
@@ -117,7 +117,7 @@ void run_optimization_phase(PacMapModel* model, std::vector<float>& embedding,
         compute_gradients(embedding, model->triplets, gradients,
                          w_n, w_mn, w_f, model->n_components);
 
-        adam_update(embedding, gradients, m, v, iter, model->learning_rate);
+        adagrad_update(embedding, gradients, m, v, iter, model->learning_rate);
 
         if (iter % 100 == 0) {
             float loss = compute_pacmap_loss(embedding, model->triplets,

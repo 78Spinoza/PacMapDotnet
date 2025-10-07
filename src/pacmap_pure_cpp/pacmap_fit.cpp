@@ -125,21 +125,32 @@ namespace fit_utils {
 
             sample_triplets(model, normalized_data.data(), progress_callback);
 
-            // Initialize Adam optimizer state
+            // Initialize AdaGrad optimizer state
             size_t embedding_size = static_cast<size_t>(n_obs) * static_cast<size_t>(embedding_dim);
-            model->adam_m.resize(embedding_size, 0.0f);
-            model->adam_v.resize(embedding_size, 0.0f);
+            model->adagrad_m.resize(embedding_size, 0.0f);
+            model->adagrad_v.resize(embedding_size, 0.0f);
 
 
             if (progress_callback) {
-                progress_callback("Optimizer Setup", 3, 100, 20.0f, "Initializing Adam optimizer state");
+                progress_callback("Optimizer Setup", 3, 100, 20.0f, "Initializing AdaGrad optimizer state");
             }
 
-            // Initialize embedding with random values
+            // Initialize embedding with improved random variance (Fix B)
             std::mt19937 generator(random_seed >= 0 ? random_seed : 42);
-            std::normal_distribution<float> dist(0.0f, 1e-4f); // Small random values
+            std::normal_distribution<float> dist(0.0f, 0.01f); // Increased from 1e-4 to 0.01
             for (size_t i = 0; i < embedding_size; i++) {
                 embedding[i] = dist(generator);
+            }
+
+            // Center and scale to controlled variance for stability
+            float mean = std::accumulate(embedding, embedding + embedding_size, 0.0f) / embedding_size;
+            for (size_t i = 0; i < embedding_size; i++) embedding[i] -= mean;
+
+            float variance = 0.0f;
+            for (size_t i = 0; i < embedding_size; i++) variance += embedding[i] * embedding[i];
+            float std_dev = std::sqrt(variance / embedding_size);
+            if (std_dev > 1e-8f) {
+                for (size_t i = 0; i < embedding_size; i++) embedding[i] = embedding[i] / std_dev * 1e-4f;
             }
 
             // PACMAP Step 2: Three-phase Optimization
