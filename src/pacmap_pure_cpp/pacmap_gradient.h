@@ -5,7 +5,7 @@
 #include <tuple>
 
 // Three-phase weight schedule
-extern std::tuple<float, float, float> get_weights(int current_iter, int total_iters);
+extern std::tuple<float, float, float> get_weights(int current_iter, int phase1_end, int phase2_end);
 
 // Parallel gradient computation with atomic operations
 extern void compute_gradients(const std::vector<float>& embedding, const std::vector<Triplet>& triplets,

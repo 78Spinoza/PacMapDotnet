@@ -66,6 +66,12 @@ add_library(pacmap SHARED
 target_sources(pacmap PRIVATE lz4.c)
 set_source_files_properties(lz4.c PROPERTIES LANGUAGE C)
 
+# Add version resource for Windows
+if(WIN32)
+    target_sources(pacmap PRIVATE version.rc)
+    set_source_files_properties(version.rc PROPERTIES LANGUAGE RC)
+endif()
+
 # Windows specific settings
 if(WIN32)
     target_compile_definitions(pacmap PRIVATE
@@ -108,11 +114,13 @@ endif()
 # Include directories
 target_include_directories(pacmap PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
-# Set output directory
+# Set output directory and version for cross-platform compatibility
 set_target_properties(pacmap PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
     LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
     ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
+    VERSION 1.5.0
+    SOVERSION 1.5.0
 )
 
 # Copy the DLL to the root directory for easy access

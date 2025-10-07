@@ -156,7 +156,7 @@ extern "C" {
     }
 
     PACMAP_API const char* pacmap_get_version() {
-        return "1.0.0";
+        return PACMAP_WRAPPER_VERSION_STRING;
     }
 
     PACMAP_API void pacmap_set_always_save_embedding_data(PacMapModel* model, bool always_save) {

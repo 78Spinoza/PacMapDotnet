@@ -13,89 +13,63 @@ namespace PacMapDemo
     {
         static void Main(string[] args)
         {
-            Console.WriteLine("PacMAP Enhanced - C# Demo with PACMAPCSharp Library");
-            Console.WriteLine("======================================================");
-            Console.WriteLine();
+            Console.WriteLine("Simple PACMAP - Mammoth Embedding");
+            Console.WriteLine("=================================");
+            Console.WriteLine($"PACMAP Library Version: {PacMapModel.GetVersion()}");
 
             try
             {
-                // Demo version info
-                Console.WriteLine($"PacMAP Enhanced C# Demo Version: 1.0.0");
-                Console.WriteLine($"PACMAPCSharp Library Version: {PacMapModel.GetVersion()}");
-                Console.WriteLine();
+                // Clean up old images first
+                Console.WriteLine("🧹 Cleaning up old images from Results folder...");
+                CleanupOldImages();
 
-                // Create output directory
-                string outputDir = "Results";
-                Directory.CreateDirectory(outputDir);
-
-                // ===============================================================
-                // BASIC PACMAP DEMONSTRATION
-                // ===============================================================
-                Console.WriteLine(new string('=', 80));
-                Console.WriteLine("🧪 BASIC PACMAP DEMONSTRATION WITH MAMMOTH DATA");
-                Console.WriteLine(new string('=', 80));
-                Console.WriteLine("DEMO OBJECTIVES:");
-                Console.WriteLine("   1. Load real mammoth 3D point cloud data");
-                Console.WriteLine("   2. Generate PACMAP 2D embedding");
-                Console.WriteLine("   3. Test model save/load functionality");
-                Console.WriteLine("   4. Create original 3D data visualization");
-                Console.WriteLine("   5. Create PACMAP 2D embedding visualization");
-                Console.WriteLine();
-
-                // Load real mammoth data
-                Console.WriteLine("📊 Loading mammoth dataset...");
+                // Load mammoth data
+                Console.WriteLine("Loading mammoth dataset...");
                 var (data, labels) = LoadMammothData();
-                Console.WriteLine($"   Loaded: {data.GetLength(0)} points, {data.GetLength(1)} dimensions");
-                Console.WriteLine($"   Labels: {labels.Distinct().Count()} unique anatomical parts");
-                Console.WriteLine();
+                Console.WriteLine($"Loaded: {data.GetLength(0)} points, {data.GetLength(1)} dimensions");
 
-                // Test basic PACMAP embedding
-                TestBasicPacmap(data, labels, outputDir);
+                // Create PACMAP and embed - Force Exact KNN to test
+                Console.WriteLine("Creating embedding with Exact KNN (no HNSW)...");
+                var pacmap = new PacMapModel();
 
-                Console.WriteLine();
-                Console.WriteLine("✅ DEMO COMPLETED SUCCESSFULLY!");
-                Console.WriteLine("The PacMapDemo now works with the new PACMAPCSharp library!");
+                // Convert double[,] to float[,]
+                int n = data.GetLength(0);
+                int d = data.GetLength(1);
+                var floatData = new float[n, d];
+                for (int i = 0; i < n; i++)
+                    for (int j = 0; j < d; j++)
+                        floatData[i, j] = (float)data[i, j];
 
-                // Auto-open Results folder on Windows
-                if (Environment.OSVersion.Platform == PlatformID.Win32NT)
-                {
-                    try
-                    {
-                        var fullPath = Path.GetFullPath(outputDir);
-                        Process.Start(new ProcessStartInfo
-                        {
-                            FileName = "explorer.exe",
-                            Arguments = fullPath,
-                            UseShellExecute = true,
-                            CreateNoWindow = false,
-                            WindowStyle = ProcessWindowStyle.Normal
-                        });
-                        Console.WriteLine($"📂 Opened Results folder: {fullPath}");
+                var stopwatch = Stopwatch.StartNew();
+                var embedding = pacmap.Fit(
+                    data: floatData,
+                    embeddingDimension: 2,
+                    nNeighbors: 10,
+                    metric: DistanceMetric.Euclidean,
+                    learningRate: 0.001f,  // CRITICAL: Reduced from 0.1 to 0.001 to prevent divergence
+                    mnRatio: 0.5f,
+                    fpRatio: 2.0f,
+                    forceExactKnn: true
+                );
+                stopwatch.Stop();
 
-                        // Alternative method if explorer doesn't work
-                        Thread.Sleep(500); // Give explorer time to open
-                        Process.Start(new ProcessStartInfo
-                        {
-                            FileName = fullPath,
-                            UseShellExecute = true,
-                            Verb = "open"
-                        });
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"⚠️  Could not open Results folder: {ex.Message}");
-                        Console.WriteLine($"   Manually navigate to: {Path.GetFullPath(outputDir)}");
-                    }
-                }
+                Console.WriteLine($"Embedding created: {embedding.GetLength(0)} x {embedding.GetLength(1)}");
+                Console.WriteLine($"⏱️  Execution time: {stopwatch.Elapsed.TotalSeconds:F2} seconds");
+
+                // Create visualizations with real model info
+                Console.WriteLine("🎨 Creating visualizations...");
+                CreateVisualizations(embedding, data, labels, pacmap, stopwatch.Elapsed.TotalSeconds);
+
+                // Open results folder
+                Console.WriteLine("📂 Opening Results folder...");
+                Process.Start("explorer.exe", "Results");
+                Console.WriteLine("✅ Results folder opened! Check for the generated images.");
+                Console.WriteLine("Done! Check Results folder for images.");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"❌ ERROR: {ex.Message}");
-                Console.WriteLine($"   Stack trace: {ex.StackTrace}");
+                Console.WriteLine($"Error: {ex.Message}");
             }
-
-            Console.WriteLine();
-            Console.WriteLine("Demo completed successfully!");
         }
 
         static (double[,] data, int[] labels) LoadMammothData()
@@ -225,7 +199,7 @@ namespace PacMapDemo
             // Test 2: Now try mammoth data with different approaches
             Console.WriteLine("   Test 2: Testing mammoth data with PACMAP...");
 
-            float[,] bestEmbedding = null;
+            float[,] bestEmbedding = new float[0, 0];
             double bestQuality = double.MaxValue;
             var bestParams = new { nNeighbors = 0, metric = DistanceMetric.Euclidean, name = "" };
 
@@ -518,6 +492,111 @@ namespace PacMapDemo
             }
 
             return count > 0 ? totalDistance / count : double.MaxValue;
+        }
+
+        // Clean up old images from Results folder
+        static void CleanupOldImages()
+        {
+            try
+            {
+                string resultsDir = "Results";
+                if (!Directory.Exists(resultsDir))
+                {
+                    Directory.CreateDirectory(resultsDir);
+                    Console.WriteLine($"   📁 Created Results directory");
+                    return;
+                }
+
+                var imageFiles = Directory.GetFiles(resultsDir, "*.png")
+                    .Concat(Directory.GetFiles(resultsDir, "*.jpg"))
+                    .Concat(Directory.GetFiles(resultsDir, "*.jpeg"));
+
+                int deletedCount = 0;
+                foreach (var file in imageFiles)
+                {
+                    try
+                    {
+                        File.Delete(file);
+                        deletedCount++;
+                        Console.WriteLine($"   🗑️  Deleted: {Path.GetFileName(file)}");
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"   ⚠️  Could not delete {Path.GetFileName(file)}: {ex.Message}");
+                    }
+                }
+
+                if (deletedCount > 0)
+                {
+                    Console.WriteLine($"   ✅ Cleaned up {deletedCount} old image files");
+                }
+                else
+                {
+                    Console.WriteLine($"   ℹ️  No old images to clean up");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"   ⚠️  Cleanup failed: {ex.Message}");
+            }
+        }
+
+        // Create visualizations and print what's being created
+        static void CreateVisualizations(float[,] embedding, double[,] originalData, int[] labels, PacMapModel pacmap, double executionTime)
+        {
+            try
+            {
+                string resultsDir = "Results";
+
+                // Create original 3D visualization
+                var original3DPath = Path.Combine(resultsDir, "mammoth_original_3d.png");
+                Console.WriteLine($"   📊 Creating original 3D visualization: {Path.GetFileName(original3DPath)}");
+                Visualizer.PlotOriginalMammoth3DReal(originalData, "Original Mammoth 3D Data", original3DPath);
+                Console.WriteLine($"   ✅ Created: {Path.GetFileName(original3DPath)}");
+
+                // Create PACMAP 2D embedding visualization with REAL model info
+                var pacmapPath = Path.Combine(resultsDir, "mammoth_pacmap_embedding.png");
+                Console.WriteLine($"   📈 Creating PACMAP 2D embedding: {Path.GetFileName(pacmapPath)}");
+
+                // Get REAL model information using ModelInfo property
+                Console.WriteLine($"   🔍 Extracting real model parameters...");
+                var modelInfo = pacmap.ModelInfo;
+
+                var paramInfo = new Dictionary<string, object>
+                {
+                    ["PACMAP Version"] = PacMapModel.GetVersion() + " (Corrected Gradients)",
+                    ["n_neighbors"] = modelInfo.Neighbors,
+                    ["embedding_dimension"] = modelInfo.OutputDimension,
+                    ["distance_metric"] = modelInfo.Metric.ToString(),
+                    ["mn_ratio"] = modelInfo.MN_ratio.ToString("F2"),
+                    ["fp_ratio"] = modelInfo.FP_ratio.ToString("F2"),
+                    ["learning_rate"] = pacmap.LearningRate.ToString("F3"),
+                    ["data_points"] = modelInfo.TrainingSamples,
+                    ["original_dimensions"] = modelInfo.InputDimension,
+                    ["hnsw_m"] = modelInfo.HnswM,
+                    ["hnsw_ef_construction"] = modelInfo.HnswEfConstruction,
+                    ["hnsw_ef_search"] = modelInfo.HnswEfSearch,
+                    ["KNN_Mode"] = modelInfo.ForceExactKnn ? "Direct KNN" : "HNSW",
+                    ["random_seed"] = modelInfo.RandomSeed
+                };
+                paramInfo["execution_time"] = $"{executionTime:F2}s";
+
+                // Create title with hyperparameters
+                var line1 = $"PACMAP v{paramInfo["PACMAP Version"]} | n_neighbors={paramInfo["n_neighbors"]} | {paramInfo["distance_metric"]} | mn_ratio={paramInfo["mn_ratio"]} | fp_ratio={paramInfo["fp_ratio"]} | lr={paramInfo["learning_rate"]} | data_points={paramInfo["data_points"]}";
+                var line2 = $"KNN: {paramInfo["KNN_Mode"]} | HNSW: M={paramInfo["hnsw_m"]}, ef={paramInfo["hnsw_ef_search"]} | Time: {paramInfo["execution_time"]}";
+                var titleWithParams = $"Mammoth PACMAP 2D Embedding\n{line1}\n{line2}";
+
+                Visualizer.PlotMammothPacMAP(embedding, originalData, titleWithParams, pacmapPath, paramInfo);
+                Console.WriteLine($"   ✅ Created: {Path.GetFileName(pacmapPath)}");
+                Console.WriteLine($"   📊 KNN Mode: {(modelInfo.ForceExactKnn ? "Direct KNN" : "HNSW")}");
+                Console.WriteLine($"   🚀 HNSW Status: {(modelInfo.ForceExactKnn ? "DISABLED" : "ACTIVE")}");
+
+                Console.WriteLine($"   🎉 All visualizations created successfully!");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"   ❌ Visualization creation failed: {ex.Message}");
+            }
         }
     }
 }

@@ -1,7 +1,9 @@
 using System;
 using System.IO;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
+using System.Diagnostics;
 
 namespace PacMapSharp
 {
@@ -310,7 +312,7 @@ namespace PacMapSharp
         #region Constants
 
         // Expected DLL version - must match C++ PACMAP_WRAPPER_VERSION_STRING
-        private const string EXPECTED_DLL_VERSION = "1.0.0";
+        private const string EXPECTED_DLL_VERSION = "1.6.0";
 
         #endregion
 
@@ -337,7 +339,7 @@ namespace PacMapSharp
         // PACMAP-specific parameters
         private float _mnRatio = 0.5f;
         private float _fpRatio = 2.0f;
-        private float _learningRate = 1.0f;
+        private float _learningRate = 0.1f;
         private (int phase1, int phase2, int phase3) _numIters = (100, 100, 250);
 
         #endregion
@@ -420,9 +422,9 @@ namespace PacMapSharp
         /// </summary>
         /// <param name="mnRatio">Mid-near pair ratio for global structure preservation (default: 0.5)</param>
         /// <param name="fpRatio">Far-pair ratio for uniform distribution (default: 2.0)</param>
-        /// <param name="learningRate">Learning rate for Adam optimizer (default: 1.0)</param>
+        /// <param name="learningRate">Learning rate for Adam optimizer (default: 0.1)</param>
         /// <param name="numIters">Number of iterations for each optimization phase (default: (100, 100, 250))</param>
-        public PacMapModel(float mnRatio = 0.5f, float fpRatio = 2.0f, float learningRate = 1.0f,
+        public PacMapModel(float mnRatio = 0.5f, float fpRatio = 2.0f, float learningRate = 0.1f,
                             (int, int, int) numIters = default((int, int, int)))
         {
             // CRITICAL: Verify DLL version before any native calls to prevent binary mismatches
@@ -480,7 +482,7 @@ namespace PacMapSharp
         /// <param name="nNeighbors">Number of nearest neighbors (default: 10)</param>
         /// <param name="mnRatio">Mid-near pair ratio for global structure (default: 0.5)</param>
         /// <param name="fpRatio">Far-pair ratio for uniform distribution (default: 2.0)</param>
-        /// <param name="learningRate">Learning rate for Adam optimizer (default: 1.0)</param>
+        /// <param name="learningRate">Learning rate for AdaGrad optimizer (default: 0.1)</param>
         /// <param name="numIters">Three-phase iterations (phase1, phase2, phase3) (default: (100, 100, 250))</param>
         /// <param name="metric">Distance metric to use (default: Euclidean)</param>
         /// <param name="forceExactKnn">Force exact brute-force k-NN instead of HNSW approximation (default: false)</param>
@@ -498,7 +500,7 @@ namespace PacMapSharp
                             int nNeighbors = 10,
                             float mnRatio = 0.5f,
                             float fpRatio = 2.0f,
-                            float learningRate = 1.0f,
+                            float learningRate = 0.1f,
                             (int, int, int) numIters = default((int, int, int)),
                             DistanceMetric metric = DistanceMetric.Euclidean,
                             bool forceExactKnn = false,
@@ -527,7 +529,7 @@ namespace PacMapSharp
         /// <param name="nNeighbors">Number of nearest neighbors (default: 10)</param>
         /// <param name="mnRatio">Mid-near pair ratio for global structure (default: 0.5)</param>
         /// <param name="fpRatio">Far-pair ratio for uniform distribution (default: 2.0)</param>
-        /// <param name="learningRate">Learning rate for Adam optimizer (default: 1.0)</param>
+        /// <param name="learningRate">Learning rate for AdaGrad optimizer (default: 0.1)</param>
         /// <param name="numIters">Three-phase iterations (phase1, phase2, phase3) (default: (100, 100, 250))</param>
         /// <param name="metric">Distance metric to use (default: Euclidean)</param>
         /// <param name="forceExactKnn">Force exact brute-force k-NN instead of HNSW approximation (default: false)</param>
@@ -543,7 +545,7 @@ namespace PacMapSharp
                                        int nNeighbors = 10,
                                        float mnRatio = 0.5f,
                                        float fpRatio = 2.0f,
-                                       float learningRate = 1.0f,
+                                       float learningRate = 0.1f,
                                        (int, int, int) numIters = default((int, int, int)),
                                        DistanceMetric metric = DistanceMetric.Euclidean,
                                        bool forceExactKnn = false,
@@ -944,20 +946,21 @@ namespace PacMapSharp
 
         /// <summary>
         /// Verifies the native DLL version matches the expected C# wrapper version
+        /// Uses internal API for version checking (cross-platform compatible)
         /// </summary>
         /// <exception cref="InvalidOperationException">Thrown when DLL version mismatch detected</exception>
         private static void VerifyDllVersion()
         {
             try
             {
-                // Get the actual version from the native library
+                // Get the version from the native library internal API
                 var actualVersion = CallGetVersion();
 
                 // Verify version matches expected version
                 if (actualVersion != EXPECTED_DLL_VERSION)
                 {
                     throw new InvalidOperationException(
-                        $"❌ CRITICAL: PACMAP library version mismatch!\n" +
+                        $"CRITICAL: PACMAP library version mismatch!\n" +
                         $"Expected version: {EXPECTED_DLL_VERSION}\n" +
                         $"Actual version: {actualVersion}\n" +
                         $"Platform: {RuntimeInformation.OSArchitecture} on {RuntimeInformation.OSDescription}\n" +
@@ -970,7 +973,7 @@ namespace PacMapSharp
             catch (DllNotFoundException ex)
             {
                 throw new DllNotFoundException(
-                    $"❌ CRITICAL: Native PACMAP library not found!\n" +
+                    $"CRITICAL: Native PACMAP library not found!\n" +
                     $"Expected: {(RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "pacmap.dll" : "libpacmap.so")}\n" +
                     $"Platform: {RuntimeInformation.OSArchitecture} on {RuntimeInformation.OSDescription}\n" +
                     $"Ensure the native library is in the application directory.\n" +
@@ -978,10 +981,121 @@ namespace PacMapSharp
             }
             catch (Exception ex) when (!(ex is InvalidOperationException))
             {
-                // If we can't verify version (e.g., function not available), show warning but continue
-                Console.WriteLine($"⚠️  WARNING: Could not verify PACMAP library version: {ex.Message}");
-                Console.WriteLine($"   Expected version: {EXPECTED_DLL_VERSION}");
-                Console.WriteLine($"   This may indicate a version mismatch or older library.");
+                throw new InvalidOperationException(
+                    $"❌ CRITICAL: Could not verify PACMAP library version!\n" +
+                    $"Expected version: {EXPECTED_DLL_VERSION}\n" +
+                    $"Error: {ex.Message}\n" +
+                    $"Platform: {RuntimeInformation.OSArchitecture} on {RuntimeInformation.OSDescription}\n" +
+                    $"Ensure the native library version matches the C# wrapper version exactly.", ex);
+            }
+        }
+
+        /// <summary>
+        /// Gets the path to the native DLL (cross-platform)
+        /// </summary>
+        /// <returns>Full path to the native library</returns>
+        private static string GetDllPath()
+        {
+            var dllName = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "pacmap.dll" : "libpacmap.so";
+            var assemblyLocation = Assembly.GetExecutingAssembly().Location;
+            var assemblyDir = Path.GetDirectoryName(assemblyLocation)!;
+
+            // Try multiple common locations
+            var possiblePaths = new[]
+            {
+                Path.Combine(assemblyDir, dllName),
+                Path.Combine(assemblyDir, "runtimes", "win-x64", "native", dllName),
+                Path.Combine(assemblyDir, "runtimes", "linux-x64", "native", dllName),
+                dllName // Fallback to PATH/LD_LIBRARY_PATH
+            };
+
+            foreach (var path in possiblePaths)
+            {
+                if (File.Exists(path))
+                    return Path.GetFullPath(path);
+            }
+
+            throw new DllNotFoundException($"Native PACMAP library not found. Searched paths: {string.Join(", ", possiblePaths)}");
+        }
+
+        /// <summary>
+        /// Gets the file version of the native library (cross-platform)
+        /// </summary>
+        /// <param name="dllPath">Path to the native library</param>
+        /// <returns>Version string or "Unknown" if cannot be determined</returns>
+        private static string GetFileVersion(string dllPath)
+        {
+            try
+            {
+                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                {
+                    // Windows: Use FileVersionInfo
+                    var versionInfo = FileVersionInfo.GetVersionInfo(dllPath);
+                    return !string.IsNullOrEmpty(versionInfo.FileVersion)
+                        ? versionInfo.FileVersion
+                        : versionInfo.ProductVersion ?? "Unknown";
+                }
+                else
+                {
+                    // Linux: Try to read version from file properties or use fallback
+                    // Linux shared libraries don't have standardized version resources like Windows
+                    // We'll use file modification time as a proxy or read from library if possible
+                    var fileInfo = new FileInfo(dllPath);
+
+                    // Try to get version from library string fallback (if available)
+                    try
+                    {
+                        using var process = new System.Diagnostics.Process
+                        {
+                            StartInfo = new System.Diagnostics.ProcessStartInfo
+                            {
+                                FileName = "objdump",
+                                Arguments = $"-p {dllPath} | grep -i version",
+                                UseShellExecute = false,
+                                RedirectStandardOutput = true,
+                                CreateNoWindow = true
+                            }
+                        };
+                        process.Start();
+                        var output = process.StandardOutput.ReadToEnd();
+                        process.WaitForExit();
+
+                        if (!string.IsNullOrEmpty(output) && output.Contains("version"))
+                        {
+                            var lines = output.Split('\n');
+                            foreach (var line in lines)
+                            {
+                                if (line.ToLower().Contains("version"))
+                                {
+                                    var parts = line.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+                                    foreach (var part in parts)
+                                    {
+                                        if (part.Contains('.'))
+                                        {
+                                            var version = part.Trim().Trim('"');
+                                            if (version.Split('.').Length >= 2)
+                                                return version;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    catch
+                    {
+                        // objdump not available or failed, use file timestamp fallback
+                    }
+
+                    // Fallback: Use file modification timestamp as version indicator
+                    return $"1.2.0-{fileInfo.LastWriteTime:yyyyMMdd-HHmmss}";
+                }
+            }
+            catch
+            {
+                throw new InvalidOperationException(
+                    $"❌ CRITICAL: Could not determine DLL version from {dllPath}\n" +
+                    $"Platform: {RuntimeInformation.OSArchitecture} on {RuntimeInformation.OSDescription}\n" +
+                    $"Ensure the DLL has proper version resources embedded.");
             }
         }
 

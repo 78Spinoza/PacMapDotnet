@@ -1,9 +1,11 @@
 # PacMapDotnet
 
-[![Build Status](https://img.shields.io/badge/build-passing-brightgreen)](https://github.com/78Spinoza/PacMapDotnet)
+[![Build Status](https://img.shields.io/badge/build-investigating-orange)](https://github.com/78Spinoza/PacMapDotnet)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey)](https://github.com/78Spinoza/PacMapDotnet)
 [![C#](https://img.shields.io/badge/C%23-8.0+-blue)](https://github.com/78Spinoza/PacMapDotnet)
+
+> **⚠️ Current Status**: Under Investigation - The library is currently not working properly and is being actively debugged. Please avoid using in production until further notice.
 
 A C#/.NET implementation of **PACMAP** (Pairwise Controlled Manifold Approximation and Projection) with native C++ optimization using HNSW for efficient dimensionality reduction.
 

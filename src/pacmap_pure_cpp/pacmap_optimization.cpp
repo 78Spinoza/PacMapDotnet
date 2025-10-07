@@ -8,11 +8,13 @@
 #include <chrono>
 
 void optimize_embedding(PacMapModel* model, float* embedding_out, pacmap_progress_callback_internal callback) {
-
     std::vector<float> embedding(model->n_samples * model->n_components);
 
-    // Initialize with random normal distribution (review specification)
-    initialize_random_embedding(embedding, model->n_samples, model->n_components, model->rng);
+    // FIXED: Use larger initialization for better spread (1e-2 instead of 1e-4)
+    std::normal_distribution<float> dist(0.0f, 1e-2f);
+    for (int i = 0; i < model->n_samples * model->n_components; ++i) {
+        embedding[i] = dist(model->rng);
+    }
 
     int total_iters = model->phase1_iters + model->phase2_iters + model->phase3_iters;
 
@@ -21,61 +23,74 @@ void optimize_embedding(PacMapModel* model, float* embedding_out, pacmap_progres
         return;
     }
 
-    // Initialize AdaGrad optimizer state
     std::vector<float> gradients(embedding.size());
-    std::vector<float> m(embedding.size(), 0.0f);  // First moment
-    std::vector<float> v(embedding.size(), 0.0f);  // Second moment
-
-    // Loss history for convergence monitoring
     std::vector<float> loss_history;
-    loss_history.reserve(total_iters);
+
+    // CRITICAL DEBUG: Print exact hyperparameters and KNN mode
+    printf("\n=== PACMAP OPTIMIZATION START (SGD v1.4.0) ===\n");
+    printf("Hyperparameters:\n");
+    printf("  Learning Rate: %.6f\n", model->learning_rate);
+    printf("  N Neighbors: %d\n", model->n_neighbors);
+    printf("  MN Ratio: %.2f\n", model->mn_ratio);
+    printf("  FP Ratio: %.2f\n", model->fp_ratio);
+    printf("  Distance Metric: %s\n", model->metric == PACMAP_METRIC_EUCLIDEAN ? "Euclidean" : "Cosine");
+    printf("  Random Seed: %d\n", model->random_seed);
+    printf("  KNN Mode: %s\n", model->force_exact_knn ? "Direct (Brute-Force)" : "HNSW");
+    if (!model->force_exact_knn) {
+        printf("  HNSW Parameters: M=%d, ef_construction=%d, ef_search=%d\n",
+               model->hnsw_m, model->hnsw_ef_construction, model->hnsw_ef_search);
+    }
+    printf("  Phase Iterations: %d, %d, %d (Total: %d)\n",
+           model->phase1_iters, model->phase2_iters, model->phase3_iters, total_iters);
+    printf("  Data Points: %d, Dimensions: %d -> %d\n",
+           model->n_samples, model->n_features, model->n_components);
+    printf("  Triplets Generated: %zu\n", model->triplets.size());
+    printf("=====================================\n\n");
 
     callback("Starting Optimization", 0, 0, 0.0f, nullptr);
 
-    auto loop_start = std::chrono::high_resolution_clock::now();
+    // Calculate phase boundaries for get_weights function
+    int phase1_end = model->phase1_iters;
+    int phase2_end = model->phase1_iters + model->phase2_iters;
 
-    // Main optimization loop with three phases
     for (int iter = 0; iter < total_iters; ++iter) {
-        // Get three-phase weights for current iteration
-        auto [w_n, w_mn, w_f] = get_weights(iter, total_iters);
+        // FIXED: Use actual phase boundaries instead of hardcoded values (errors6.txt)
+        auto [w_n, w_mn, w_f] = get_weights(iter, phase1_end, phase2_end);
 
-        // Compute gradients for all triplets
-        compute_gradients(embedding, model->triplets, gradients,
-                         w_n, w_mn, w_f, model->n_components);
+        compute_gradients(embedding, model->triplets, gradients, w_n, w_mn, w_f, model->n_components);
 
-        // Update embedding using AdaGrad optimizer
-        adagrad_update(embedding, gradients, m, v, iter, model->learning_rate);
+        // Rust-style SGD with clipping (errors6.txt implementation)
+        float grad_norm_squared = 0.0f;
+        #pragma omp parallel for reduction(+:grad_norm_squared)
+        for (int i = 0; i < static_cast<int>(gradients.size()); ++i) {
+            grad_norm_squared += gradients[i] * gradients[i];
+        }
+        float grad_norm = std::sqrt(std::max(grad_norm_squared, 1e-8f));
 
-        // Monitor progress and compute loss - CRITICAL DEBUG: More frequent logging
+        float scale = 1.0f;
+        if (grad_norm > 4.0f) {
+            scale = 4.0f / grad_norm;
+        }
+
+        #pragma omp parallel for
+        for (int i = 0; i < static_cast<int>(embedding.size()); ++i) {
+            embedding[i] -= model->learning_rate * scale * gradients[i];
+        }
+
         if (iter % 10 == 0 || iter == total_iters - 1) {
-            float loss = compute_pacmap_loss(embedding, model->triplets,
-                                           w_n, w_mn, w_f, model->n_components);
+            float loss = compute_pacmap_loss(embedding, model->triplets, w_n, w_mn, w_f, model->n_components);
             loss_history.push_back(loss);
 
+            float min_emb = *std::min_element(embedding.begin(), embedding.end());
+            float max_emb = *std::max_element(embedding.begin(), embedding.end());
+            printf("[DEBUG] Iter %d: Loss=%.6f, Embedding range=[%.6f, %.6f]\n", iter, loss, min_emb, max_emb);
+
             std::string phase = get_current_phase(iter, model->phase1_iters, model->phase2_iters);
-
-            // CRITICAL DEBUG: Check embedding spread
-            float min_emb = embedding[0], max_emb = embedding[0];
-            for (float val : embedding) {
-                min_emb = std::min(min_emb, val);
-                max_emb = std::max(max_emb, val);
-            }
-
             monitor_optimization_progress(iter, total_iters, loss, phase, callback);
 
-            // Early termination check
-            if (iter > 200 && should_terminate_early(loss_history)) {
-                callback("Early Termination - Converged", iter, total_iters,
-                        static_cast<float>(iter) / total_iters * 100.0f,
-                        "Convergence detected");
-                break;
-            }
+            // DISABLED early stopping - PACMAP needs full optimization to converge
+            // The loss can fluctuate normally during optimization phases
         }
-    }
-
-    auto loop_end = std::chrono::high_resolution_clock::now();
-    auto loop_duration = std::chrono::duration_cast<std::chrono::milliseconds>(loop_end - loop_start);
-    if (!loss_history.empty()) {
     }
 
     // Compute final safety statistics
@@ -111,7 +126,9 @@ void run_optimization_phase(PacMapModel* model, std::vector<float>& embedding,
                           pacmap_progress_callback_internal callback) {
 
     for (int iter = start_iter; iter < end_iter; ++iter) {
-        auto [w_n, w_mn, w_f] = get_weights(iter, model->phase1_iters + model->phase2_iters + model->phase3_iters);
+        int phase1_end = model->phase1_iters;
+        int phase2_end = model->phase1_iters + model->phase2_iters;
+        auto [w_n, w_mn, w_f] = get_weights(iter, phase1_end, phase2_end);
 
         std::vector<float> gradients(embedding.size());
         compute_gradients(embedding, model->triplets, gradients,
@@ -292,7 +309,9 @@ OptimizationDiagnostics run_optimization_with_diagnostics(PacMapModel* model,
     auto start_time = std::chrono::high_resolution_clock::now();
 
     // Store initial loss
-    auto [w_n, w_mn, w_f] = get_weights(0, model->phase1_iters + model->phase2_iters + model->phase3_iters);
+    int phase1_end = model->phase1_iters;
+    int phase2_end = model->phase1_iters + model->phase2_iters;
+    auto [w_n, w_mn, w_f] = get_weights(0, phase1_end, phase2_end);
     diagnostics.initial_loss = compute_pacmap_loss(embedding, model->triplets,
                                                   w_n, w_mn, w_f, model->n_components);
 

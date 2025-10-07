@@ -28,7 +28,10 @@ namespace transform_utils {
             return PACMAP_ERROR_INVALID_PARAMS;
         }
 
-        try {
+        printf("[DEBUG] PACMAP TRANSFORM START - n_new_obs=%d, n_dim=%d, target_dim=%d\n",
+                   n_new_obs, n_dim, model->n_components);
+
+            try {
             std::vector<float> new_embedding(static_cast<size_t>(n_new_obs) * static_cast<size_t>(model->n_components));
 
             for (int i = 0; i < n_new_obs; i++) {
@@ -49,6 +52,10 @@ namespace transform_utils {
 
                 // Find k-nearest neighbors in original space (HNSW or KNN direct mode)
                 std::vector<std::pair<float, size_t>> neighbors;
+
+                printf("[DEBUG] PACMAP TRANSFORM - Processing point %d/%d, method=%s\n",
+                       i + 1, n_new_obs,
+                       (model->force_exact_knn || !model->original_space_index) ? "BRUTE_FORCE" : "HNSW");
 
                 if (model->force_exact_knn || !model->original_space_index) {
                     // KNN direct mode: brute-force search through training data
@@ -239,6 +246,7 @@ namespace transform_utils {
                 embedding[i] = new_embedding[i];
             }
 
+            printf("[DEBUG] PACMAP TRANSFORM - Successfully transformed %d points\n", n_new_obs);
             return PACMAP_SUCCESS;
         }
         catch (const std::exception& e) {

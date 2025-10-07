@@ -13,24 +13,24 @@
 
 static std::chrono::high_resolution_clock::time_point gradient_start_time;
 
-std::tuple<float, float, float> get_weights(int current_iter, int total_iters) {
-    float progress = static_cast<float>(current_iter) / total_iters;
-    float w_n = 1.0f, w_f = 1.0f, w_mn;
+std::tuple<float, float, float> get_weights(int current_iter, int phase1_end, int phase2_end) {
+    // CRITICAL FIX: Use actual phase boundaries instead of hardcoded values (errors6.txt)
+    // Previous implementation used hardcoded 100/200 which didn't match model settings!
+    float w_n, w_mn, w_f = 1.0f;
 
-    // Three-phase weight schedule (review specification)
-    if (progress < 0.1f) {
-        // Phase 1: Global structure focus (0-10%)
-        // w_MN decreases linearly from 1000 to 3
-        float phase_progress = progress * 10.0f;  // 0 to 1 within phase
-        w_mn = 1000.0f * (1.0f - phase_progress) + 3.0f * phase_progress;
-    } else if (progress < 0.4f) {
-        // Phase 2: Balance phase (10-40%)
+    if (current_iter < phase1_end) {
+        // Phase 1: Global structure (user-defined iterations)
+        w_n = 3.0f;
         w_mn = 3.0f;
+    } else if (current_iter < phase2_end) {
+        // Phase 2: Balance phase (user-defined iterations)
+        w_n = 3.0f;
+        w_mn = 1.0f;
     } else {
-        // Phase 3: Local structure focus (40-100%)
-        // w_MN decreases linearly from 3 to 0
-        float phase_progress = (progress - 0.4f) / 0.6f;  // 0 to 1 within phase
-        w_mn = 3.0f * (1.0f - phase_progress);
+        // Phase 3: Local structure (remaining iterations)
+        // CRITICAL FIX: Maintain repulsion to prevent collapse!
+        w_n = 1.0f;   // Increased from 0.1f
+        w_mn = 1.0f;  // Changed from 0.0f to prevent collapse
     }
 
     return {w_n, w_mn, w_f};
@@ -41,63 +41,70 @@ void compute_gradients(const std::vector<float>& embedding, const std::vector<Tr
 
     gradients.assign(embedding.size(), 0.0f);
 
-    // Parallel gradient computation with atomic operations (review requirement)
-    #pragma omp parallel for schedule(dynamic, 1000)
+    // CRITICAL FIX: Updated gradient formulas from error5.txt
+    float total_coeff = 0.0f;
+    int valid_triplets = 0;
+    float min_dist = std::numeric_limits<float>::max();
+    float max_dist = std::numeric_limits<float>::lowest();
+
+    #pragma omp parallel for schedule(dynamic, 1000) reduction(+:total_coeff, valid_triplets) reduction(min:min_dist) reduction(max:max_dist)
     for (int idx = 0; idx < static_cast<int>(triplets.size()); ++idx) {
         const auto& t = triplets[idx];
+        if (t.anchor == t.neighbor) continue;
         size_t idx_a = static_cast<size_t>(t.anchor) * n_components;
         size_t idx_n = static_cast<size_t>(t.neighbor) * n_components;
 
-        // Compute Euclidean distance in embedding space
-        float d_ij_squared = 0.0f;
+        float dist_squared = 0.0f;
         for (int d = 0; d < n_components; ++d) {
             float diff = embedding[idx_a + d] - embedding[idx_n + d];
-            d_ij_squared += diff * diff;
+            dist_squared += diff * diff;
         }
-        float d_ij = std::sqrt(std::max(d_ij_squared, 1e-8f));
+        dist_squared = std::max(dist_squared, 1e-8f);
+        float dist = std::sqrt(dist_squared);
 
-        // Compute gradient magnitude based on triplet type (PACMAP loss functions)
-        // CORRECTED: Use official PACMAP constants for proper attractive forces
-        float grad_magnitude;
+        // Updated gradient formulas from error5.txt
+        float coeff = 0.0f;
         switch (t.type) {
             case NEIGHBOR:
-                // Attractive force: w * 10.0 / ((10.0 + d)^2) - PACMAP official constant
-                grad_magnitude = w_n * 10.0f / std::pow(10.0f + d_ij, 2.0f);
+                coeff = -w_n * 20.0f / std::pow(10.0f + dist_squared, 2.0f);
                 break;
             case MID_NEAR:
-                // Moderate attractive force: w * 10000.0 / ((10000.0 + d)^2) - PACMAP official constant
-                grad_magnitude = w_mn * 10000.0f / std::pow(10000.0f + d_ij, 2.0f);
+                coeff = -w_mn * 2.0f / std::pow(1.0f + dist_squared, 2.0f);
                 break;
             case FURTHER:
-                // Repulsive force: -w / ((1 + d)^2) - already correct
-                grad_magnitude = -w_f / std::pow(1.0f + d_ij, 2.0f);
+                coeff = w_f * 6.0f / std::pow(1.0f + dist_squared, 2.0f);
                 break;
-            default:
-                continue;  // Should never happen
+            default: continue;
         }
 
-        // Apply gradients symmetrically (Newton's third law)
-        float scale = grad_magnitude / d_ij;
+        total_coeff += std::abs(coeff);
+        valid_triplets++;
+        min_dist = std::min(min_dist, dist);
+        max_dist = std::max(max_dist, dist);
+
         for (int d = 0; d < n_components; ++d) {
             float diff = embedding[idx_a + d] - embedding[idx_n + d];
-            float gradient_component = scale * diff;
+            float gradient_component = coeff * diff;
 
-            // Thread-safe atomic operations (review requirement for determinism)
             #pragma omp atomic
             gradients[idx_a + d] += gradient_component;
             #pragma omp atomic
             gradients[idx_n + d] -= gradient_component;
         }
     }
+
+    // Debug gradient statistics
+    printf("[DEBUG] GRADIENT: Valid triplets=%d, Avg coeff=%.6f, Distance range=[%.6f, %.6f]\n",
+           valid_triplets, valid_triplets ? total_coeff / valid_triplets : 0, min_dist, max_dist);
 }
 
 void adagrad_update(std::vector<float>& embedding, const std::vector<float>& gradients,
                   std::vector<float>& m, std::vector<float>& v, int iter, float learning_rate,
                   float beta1, float beta2, float eps) {
 
-    // AdaGrad optimizer implementation (replacing ADAM)
-    // Learning rate fixed at 1.0 as per official PACMAP
-    const float ada_grad_lr = 1.0f;
+    // FIXED: AdaGrad optimizer - use model->learning_rate instead of hardcoded 1.0f
+    // This was the critical bug causing poor PACMAP performance!
+    const float ada_grad_lr = learning_rate;  // Use the passed learning_rate parameter
     const float ada_grad_eps = 1e-8f;
 
     // Parallel AdaGrad update - simple accumulation of squared gradients
@@ -106,7 +113,7 @@ void adagrad_update(std::vector<float>& embedding, const std::vector<float>& gra
         // Accumulate squared gradients (no momentum, no bias correction)
         v[i] += gradients[i] * gradients[i];
 
-        // Update parameters with adaptive learning rate
+        // Update parameters with adaptive learning rate using proper learning_rate
         embedding[i] -= ada_grad_lr * gradients[i] / (std::sqrt(v[i]) + ada_grad_eps);
     }
 }
@@ -124,36 +131,40 @@ void reset_adagrad_state(std::vector<float>& m, std::vector<float>& v) {
 float compute_pacmap_loss(const std::vector<float>& embedding, const std::vector<Triplet>& triplets,
                          float w_n, float w_mn, float w_f, int n_components) {
 
+    // CRITICAL FIX: Updated loss function from error5.txt
     float total_loss = 0.0f;
+    int count = 0;
 
     for (const auto& triplet : triplets) {
         size_t idx_a = static_cast<size_t>(triplet.anchor) * n_components;
         size_t idx_n = static_cast<size_t>(triplet.neighbor) * n_components;
 
-        // Compute embedding space distance
-        float d_ij = compute_sampling_distance(embedding.data() + idx_a,
-                                             embedding.data() + idx_n,
-                                             n_components, PACMAP_METRIC_EUCLIDEAN);
+        float dist_squared = 0.0f;
+        for (int d = 0; d < n_components; ++d) {
+            float diff = embedding[idx_a + d] - embedding[idx_n + d];
+            dist_squared += diff * diff;
+        }
+        float dist = std::sqrt(std::max(dist_squared, 1e-8f));
 
-        // Compute loss based on triplet type
-        // CORRECTED: Use official PACMAP loss constants to match gradient computation
-        float triplet_loss;
+        float loss_term = 0.0f;
         switch (triplet.type) {
             case NEIGHBOR:
-                triplet_loss = w_n * (d_ij / (10.0f + d_ij));  // PACMAP official constant
+                loss_term = w_n * 10.0f * std::log1p(dist);
                 break;
             case MID_NEAR:
-                triplet_loss = w_mn * (d_ij / (10000.0f + d_ij));  // PACMAP official constant
+                loss_term = w_mn * std::log1p(dist);
                 break;
             case FURTHER:
-                triplet_loss = w_f * (1.0f / (1.0f + d_ij));  // already correct
+                loss_term = w_f / (1.0f + dist_squared);
                 break;
+            default: continue;
         }
-
-        total_loss += triplet_loss;
+        total_loss += loss_term;
+        count++;
     }
 
-    return total_loss / static_cast<float>(triplets.size());  // Average loss
+    printf("[DEBUG] LOSS: Total=%.6f, Avg=%.6f\n", total_loss, count ? total_loss / count : 0);
+    return total_loss;
 }
 
 bool check_convergence(const std::vector<float>& loss_history, float threshold, int window) {

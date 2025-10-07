@@ -143,7 +143,7 @@ void sample_MN_pair(PacMapModel* model, const std::vector<float>& normalized_dat
 
     // Distance-based sampling for mid-near pairs
     distance_based_sampling(model, normalized_data,
-                           model->n_samples * n_mn * 2,  // Oversample for uniqueness
+                           model->n_samples * n_mn,  // FIXED: Removed *2 oversampling causing imbalance
                            p25_dist, p75_dist,
                            mn_triplets, MID_NEAR);
 }
@@ -162,7 +162,7 @@ void sample_FP_pair(PacMapModel* model, const std::vector<float>& normalized_dat
 
     // Distance-based sampling for far pairs
     distance_based_sampling(model, normalized_data,
-                           model->n_samples * n_fp * 3,  // Oversample more for far pairs
+                           model->n_samples * n_fp,  // FIXED: Removed *3 oversampling causing imbalance
                            p90_dist, std::numeric_limits<float>::infinity(),
                            fp_triplets, FURTHER);
 }

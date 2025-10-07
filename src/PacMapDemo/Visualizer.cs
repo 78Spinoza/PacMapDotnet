@@ -211,8 +211,8 @@ namespace PacMapDemo
                     Console.WriteLine($"   {char.ToUpper(part.Key[0]) + part.Key.Substring(1)}: {part.Value} points ({percentage:F1}%)");
                 }
 
-                // Export XY view (top view)
-                var exporter = new OxyPlot.WindowsForms.PngExporter { Width = 800, Height = 600, Resolution = 120 };
+                // Export XY view (top view) - Medium size
+                var exporter = new OxyPlot.WindowsForms.PngExporter { Width = 1200, Height = 900, Resolution = 150 };
                 string xyPath = outputPath.Replace(".png", "_XY_TopView.png");
                 using (var stream = File.Create(xyPath))
                 {
@@ -320,8 +320,8 @@ namespace PacMapDemo
                     }
                 }
 
-                // Export
-                var exporter = new OxyPlot.WindowsForms.PngExporter { Width = 1600, Height = 1200, Resolution = 120 };
+                // Export - Medium size
+                var exporter = new OxyPlot.WindowsForms.PngExporter { Width = 1600, Height = 1200, Resolution = 150 };
                 using (var stream = File.Create(outputPath))
                 {
                     exporter.Export(plotModel, stream);
@@ -526,36 +526,16 @@ namespace PacMapDemo
             };
             plotModel.Legends.Add(defaultLegend);
 
-            // Add parameter information as text annotation
-            if (paramInfo != null)
-            {
-                var paramText = new List<string>();
-                foreach (var kvp in paramInfo)
-                {
-                    paramText.Add($"{kvp.Key}: {kvp.Value}");
-                }
+            // Hyperparameters will be added to the title instead
 
-                var annotation = new TextAnnotation
-                {
-                    Text = string.Join("\n", paramText),
-                    TextPosition = new DataPoint(0.02, 0.98), // Top-left corner
-                    TextColor = OxyColors.Black,
-                    Background = OxyColors.White,
-                    FontSize = 10,
-                    TextHorizontalAlignment = HorizontalAlignment.Left,
-                    TextVerticalAlignment = VerticalAlignment.Top
-                };
-                plotModel.Annotations.Add(annotation);
-            }
-
-            // Export to PNG
-            var exporter = new PngExporter { Width = 800, Height = 600 };
+            // Export to PNG - Medium size with hyperparameters
+            var exporter = new PngExporter { Width = 1920, Height = 1440, Resolution = 150 };
             using (var stream = File.Create(outputPath))
             {
                 exporter.Export(plotModel, stream);
             }
 
-            Console.WriteLine($"   📊 Plot saved: {outputPath}");
+            Console.WriteLine($"   📊 Plot saved: {outputPath} (Ultra High Resolution)");
         }
 
         /// <summary>
