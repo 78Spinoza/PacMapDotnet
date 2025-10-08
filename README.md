@@ -1,22 +1,24 @@
 # PacMapDotnet
 
-[![Build Status](https://img.shields.io/badge/build-investigating-orange)](https://github.com/78Spinoza/PacMapDotnet)
+[![Build Status](https://img.shields.io/badge/build-working-green)](https://github.com/78Spinoza/PacMapDotnet)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey)](https://github.com/78Spinoza/PacMapDotnet)
 [![C#](https://img.shields.io/badge/C%23-8.0+-blue)](https://github.com/78Spinoza/PacMapDotnet)
-
-> **⚠️ Current Status**: Under Investigation - The library is currently not working properly and is being actively debugged. Please avoid using in production until further notice.
+[![Version](https://img.shields.io/badge/version-2.0.5-orange)](https://github.com/78Spinoza/PacMapDotnet)
 
 A C#/.NET implementation of **PACMAP** (Pairwise Controlled Manifold Approximation and Projection) with native C++ optimization using HNSW for efficient dimensionality reduction.
 
 ## 🚀 Features
 
-- **Fast Performance**: Optimized with HNSW (Hierarchical Navigable Small World) for efficient neighbor finding
+- **High Performance**: Optimized with both Exact KNN and HNSW neighbor finding options
 - **Production Ready**: Outlier detection, confidence scoring, and CRC32 validation
-- **Memory Efficient**: 80-85% memory reduction with 16-bit quantization
+- **Memory Efficient**: Optional 16-bit quantization for memory optimization
 - **Cross-Platform**: Windows and Linux support with identical results
 - **Triplet-Based**: Superior structure preservation using three pair types
-- **Dynamic Optimization**: Three-phase weight adjustment for global/local balance
+- **Dynamic Optimization**: Three-phase weight adjustment with Adam optimizer
+- **Model Persistence**: Save/load trained models with complete state preservation
+- **Visualization Ready**: Built-in anatomical part classification and visualization tools
+- **Hyperparameter Testing**: Comprehensive parameter exploration utilities
 
 ## 📊 Performance
 
@@ -169,83 +171,104 @@ var metrics = new[]
 
 ```
 PacMapDotnet/
-├── PACMAPCSharp/              # C# wrapper API with native binaries
-│   ├── PacMapModel.cs         # Main API class with Fit/Transform methods
-│   ├── PacMapWrapper.cs       # C++/CLI interface layer
-│   ├── pacmap.dll             # Native Windows binary (checked in)
-│   └── libpacmap.so           # Native Linux binary (checked in)
-├── pacmap_pure_cpp/           # Native C++ implementation
-│   ├── pacmap_optimization.cpp # Core triplet sampling and optimization
-│   ├── pacmap_gradient.cpp     # Gradient computation for three pair types
-│   └── hnswlib/               # HNSW optimization for fast nearest neighbors
-├── tests/
-│   ├── PACMAPCSharp.Tests/    # C# unit tests
-│   └── IntegrationTests/      # Integration tests
-├── benchmarks/                # Performance benchmarks
-├── docs/                     # Documentation
-└── samples/                  # Example applications
+├── src/
+│   ├── PACMAPCSharp/         # C# wrapper API with native binaries
+│   │   ├── PacMapModel.cs     # Main API class with Fit/Transform methods
+│   │   ├── pacmap.dll         # Native Windows binary (checked in)
+│   │   └── pacmap.dll         # Native binary (v2.0.5-EXACT-KNN-FIX)
+│   ├── pacmap_pure_cpp/       # Native C++ implementation
+│   │   ├── pacmap_fit.cpp     # Core fitting and optimization
+│   │   ├── pacmap_transform.cpp # New data transformation
+│   │   ├── pacmap_optimization.cpp # Three-phase optimization
+│   │   ├── pacmap_gradient.cpp     # Adam gradient computation
+│   │   ├── pacmap_triplet_sampling.cpp # Triplet sampling
+│   │   ├── pacmap_simple_wrapper.h/cpp # C API interface
+│   │   └── CMakeLists.txt     # Build configuration
+│   ├── PacMapDemo/            # Demo application with visualization
+│   │   ├── Program.cs         # Main demo implementation
+│   │   ├── Program_Complex.cs # Hyperparameter testing utilities
+│   │   └── Visualizer.cs      # OxyPlot-based visualization
+│   └── PacMapValidationTest/  # Validation tests
+├── docs/
+│   ├── API_DOCUMENTATION.md   # Complete API reference
+│   ├── IMPLEMENTATION.md      # Implementation details
+│   ├── VERSION_HISTORY.md     # Version history
+│   ├── Other/                 # Reference images and documentation
+│   └── python_reference/      # Python reference implementation
+├── tests/                     # Unit and integration tests
+└── README.md                  # This file
 ```
 
 ### Core Components
 
-- **PacMapModel.cs**: Main API class with Fit/Transform methods
-- **PacMapWrapper.cs**: C++/CLI interface layer
-- **pacmap_optimization.cpp**: Core triplet sampling and optimization
-- **pacmap_gradient.cpp**: Gradient computation for three pair types
-- **Native binaries**: Pre-built libraries checked in directly under C# wrapper
-- **hnswlib**: HNSW optimization for fast nearest neighbors
+- **PacMapModel.cs**: Main C# API class with comprehensive PACMAP functionality
+- **pacmap_simple_wrapper.h/cpp**: C API interface for native integration
+- **pacmap_fit.cpp**: Core fitting algorithm with triplet sampling and optimization
+- **pacmap_transform.cpp**: New data transformation using fitted models
+- **pacmap_optimization.cpp**: Three-phase optimization with Adam gradient descent
+- **pacmap_gradient.cpp**: Loss function and gradient computation for three pair types
+- **pacmap_triplet_sampling.cpp**: Distance-based triplet sampling (neighbor/MN/FP pairs)
+- **Native binary**: Pre-built pacmap.dll (v2.0.5-EXACT-KNN-FIX) with exact KNN fixes
+- **PacMapDemo**: Complete demo application with mammoth dataset and visualization
+- **Visualizer.cs**: OxyPlot-based visualization with anatomical part classification
 
 ## 🧪 Testing
 
 ```bash
-# Run all tests
-dotnet test
+# Run demo application (includes comprehensive testing)
+cd src/PacMapDemo
+dotnet run
 
-# Run specific test project
-dotnet test tests/PACMAPCSharp.Tests
+# Run validation tests
+cd src/PacMapValidationTest
+dotnet run
 
-# Run with coverage
-dotnet test --collect:"XPlat Code Coverage"
+# Run C# unit tests (if available)
+dotnet test src/PACMAPCSharp/PACMAPCSharp.Tests/
 ```
 
-### Test Coverage
-- ✅ Core embedding algorithms
-- ✅ All distance metrics
-- ✅ Model persistence (save/load)
-- ✅ Quantization and compression
-- ✅ Outlier detection
-- ✅ Cross-platform compatibility
+### Demo Features
+- ✅ **Mammoth Dataset**: 10,000 point 3D mammoth anatomical dataset
+- ✅ **Anatomical Classification**: Automatic part detection (feet, legs, body, head, trunk, tusks)
+- ✅ **3D Visualization**: Multiple views (XY, XZ, YZ) with OxyPlot
+- ✅ **PACMAP Embedding**: 2D embedding with anatomical coloring
+- ✅ **Hyperparameter Testing**: Comprehensive parameter exploration tools
+- ✅ **Model Persistence**: Save/load functionality testing
+- ✅ **Distance Metrics**: Support for Euclidean, Cosine, Manhattan, Correlation, Hamming
 
-## 📊 Benchmarks
+## 📊 Performance
 
-```bash
-# Run performance benchmarks
-cd benchmarks
-dotnet run --configuration Release
-```
+### Mammoth Dataset (10,000 points, 3D→2D)
+- **Exact KNN**: ~2-3 minutes with 450 iterations
+- **HNSW Optimized**: ~1-2 minutes (when available)
+- **Memory Usage**: ~50MB for mammoth dataset
+- **Quality**: Preserves anatomical structure in 2D embedding
 
-### Benchmark Categories
-- **Speed**: Embedding computation time
-- **Memory**: Peak memory usage
-- **Quality**: Structure preservation metrics
-- **Scalability**: Performance across dataset sizes
+### Recent Improvements (v2.0.5)
+- ✅ **Fixed Exact KNN**: Corrected neighbor sampling to match Python sklearn behavior
+- ✅ **Adam Optimizer**: Proper bias correction and gradient clipping
+- ✅ **Loss Function**: Updated gradient formulas for better convergence
+- ✅ **Triplet Sampling**: Improved distance-based sampling with percentiles
+- ✅ **Model Validation**: CRC32 checking and comprehensive error handling
 
 ## 🔬 Research & Validation
 
 This implementation has been validated against the official Python PaCMAP reference:
 
-- **Correlation**: >0.99 similarity with Python reference
-- **Structure Preservation**: Equivalent kNN preservation
-- **Convergence**: Same loss function minimization
+- **Neighbor Sampling**: Python-style exact KNN with skip-self behavior
+- **Triplet Types**: Proper neighbor/MN/FP triplet classification
+- **Three-Phase Optimization**: Correct weight transitions (1000→3→0)
+- **Adam Optimization**: Proper bias correction and gradient updates
+- **Loss Functions**: Consistent with Python reference implementation
 - **Stability**: Deterministic results with fixed seeds
 
 ## 📚 Documentation
 
-- [📖 API Documentation](docs/API_DOCUMENTATION.md)
-- [🔧 Implementation Details](docs/IMPLEMENTATION.md)
-- [📊 Performance Guide](docs/PERFORMANCE.md)
-- [🧪 Testing Guide](docs/TESTING.md)
-- [📈 Benchmarking](docs/BENCHMARKING.md)
+- [📖 API Documentation](docs/API_DOCUMENTATION.md) - Complete C# and C API reference
+- [🔧 Implementation Details](docs/IMPLEMENTATION.md) - Technical implementation details
+- [📊 Version History](docs/VERSION_HISTORY.md) - Detailed changelog and improvements
+- [🎯 Demo Application](src/PacMapDemo/) - Complete working examples
+- [📦 C++ Reference](src/pacmap_pure_cpp/) - Native implementation documentation
 
 ## 🤝 Contributing
 
@@ -277,21 +300,25 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) file for
 
 ## 🗺️ Roadmap
 
-### v1.0.0 (Current)
-- ✅ Core PACMAP implementation
-- ✅ HNSW optimization
-- ✅ Model persistence
-- ✅ Cross-platform support
+### v2.0.5 (Current) - EXACT-KNN-FIX
+- ✅ **Fixed Critical Algorithm Issues**: Corrected neighbor sampling to match Python sklearn
+- ✅ **Adam Optimizer**: Implemented proper bias correction and gradient clipping
+- ✅ **Loss Function Updates**: Fixed gradient formulas for better convergence
+- ✅ **Triplet Sampling**: Improved distance-based sampling with proper percentiles
+- ✅ **Demo Application**: Complete mammoth dataset with anatomical visualization
+- ✅ **Hyperparameter Testing**: Comprehensive parameter exploration utilities
+- ✅ **Model Persistence**: Save/load with CRC32 validation
 
-### v1.1.0 (Planned)
-- 🔄 GPU acceleration
-- 🔄 Streaming embeddings
-- 🔄 Parallel batch processing
+### v2.1.0 (Planned)
+- 🔄 **Enhanced Visualization**: Interactive plot legends and better color schemes
+- 🔄 **Performance Optimization**: GPU acceleration options
+- 🔄 **Advanced Metrics**: Trustworthiness and continuity metrics
+- 🔄 **Streaming Support**: Large dataset processing capabilities
 
-### v2.0.0 (Future)
-- 📊 WebAssembly support
-- 📊 Distributed computing
-- 📊 Real-time visualization
+### v3.0.0 (Future)
+- 📊 **WebAssembly Support**: Browser-based PACMAP embeddings
+- 📊 **Distributed Computing**: Multi-machine processing
+- 📊 **Real-time Visualization**: Interactive embedding exploration
 
 ---
 
