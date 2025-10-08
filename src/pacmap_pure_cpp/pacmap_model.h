@@ -63,6 +63,7 @@ struct PacMapModel {
     float mn_ratio = 0.5f;     // Mid-near pair ratio
     float fp_ratio = 2.0f;     // Far pair ratio
     float learning_rate = 1.0f; // Adam optimizer learning rate
+    float initialization_std_dev = 0.1f; // Standard deviation for embedding initialization
     int phase1_iters = 100;    // Global structure phase
     int phase2_iters = 100;    // Balance phase
     int phase3_iters = 250;    // Local structure phase

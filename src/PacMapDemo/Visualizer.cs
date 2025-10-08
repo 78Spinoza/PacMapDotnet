@@ -212,7 +212,7 @@ namespace PacMapDemo
                 }
 
                 // Export XY view (top view)
-                var exporter = new OxyPlot.WindowsForms.PngExporter { Width = 1600, Height = 1200, Resolution = 300 };
+                var exporter = new OxyPlot.WindowsForms.PngExporter { Width = 800, Height = 600, Resolution = 300 };
                 string xyPath = outputPath.Replace(".png", "_XY_TopView.png");
                 using (var stream = File.Create(xyPath))
                 {
@@ -354,7 +354,7 @@ namespace PacMapDemo
                 }
 
                 // Export - Smaller size like mammoth_original_3d_YZ_FrontView
-                var exporter = new OxyPlot.WindowsForms.PngExporter { Width = 1600, Height = 1200, Resolution = 300 };
+                var exporter = new OxyPlot.WindowsForms.PngExporter { Width = 800, Height = 600, Resolution = 300 };
                 using (var stream = File.Create(outputPath))
                 {
                     exporter.Export(plotModel, stream);
@@ -533,7 +533,7 @@ namespace PacMapDemo
             plotModel.Background = OxyColors.White;
 
             // Export to PNG
-            var exporter = new PngExporter { Width = 1600, Height = 1200 };
+            var exporter = new PngExporter { Width = 800, Height = 600 };
             using (var stream = File.Create(outputPath))
             {
                 exporter.Export(plotModel, stream);

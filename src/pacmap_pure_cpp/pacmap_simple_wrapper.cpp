@@ -36,12 +36,12 @@ extern "C" {
         float learning_rate, int n_iters, int phase1_iters, int phase2_iters, int phase3_iters,
         PacMapMetric metric, float* embedding, pacmap_progress_callback_v2 progress_callback,
         int force_exact_knn, int M, int ef_construction, int ef_search,
-        int use_quantization, int random_seed, int autoHNSWParam) {
+        int use_quantization, int random_seed, int autoHNSWParam, float initialization_std_dev) {
         // Direct call to internal PACMAP implementation
         return fit_utils::internal_pacmap_fit_with_progress_v2(model, data, n_obs, n_dim, embedding_dim,
             n_neighbors, MN_ratio, FP_ratio, learning_rate, n_iters, phase1_iters, phase2_iters, phase3_iters,
             metric, embedding, progress_callback, force_exact_knn, M, ef_construction, ef_search,
-            use_quantization, random_seed, autoHNSWParam);
+            use_quantization, random_seed, autoHNSWParam, initialization_std_dev);
     }
 
     PACMAP_API int pacmap_transform(PacMapModel* model,

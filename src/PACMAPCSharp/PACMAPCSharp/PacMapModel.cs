@@ -225,7 +225,8 @@ namespace PacMapSharp
                                                           float learningRate, int nIters, int phase1Iters, int phase2Iters, int phase3Iters,
                                                           DistanceMetric metric, float[,] embedding, NativeProgressCallbackV2 progressCallback,
                                                           int forceExactKnn, int M, int efConstruction, int efSearch,
-                                                          int useQuantization, int randomSeed = -1, int autoHNSWParam = 1);
+                                                          int useQuantization, int randomSeed = -1, int autoHNSWParam = 1,
+                                                          float initializationStdDev = 0.1f);
 
         [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_transform_detailed")]
         private static extern int WindowsTransformDetailed(IntPtr model, float[,] newData, int nNewObs, int nDim,
@@ -271,7 +272,8 @@ namespace PacMapSharp
                                                          float learningRate, int nIters, int phase1Iters, int phase2Iters, int phase3Iters,
                                                          DistanceMetric metric, float[,] embedding, NativeProgressCallbackV2 progressCallback,
                                                          int forceExactKnn, int M, int efConstruction, int efSearch,
-                                                         int useQuantization, int randomSeed = -1, int autoHNSWParam = 1);
+                                                         int useQuantization, int randomSeed = -1, int autoHNSWParam = 1,
+                                                         float initializationStdDev = 0.1f);
 
         [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_transform_detailed")]
         private static extern int LinuxTransformDetailed(IntPtr model, float[,] newData, int nNewObs, int nDim,
@@ -312,7 +314,7 @@ namespace PacMapSharp
         #region Constants
 
         // Expected DLL version - must match C++ PACMAP_WRAPPER_VERSION_STRING
-        private const string EXPECTED_DLL_VERSION = "2.0.8-DISTANCE-FIXED";
+        private const string EXPECTED_DLL_VERSION = "2.1.0-INITSTDDEV-FIX";
 
         #endregion
 
@@ -342,6 +344,7 @@ namespace PacMapSharp
         private float _learningRate = 1.0f;  // Updated default for Adam optimizer
         private float _adamBeta1 = 0.9f;
         private float _adamBeta2 = 0.999f;
+        private float _initializationStdDev = 0.1f;  // Standard deviation for embedding initialization
         private (int phase1, int phase2, int phase3) _numIters = (100, 100, 250);
 
         #endregion
@@ -372,6 +375,11 @@ namespace PacMapSharp
         /// Gets the Adam beta2 parameter for RMSprop-like decay
         /// </summary>
         public float AdamBeta2 => _adamBeta2;
+
+        /// <summary>
+        /// Gets the standard deviation for embedding initialization
+        /// </summary>
+        public float InitializationStdDev => _initializationStdDev;
 
         /// <summary>
         /// Gets the number of iterations for each optimization phase
@@ -437,9 +445,10 @@ namespace PacMapSharp
         /// <param name="learningRate">Learning rate for Adam optimizer (default: 1.0)</param>
         /// <param name="adamBeta1">Adam beta1 parameter for momentum (default: 0.9)</param>
         /// <param name="adamBeta2">Adam beta2 parameter for RMSprop-like decay (default: 0.999)</param>
+        /// <param name="initializationStdDev">Standard deviation for embedding initialization (default: 0.1)</param>
         /// <param name="numIters">Number of iterations for each optimization phase (default: (100, 100, 250))</param>
         public PacMapModel(float mnRatio = 0.5f, float fpRatio = 2.0f, float learningRate = 1.0f,
-                            float adamBeta1 = 0.9f, float adamBeta2 = 0.999f,
+                            float adamBeta1 = 0.9f, float adamBeta2 = 0.999f, float initializationStdDev = 0.1f,
                             (int, int, int) numIters = default((int, int, int)))
         {
             // CRITICAL: Verify DLL version before any native calls to prevent binary mismatches
@@ -454,6 +463,7 @@ namespace PacMapSharp
             _learningRate = learningRate;
             _adamBeta1 = adamBeta1;
             _adamBeta2 = adamBeta2;
+            _initializationStdDev = initializationStdDev;
 
             // Handle default value for numIters
             _numIters = numIters.Equals(default((int, int, int))) ? (100, 100, 250) : numIters;
@@ -803,7 +813,8 @@ namespace PacMapSharp
                                                  nNeighbors, mnRatio, fpRatio, learningRate, totalIters, numIters.Item1, numIters.Item2, numIters.Item3,
                                                  metric, embedding, nativeCallback,
                                                  forceExactKnn ? 1 : 0, hnswM, hnswEfConstruction, hnswEfSearch,
-                                                 useQuantization ? 1 : 0, randomSeed, autoHNSWParam ? 1 : 0);
+                                                 useQuantization ? 1 : 0, randomSeed, autoHNSWParam ? 1 : 0,
+                                                 _initializationStdDev);
             }
             else
             {
@@ -812,7 +823,8 @@ namespace PacMapSharp
                                                  nNeighbors, mnRatio, fpRatio, learningRate, totalIters, numIters.Item1, numIters.Item2, numIters.Item3,
                                                  metric, embedding, null,
                                                  forceExactKnn ? 1 : 0, hnswM, hnswEfConstruction, hnswEfSearch,
-                                                 useQuantization ? 1 : 0, randomSeed, autoHNSWParam ? 1 : 0);
+                                                 useQuantization ? 1 : 0, randomSeed, autoHNSWParam ? 1 : 0,
+                                                 _initializationStdDev);
             }
 
             ThrowIfError(result);
@@ -842,15 +854,18 @@ namespace PacMapSharp
                                                   float learningRate, int nIters, int phase1Iters, int phase2Iters, int phase3Iters,
                                                   DistanceMetric metric, float[,] embedding, NativeProgressCallbackV2? progressCallback,
                                                   int forceExactKnn, int M, int efConstruction, int efSearch,
-                                                  int useQuantization, int randomSeed = -1, int autoHNSWParam = 1)
+                                                  int useQuantization, int randomSeed = -1, int autoHNSWParam = 1,
+                                                  float initializationStdDev = 0.1f)
         {
             var callback = progressCallback ?? ((phase, current, total, percent, message) => { });
             return IsWindows ? WindowsFitWithProgressV2(model, data, nObs, nDim, embeddingDim, nNeighbors, mnRatio, fpRatio,
                                                       learningRate, nIters, phase1Iters, phase2Iters, phase3Iters, metric, embedding, callback,
-                                                      forceExactKnn, M, efConstruction, efSearch, useQuantization, randomSeed, autoHNSWParam)
+                                                      forceExactKnn, M, efConstruction, efSearch, useQuantization, randomSeed, autoHNSWParam,
+                                                      initializationStdDev)
                              : LinuxFitWithProgressV2(model, data, nObs, nDim, embeddingDim, nNeighbors, mnRatio, fpRatio,
                                                      learningRate, nIters, phase1Iters, phase2Iters, phase3Iters, metric, embedding, callback,
-                                                     forceExactKnn, M, efConstruction, efSearch, useQuantization, randomSeed, autoHNSWParam);
+                                                     forceExactKnn, M, efConstruction, efSearch, useQuantization, randomSeed, autoHNSWParam,
+                                                     initializationStdDev);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

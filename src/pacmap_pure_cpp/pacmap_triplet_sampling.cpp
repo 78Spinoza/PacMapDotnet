@@ -217,48 +217,108 @@ void sample_MN_pair(PacMapModel* model, const std::vector<float>& normalized_dat
                    std::vector<Triplet>& mn_triplets, int n_mn) {
 
     mn_triplets.clear();
-    printf("[DEBUG] Using ORIGINAL MN sampling (distance-based approach)\n");
+    printf("[DEBUG] CRITICAL FIX: Using PER-POINT RANDOM MN sampling (matching Rust implementation)\n");
 
-    // ORIGINAL approach: Distance-based sampling for mid-near pairs
-    // Compute 25th and 75th percentiles for distance-based MN sampling
-    auto percentiles = compute_distance_percentiles(normalized_data,
-                                                   std::min(model->n_samples, 1000),
-                                                   model->n_features,
-                                                   model->metric);
-    float p25_dist = percentiles[0];  // 25th percentile
-    float p75_dist = percentiles[1];  // 75th percentile
+    // CRITICAL FIX: Switch to per-point random sampling (matching Rust sampling.rs)
+    // For each point i, sample 6 random points, compute distances, sort, pick 2nd closest
+    mn_triplets.reserve(model->n_samples * n_mn);
+    std::unordered_set<long long> used_pairs;
 
-    // Distance-based sampling for mid-near pairs (25th-75th percentile range)
-    int target_mn_triplets = model->n_samples * n_mn;
-    distance_based_sampling(model, normalized_data,
-                           model->n_samples * n_mn * 2,  // Oversample for uniqueness
-                           target_mn_triplets,
-                           p25_dist, p75_dist,
-                           mn_triplets, MID_NEAR);
+    #pragma omp parallel
+    {
+        std::mt19937 rng = get_seeded_rng(model->random_seed + omp_get_thread_num());
+        std::uniform_int_distribution<int> dist(0, model->n_samples - 1);
+        std::vector<std::pair<float, int>> distances;
+        distances.reserve(6); // Sample 6 candidates as in Rust
 
-    printf("[DEBUG] ORIGINAL MN sampling completed: %d triplets generated\n", (int)mn_triplets.size());
+        #pragma omp for
+        for (int i = 0; i < model->n_samples; ++i) {
+            distances.clear();
+            std::unordered_set<int> sampled_indices;
+
+            // Sample 6 unique random points
+            while (sampled_indices.size() < 6) {
+                int j = dist(rng);
+                if (j != i && sampled_indices.find(j) == sampled_indices.end()) {
+                    float d = compute_sampling_distance(
+                        normalized_data.data() + i * model->n_features,
+                        normalized_data.data() + j * model->n_features,
+                        model->n_features, model->metric);
+                    distances.emplace_back(d, j);
+                    sampled_indices.insert(j);
+                }
+            }
+
+            // Sort by distance and pick second closest (index 1)
+            std::sort(distances.begin(), distances.end());
+            for (int k = 0; k < n_mn && k + 1 < distances.size(); ++k) {
+                int j = distances[k + 1].second; // Skip closest (index 0), pick 2nd, 3rd, etc.
+                long long pair_key = ((long long)std::min(i, j) << 32) | std::max(i, j);
+                #pragma omp critical
+                {
+                    if (used_pairs.find(pair_key) == used_pairs.end()) {
+                        mn_triplets.emplace_back(Triplet{i, j, MID_NEAR});
+                        used_pairs.insert(pair_key);
+                    }
+                }
+            }
+        }
+    }
+
+    printf("[DEBUG] PER-POINT MN sampling completed: %d triplets generated\n", (int)mn_triplets.size());
 }
 
 void sample_FP_pair(PacMapModel* model, const std::vector<float>& normalized_data,
                    std::vector<Triplet>& fp_triplets, int n_fp) {
 
     fp_triplets.clear();
+    printf("[DEBUG] CRITICAL FIX: Using RANDOM FP sampling without distance filtering (matching Rust implementation)\n");
 
-    // Compute 90th percentile for far pairs
-    auto percentiles = compute_distance_percentiles(normalized_data,
-                                                   std::min(model->n_samples, 500),
-                                                   model->n_features,
-                                                   model->metric);
-    float p90_dist = percentiles[2];  // 90th percentile
+    // CRITICAL FIX: Switch to pure random sampling (matching Rust sampling.rs)
+    // Sample random points excluding neighbors and self, no distance filtering
+    fp_triplets.reserve(model->n_samples * n_fp);
+    std::unordered_set<long long> used_pairs;
 
-    // Distance-based sampling for far pairs
-    // IMPROVED: Better triplet balance with optimized sampling
-    int target_fp_triplets = model->n_samples * n_fp;
-    distance_based_sampling(model, normalized_data,
-                           model->n_samples * n_fp * 3,  // Oversample more for far pairs
-                           target_fp_triplets,
-                           p90_dist, std::numeric_limits<float>::infinity(),
-                           fp_triplets, FURTHER);
+    // Get neighbor indices for exclusion
+    std::vector<std::unordered_set<int>> neighbor_sets(model->n_samples);
+    for (const auto& t : model->triplets) {
+        if (t.type == NEIGHBOR) {
+            neighbor_sets[t.anchor].insert(t.neighbor);
+        }
+    }
+
+    #pragma omp parallel
+    {
+        std::mt19937 rng = get_seeded_rng(model->random_seed + 1000 + omp_get_thread_num());
+        std::uniform_int_distribution<int> dist(0, model->n_samples - 1);
+
+        #pragma omp for
+        for (int i = 0; i < model->n_samples; ++i) {
+            std::unordered_set<int> sampled_indices;
+            int found = 0;
+
+            while (found < n_fp) {
+                int j = dist(rng);
+                if (j != i &&
+                    sampled_indices.find(j) == sampled_indices.end() &&
+                    neighbor_sets[i].find(j) == neighbor_sets[i].end()) {
+
+                    long long pair_key = ((long long)std::min(i, j) << 32) | std::max(i, j);
+                    #pragma omp critical
+                    {
+                        if (used_pairs.find(pair_key) == used_pairs.end()) {
+                            fp_triplets.emplace_back(Triplet{i, j, FURTHER});
+                            used_pairs.insert(pair_key);
+                            found++;
+                        }
+                    }
+                    sampled_indices.insert(j);
+                }
+            }
+        }
+    }
+
+    printf("[DEBUG] RANDOM FP sampling completed: %d triplets generated\n", (int)fp_triplets.size());
 }
 
 void distance_based_sampling(PacMapModel* model, const std::vector<float>& data,

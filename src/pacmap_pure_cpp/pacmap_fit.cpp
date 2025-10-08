@@ -34,7 +34,8 @@ namespace fit_utils {
         int ef_search,
         int use_quantization,
         int random_seed,
-        int autoHNSWParam) {
+        int autoHNSWParam,
+        float initialization_std_dev) {
 
         if (!model || !data || !embedding || n_obs <= 0 || n_dim <= 0 ||
             embedding_dim <= 0 || n_neighbors <= 0 || n_neighbors >= n_obs) {
@@ -60,6 +61,7 @@ namespace fit_utils {
             model->mn_ratio = mn_ratio;
             model->fp_ratio = fp_ratio;
             model->learning_rate = learning_rate;
+            model->initialization_std_dev = initialization_std_dev;
             model->phase1_iters = phase1_iters;
             model->phase2_iters = phase2_iters;
             model->phase3_iters = phase3_iters;
@@ -134,23 +136,17 @@ namespace fit_utils {
                 progress_callback("Optimizer Setup", 3, 100, 20.0f, "Initializing Adam optimizer state");
             }
 
-            // Initialize embedding with improved random variance (Fix B)
+            // CRITICAL FIX: Initialize embedding to match Rust implementation exactly
+            // Rust uses simple random normal initialization without post-scaling
             std::mt19937 generator(random_seed >= 0 ? random_seed : 42);
-            std::normal_distribution<float> dist(0.0f, 0.01f); // Increased from 1e-4 to 0.01
+            std::normal_distribution<float> dist(0.0f, 0.1f); // Standard initialization similar to Rust
             for (size_t i = 0; i < embedding_size; i++) {
                 embedding[i] = dist(generator);
             }
 
-            // Center and scale to controlled variance for stability
-            float mean = std::accumulate(embedding, embedding + embedding_size, 0.0f) / embedding_size;
-            for (size_t i = 0; i < embedding_size; i++) embedding[i] -= mean;
-
-            float variance = 0.0f;
-            for (size_t i = 0; i < embedding_size; i++) variance += embedding[i] * embedding[i];
-            float std_dev = std::sqrt(variance / embedding_size);
-            if (std_dev > 1e-8f) {
-                for (size_t i = 0; i < embedding_size; i++) embedding[i] = embedding[i] / std_dev * 1e-4f;
-            }
+            // CRITICAL FIX: Removed scaling to std=1e-4f to match Rust exactly
+            // Rust PACMAP does not apply variance scaling after initialization
+            // Let Adam optimizer handle the natural scale of the embedding
 
             // PACMAP Step 2: Three-phase Optimization
             if (progress_callback) {

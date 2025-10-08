@@ -128,7 +128,8 @@ namespace fit_utils {
         int ef_search,
         int use_quantization,
         int random_seed,
-        int autoHNSWParam
+        int autoHNSWParam,
+        float initialization_std_dev
     );
 
     // Helper functions for uwot_fit refactoring

@@ -11,8 +11,8 @@ void optimize_embedding(PacMapModel* model, float* embedding_out, pacmap_progres
 
     std::vector<float> embedding(model->n_samples * model->n_components);
 
-    // Initialize embedding with proper random normal distribution (CRITICAL FIX: Remove duplicate initialization)
-    initialize_random_embedding(embedding, model->n_samples, model->n_components, model->rng);
+    // Initialize embedding with proper random normal distribution using model's initialization_std_dev parameter
+    initialize_random_embedding(embedding, model->n_samples, model->n_components, model->rng, model->initialization_std_dev);
 
     int total_iters = model->phase1_iters + model->phase2_iters + model->phase3_iters;
 
@@ -33,7 +33,7 @@ void optimize_embedding(PacMapModel* model, float* embedding_out, pacmap_progres
     model->adam_v.assign(embedding.size(), 0.0f);
 
     // CRITICAL DEBUG: Print exact hyperparameters and KNN mode
-    float std_dev = 10.0f / std::sqrt(static_cast<float>(model->n_components));
+    float std_dev = model->initialization_std_dev;
     printf("\n=== PACMAP OPTIMIZATION START (ADAM v2.0.0 - CLIPPING THRESHOLD ADJUST) ===\n");
     printf("🔥 CONFIRMED: Using ADAM OPTIMIZER with bias correction!\n");
     printf("Hyperparameters:\n");
@@ -54,7 +54,7 @@ void optimize_embedding(PacMapModel* model, float* embedding_out, pacmap_progres
            model->phase1_iters, model->phase2_iters, model->phase3_iters, total_iters);
     printf("  Data Points: %d, Dimensions: %d -> %d\n",
            model->n_samples, model->n_features, model->n_components);
-    printf("  Initialization Std Dev: %.6f (10.0f / sqrt(%d))\n", std_dev, model->n_components);
+    printf("  Initialization Std Dev: %.6f (model parameter)\n", std_dev);
     printf("  Triplets Generated: %zu\n", model->triplets.size());
     printf("=====================================\n\n");
 
@@ -166,15 +166,11 @@ void optimize_embedding(PacMapModel* model, float* embedding_out, pacmap_progres
             // Compute Adam update with bias correction
             float adam_update = adam_lr * model->adam_m[i] / (std::sqrt(model->adam_v[i]) + model->adam_eps);
 
-            // Apply gradient clipping AFTER Adam scaling (correct order)
-            // IMPROVED: More permissive clipping threshold for better manifold unfolding
-            float clipped_update = adam_update;
-            if (std::abs(adam_update) > 5.0f) {  // Increased threshold for better convergence
-                clipped_update = 5.0f * (adam_update > 0 ? 1.0f : -1.0f);
-            }
+            // CRITICAL FIX: Removed gradient clipping to match Rust implementation exactly
+            // Rust PACMAP does not apply gradient clipping - let Adam optimizer handle scale naturally
 
             // Update parameters
-            embedding[i] -= clipped_update;
+            embedding[i] -= adam_update;
         }
 
         // Monitor progress and compute loss - CRITICAL DEBUG: More frequent logging
@@ -221,10 +217,10 @@ void optimize_embedding(PacMapModel* model, float* embedding_out, pacmap_progres
     callback("Optimization Complete", total_iters, total_iters, 100.0f, nullptr);
 }
 
-void initialize_random_embedding(std::vector<float>& embedding, int n_samples, int n_components, std::mt19937& rng) {
-    // FIXED: Proper variance for random embedding initialization (error analysis #3)
-    // Use variance of 10.0f / sqrt(n_components) for better initial spread
-    float std_dev = 10.0f / std::sqrt(static_cast<float>(n_components));
+void initialize_random_embedding(std::vector<float>& embedding, int n_samples, int n_components, std::mt19937& rng, float std_dev) {
+    // CRITICAL FIX: Use provided initialization_std_dev parameter instead of hardcoded large value
+    // The previous value of 10.0f / sqrt(n_components) ≈ 5.77 was too large and caused fragmentation
+    // Now using the parameter provided through the API (default 0.1f) for proper initialization
     std::normal_distribution<float> normal_dist(0.0f, std_dev);
 
     for (auto& val : embedding) {

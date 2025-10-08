@@ -30,7 +30,24 @@ namespace PacMapDemo
 
                 // Create PACMAP and embed - Force Exact KNN to test
                 Console.WriteLine("Creating embedding with Exact KNN (no HNSW)...");
-                var pacmap = new PacMapModel();
+                Console.WriteLine("🔧 TESTING ORIGINAL HIGH RATIOS WITH GENTLE LEARNING:");
+                Console.WriteLine("   - RESTORED MN_ratio (0.5) - original neighbor clustering force");
+                Console.WriteLine("   - RESTORED FP_ratio (2.0) - original far point separation force");
+                Console.WriteLine("   - VERY LOW learning_rate (0.01) - very gentle optimization");
+                Console.WriteLine("   - HIGH initialization_std_dev (2.0) - better initial spread");
+                Console.WriteLine();
+
+                // Try better hyperparameters for mammoth structure
+                var pacmap = new PacMapModel(
+                    mnRatio: 0.5f,     // RESTORED - original neighbor clustering force
+                    fpRatio: 2.0f,     // RESTORED - original far point separation force
+                    learningRate: 0.01f, // VERY LOW learning rate as requested
+                    adamBeta1: 0.9f,
+                    adamBeta2: 0.999f,
+                    initializationStdDev: 2.0f,  // Keep higher for better spread
+                    numIters: (300, 300, 900)     // Keep moderate iterations
+                );
+                DisplayModelHyperparameters(pacmap, "PACMAP Model (Optimized)");
 
                 // Convert double[,] to float[,]
                 int n = data.GetLength(0);
@@ -42,20 +59,20 @@ namespace PacMapDemo
 
                 var stopwatch = Stopwatch.StartNew();
 
-                Console.WriteLine("Testing with HIGH iterations to match Rust quality:");
+                Console.WriteLine("Testing with BALANCED hyperparameters to fix smushing:");
                 Console.WriteLine("  Default: (100, 100, 250) = 450 total iterations");
-                Console.WriteLine("  Previous: (200, 200, 500) = 900 total iterations");
-                Console.WriteLine("  Testing:  (300, 300, 900) = 1500 total iterations (Rust-like)");
+                Console.WriteLine("  Previous: (500, 500, 1500) = 2500 total iterations (caused smushing)");
+                Console.WriteLine("  Testing:  (300, 300, 900) = 1500 total iterations (balanced)");
 
                 var embedding = pacmap.Fit(
                     data: floatData,
                     embeddingDimension: 2,
                     nNeighbors: 10,
                     metric: DistanceMetric.Euclidean,
-                    learningRate: 1.0f,  // Updated to use Adam-appropriate learning rate
-                    mnRatio: 0.5f,
-                    fpRatio: 2.0f,
-                    numIters: (100, 100, 250),  // Match Rust defaults exactly
+                    learningRate: 0.01f,  // VERY LOW learning rate as requested
+                    mnRatio: 0.5f,     // RESTORED original high value
+                    fpRatio: 2.0f,     // RESTORED original high value
+                    numIters: (300, 300, 900),  // Keep moderate iterations
                     forceExactKnn: true,   // Test exact k-NN with Python-style sampling
                     randomSeed: 42  // Switch back to original seed
                 );
@@ -179,6 +196,7 @@ namespace PacMapDemo
 
             // Test PACMAP on simple data
             using var testModel = new PacMapModel();
+            DisplayModelHyperparameters(testModel, "Test Model");
             var testEmbedding = testModel.Fit(
                 data: floatTestData,
                 embeddingDimension: 2,
@@ -262,6 +280,7 @@ namespace PacMapDemo
 
             // Create the best model for persistence testing
             using var model = new PacMapModel();
+            DisplayModelHyperparameters(model, "Final Model");
             embedding = model.Fit(
                 data: floatData,
                 embeddingDimension: 2,
@@ -298,6 +317,7 @@ namespace PacMapDemo
             foreach (var metric in metrics)
             {
                 using var metricModel = new PacMapModel();
+                DisplayModelHyperparameters(metricModel, $"Metric Test Model ({metric})");
                 var metricStopwatch = Stopwatch.StartNew();
 
                 var metricEmbedding = metricModel.Fit(
@@ -343,13 +363,15 @@ namespace PacMapDemo
                     ["metric"] = bestParams.metric.ToString().ToLower(),
                     ["random_seed"] = 42,
                     ["embedding_quality"] = bestQuality.ToString("F4"),
+                    ["init_std_dev"] = model.InitializationStdDev.ToString("F3"),
+                    ["phase_iters"] = $"({model.NumIters.phase1}, {model.NumIters.phase2}, {model.NumIters.phase3})",
                     ["data_points"] = embedding.GetLength(0),
                     ["data_range_x"] = $"{data[0, 0]:F1} to {data[data.GetLength(0)-1, 0]:F1}",
                     ["data_range_y"] = $"{data[0, 1]:F1} to {data[data.GetLength(0)-1, 1]:F1}",
                     ["data_range_z"] = $"{data[0, 2]:F1} to {data[data.GetLength(0)-1, 2]:F1}"
                 };
 
-                string title = $"Mammoth PACMAP 2D Embedding (n={bestParams.nNeighbors}, {bestParams.metric})";
+                string title = $"Mammoth PACMAP 2D Embedding\nn={bestParams.nNeighbors}, {bestParams.metric}, init_std={paramInfo["init_std_dev"]}, phases={paramInfo["phase_iters"]}";
                 Visualizer.PlotMammothPacMAP(embedding, data, title, plotPath, paramInfo);
                 Console.WriteLine($"      ✅ PACMAP visualization saved: {plotPath}");
                 Console.WriteLine($"      📝 Parameters: n_neighbors={bestParams.nNeighbors}, metric={bestParams.metric}, quality={bestQuality:F4}");
@@ -579,6 +601,8 @@ namespace PacMapDemo
                     ["mn_ratio"] = modelInfo.MN_ratio.ToString("F2"),
                     ["fp_ratio"] = modelInfo.FP_ratio.ToString("F2"),
                     ["learning_rate"] = pacmap.LearningRate.ToString("F3"),
+                    ["init_std_dev"] = pacmap.InitializationStdDev.ToString("F3"),
+                    ["phase_iters"] = $"({pacmap.NumIters.phase1}, {pacmap.NumIters.phase2}, {pacmap.NumIters.phase3})",
                     ["data_points"] = modelInfo.TrainingSamples,
                     ["original_dimensions"] = modelInfo.InputDimension,
                     ["hnsw_m"] = modelInfo.HnswM,
@@ -590,7 +614,7 @@ namespace PacMapDemo
                 paramInfo["execution_time"] = $"{executionTime:F2}s";
 
                 // Create title with hyperparameters
-                var line1 = $"PACMAP v{paramInfo["PACMAP Version"]} | n_neighbors={paramInfo["n_neighbors"]} | {paramInfo["distance_metric"]} | mn_ratio={paramInfo["mn_ratio"]} | fp_ratio={paramInfo["fp_ratio"]} | lr={paramInfo["learning_rate"]} | data_points={paramInfo["data_points"]}";
+                var line1 = $"PACMAP v{paramInfo["PACMAP Version"]} | n_neighbors={paramInfo["n_neighbors"]} | {paramInfo["distance_metric"]} | mn_ratio={paramInfo["mn_ratio"]} | fp_ratio={paramInfo["fp_ratio"]} | lr={paramInfo["learning_rate"]} | init_std={paramInfo["init_std_dev"]} | phases={paramInfo["phase_iters"]}";
                 var line2 = $"KNN: {paramInfo["KNN_Mode"]} | HNSW: M={paramInfo["hnsw_m"]}, ef={paramInfo["hnsw_ef_search"]} | Time: {paramInfo["execution_time"]}";
                 var titleWithParams = $"Mammoth PACMAP 2D Embedding\n{line1}\n{line2}";
 
@@ -605,6 +629,22 @@ namespace PacMapDemo
             {
                 Console.WriteLine($"   ❌ Visualization creation failed: {ex.Message}");
             }
+        }
+
+        /// <summary>
+        /// Displays model hyperparameters in a formatted way
+        /// </summary>
+        static void DisplayModelHyperparameters(PacMapModel model, string context = "Model")
+        {
+            Console.WriteLine($"   📋 {context} Hyperparameters:");
+            Console.WriteLine($"      MN_ratio: {model.MN_ratio}");
+            Console.WriteLine($"      FP_ratio: {model.FP_ratio}");
+            Console.WriteLine($"      Learning Rate: {model.LearningRate}");
+            Console.WriteLine($"      Adam Beta1: {model.AdamBeta1}");
+            Console.WriteLine($"      Adam Beta2: {model.AdamBeta2}");
+            Console.WriteLine($"      Initialization Std Dev: {model.InitializationStdDev}");
+            Console.WriteLine($"      Phase Iterations: ({model.NumIters.phase1}, {model.NumIters.phase2}, {model.NumIters.phase3})");
+            Console.WriteLine();
         }
     }
 }

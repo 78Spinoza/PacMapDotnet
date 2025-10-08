@@ -8,7 +8,7 @@
 extern void optimize_embedding(PacMapModel* model, float* embedding_out, pacmap_progress_callback_v2 callback);
 
 // Initialization utilities
-extern void initialize_random_embedding(std::vector<float>& embedding, int n_samples, int n_components, std::mt19937& rng);
+extern void initialize_random_embedding(std::vector<float>& embedding, int n_samples, int n_components, std::mt19937& rng, float std_dev);
 
 // REMOVED: run_optimization_phase function declaration - unused dead code
 

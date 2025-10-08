@@ -94,6 +94,20 @@ void compute_gradients(const std::vector<float>& embedding, const std::vector<Tr
             gradients[idx_n + d] -= gradient_component;
         }
     }
+
+    // CRITICAL FIX: Normalize gradients by triplet count to match Rust implementation
+    // This prevents gradient explosion in large datasets
+    if (!triplets.empty()) {
+        float normalization_factor = 1.0f / static_cast<float>(triplets.size());
+        #pragma omp parallel for
+        for (int i = 0; i < static_cast<int>(gradients.size()); ++i) {
+            gradients[i] *= normalization_factor;
+        }
+
+        // Debug output for gradient normalization
+        printf("[GRADIENT DEBUG] Normalized %zu gradients by factor %.6f\n",
+               gradients.size(), normalization_factor);
+    }
 }
 
 float compute_pacmap_loss(const std::vector<float>& embedding, const std::vector<Triplet>& triplets,
