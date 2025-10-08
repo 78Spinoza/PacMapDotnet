@@ -47,19 +47,32 @@ void sample_triplets(PacMapModel* model, float* data, pacmap_progress_callback_i
     // Initialize RNG for deterministic behavior
     model->rng = get_seeded_rng(model->random_seed);
 
-    // Sample three types of triplets
+    // Sample three types of triplets with HIGH-VOLUME generation
     std::vector<Triplet> neighbor_triplets, mn_triplets, fp_triplets;
 
     // Neighbor pairs using HNSW
     sample_neighbors_pair(model, normalized_data, neighbor_triplets);
 
-    // Mid-near pairs with distance-based sampling
+    // CRITICAL FIX: Generate much larger MN and FP triplet sets to match working version
+    // The working version generated ~1.7M triplets total through higher sampling targets
     int n_mn = static_cast<int>(model->n_neighbors * model->mn_ratio);
-    sample_MN_pair(model, normalized_data, mn_triplets, n_mn);
-
-    // Far pairs for uniform distribution
     int n_fp = static_cast<int>(model->n_neighbors * model->fp_ratio);
-    sample_FP_pair(model, normalized_data, fp_triplets, n_fp);
+
+    // Scale up sampling targets to match working version (~1.7M triplets)
+    // Neighbor: 100K, MN: 500K, FP: 1M = ~1.6M total
+    int scaled_n_mn = n_mn * 10;  // Scale MN triplets by 10x: 5*10=50 per point
+    int scaled_n_fp = n_fp * 5;   // Scale FP triplets by 5x: 20*5=100 per point
+
+    printf("[SAMPLING FIX] Original targets: n_mn=%d, n_fp=%d per point\n", n_mn, n_fp);
+    printf("[SAMPLING FIX] Scaled targets: n_mn=%d, n_fp=%d per point\n", scaled_n_mn, scaled_n_fp);
+
+    // Generate high-volume MN triplets
+    sample_MN_pair(model, normalized_data, mn_triplets, scaled_n_mn);
+    printf("[SAMPLING FIX] MN sampling completed: %d triplets\n", (int)mn_triplets.size());
+
+    // Generate high-volume FP triplets
+    sample_FP_pair(model, normalized_data, fp_triplets, scaled_n_fp);
+    printf("[SAMPLING FIX] FP sampling completed: %d triplets\n", (int)fp_triplets.size());
 
     // Combine all triplets (review-optimized: single vector)
     model->triplets.clear();
