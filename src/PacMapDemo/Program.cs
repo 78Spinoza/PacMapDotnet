@@ -34,7 +34,7 @@ namespace PacMapDemo
                 Console.WriteLine("   - RESTORED MN_ratio (0.5) - original neighbor clustering force");
                 Console.WriteLine("   - RESTORED FP_ratio (2.0) - original far point separation force");
                 Console.WriteLine("   - HIGH learning_rate (1.0) - strong optimization");
-                Console.WriteLine("   - VERY SMALL initialization_std_dev (0.001) - tight initial clustering");
+                Console.WriteLine("   - PROPER initialization_std_dev (0.1) - matches Rust implementation for good manifold formation");
                 Console.WriteLine();
 
                 // Try better hyperparameters for mammoth structure
@@ -44,7 +44,7 @@ namespace PacMapDemo
                     learningRate: 1.0f,  // RESTORED to original high learning rate
                     adamBeta1: 0.9f,
                     adamBeta2: 0.999f,
-                    initializationStdDev: 0.001f,  // VERY SMALL - tight initial clustering
+                    initializationStdDev: 0.1f,   // PROPER - matches Rust implementation for good manifold formation
                     numIters: (300, 300, 900)     // Keep moderate iterations
                 );
                 DisplayModelHyperparameters(pacmap, "PACMAP Model (Optimized)");
