@@ -190,5 +190,6 @@ secrets/
 *.crt
 *.pfx
 
-# Claude settings
+# Claude settings and documentation
 .claude/
+docs/CLAUDE.md
