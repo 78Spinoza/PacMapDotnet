@@ -8,13 +8,11 @@
 #include <chrono>
 
 void optimize_embedding(PacMapModel* model, float* embedding_out, pacmap_progress_callback_internal callback) {
+
     std::vector<float> embedding(model->n_samples * model->n_components);
 
-    // FIXED: Use larger initialization for better spread (1e-2 instead of 1e-4)
-    std::normal_distribution<float> dist(0.0f, 1e-2f);
-    for (int i = 0; i < model->n_samples * model->n_components; ++i) {
-        embedding[i] = dist(model->rng);
-    }
+    // Initialize embedding with proper random normal distribution (CRITICAL FIX: Remove duplicate initialization)
+    initialize_random_embedding(embedding, model->n_samples, model->n_components, model->rng);
 
     int total_iters = model->phase1_iters + model->phase2_iters + model->phase3_iters;
 
@@ -23,13 +21,25 @@ void optimize_embedding(PacMapModel* model, float* embedding_out, pacmap_progres
         return;
     }
 
+    // Initialize Adam optimizer state
     std::vector<float> gradients(embedding.size());
+
+    // Loss history for convergence monitoring
     std::vector<float> loss_history;
+    loss_history.reserve(total_iters);
+
+    // Initialize Adam optimizer state in model
+    model->adam_m.assign(embedding.size(), 0.0f);
+    model->adam_v.assign(embedding.size(), 0.0f);
 
     // CRITICAL DEBUG: Print exact hyperparameters and KNN mode
-    printf("\n=== PACMAP OPTIMIZATION START (SGD v1.4.0) ===\n");
+    float std_dev = 10.0f / std::sqrt(static_cast<float>(model->n_components));
+    printf("\n=== PACMAP OPTIMIZATION START (ADAM v2.0.0 - CLIPPING THRESHOLD ADJUST) ===\n");
+    printf("🔥 CONFIRMED: Using ADAM OPTIMIZER with bias correction!\n");
     printf("Hyperparameters:\n");
     printf("  Learning Rate: %.6f\n", model->learning_rate);
+    printf("  Adam Beta1: %.3f, Beta2: %.3f, Epsilon: %.2e\n",
+           model->adam_beta1, model->adam_beta2, model->adam_eps);
     printf("  N Neighbors: %d\n", model->n_neighbors);
     printf("  MN Ratio: %.2f\n", model->mn_ratio);
     printf("  FP Ratio: %.2f\n", model->fp_ratio);
@@ -44,53 +54,159 @@ void optimize_embedding(PacMapModel* model, float* embedding_out, pacmap_progres
            model->phase1_iters, model->phase2_iters, model->phase3_iters, total_iters);
     printf("  Data Points: %d, Dimensions: %d -> %d\n",
            model->n_samples, model->n_features, model->n_components);
+    printf("  Initialization Std Dev: %.6f (10.0f / sqrt(%d))\n", std_dev, model->n_components);
     printf("  Triplets Generated: %zu\n", model->triplets.size());
     printf("=====================================\n\n");
 
     callback("Starting Optimization", 0, 0, 0.0f, nullptr);
 
-    // Calculate phase boundaries for get_weights function
-    int phase1_end = model->phase1_iters;
-    int phase2_end = model->phase1_iters + model->phase2_iters;
+    auto loop_start = std::chrono::high_resolution_clock::now();
 
+    // Main optimization loop with three phases
     for (int iter = 0; iter < total_iters; ++iter) {
-        // FIXED: Use actual phase boundaries instead of hardcoded values (errors6.txt)
-        auto [w_n, w_mn, w_f] = get_weights(iter, phase1_end, phase2_end);
+        // Get three-phase weights for current iteration
+        auto [w_n, w_mn, w_f] = get_weights(iter, model->phase1_iters, model->phase1_iters + model->phase2_iters);
 
-        compute_gradients(embedding, model->triplets, gradients, w_n, w_mn, w_f, model->n_components);
+        // Compute gradients for all triplets
+        compute_gradients(embedding, model->triplets, gradients,
+                         w_n, w_mn, w_f, model->n_components);
 
-        // Rust-style SGD with clipping (errors6.txt implementation)
-        float grad_norm_squared = 0.0f;
-        #pragma omp parallel for reduction(+:grad_norm_squared)
-        for (int i = 0; i < static_cast<int>(gradients.size()); ++i) {
-            grad_norm_squared += gradients[i] * gradients[i];
-        }
-        float grad_norm = std::sqrt(std::max(grad_norm_squared, 1e-8f));
+        // CRITICAL FIX: Adam optimizer with proper gradient handling (FIXED GRADIENT CLIPPING ORDER)
+        // Adam optimizer with bias correction (matching Rust implementation)
+        float adam_lr = model->learning_rate *
+                       std::sqrt(1.0f - std::pow(model->adam_beta2, iter + 1)) /
+                       (1.0f - std::pow(model->adam_beta1, iter + 1));
 
-        float scale = 1.0f;
-        if (grad_norm > 4.0f) {
-            scale = 4.0f / grad_norm;
+        // ADAM DEBUG: Detailed tracking every 50 iterations
+        if (iter % 50 == 0 || iter < 10) {
+            printf("[ADAM DEBUG] Iter %d: lr=%.6f, beta1=%.3f, beta2=%.3f, eps=%.2e\n",
+                   iter, adam_lr, model->adam_beta1, model->adam_beta2, model->adam_eps);
+
+            // Sample a few gradient statistics
+            float grad_min = gradients[0], grad_max = gradients[0], grad_sum = 0.0f;
+            int grad_nan = 0, grad_inf = 0;
+            for (int i = 0; i < static_cast<int>(gradients.size()); ++i) {
+                float g = gradients[i];
+                grad_min = std::min(grad_min, g);
+                grad_max = std::max(grad_max, g);
+                grad_sum += g;
+                if (std::isnan(g)) grad_nan++;
+                if (std::isinf(g)) grad_inf++;
+            }
+            float grad_mean = grad_sum / gradients.size();
+
+            printf("[ADAM DEBUG] Gradients: min=%.6f, max=%.6f, mean=%.6f, nan=%d, inf=%d\n",
+                   grad_min, grad_max, grad_mean, grad_nan, grad_inf);
+
+            // CRITICAL ADAM STATE VERIFICATION
+            printf("[ADAM DEBUG] Adam state verification:\n");
+            printf("  - adam_m.size() = %zu (should equal embedding.size() = %zu)\n",
+                   model->adam_m.size(), embedding.size());
+            printf("  - adam_v.size() = %zu (should equal embedding.size() = %zu)\n",
+                   model->adam_v.size(), embedding.size());
+
+            // Sample Adam state statistics
+            if (!model->adam_m.empty() && !model->adam_v.empty()) {
+                float m_min = model->adam_m[0], m_max = model->adam_m[0], m_sum = 0.0f;
+                float v_min = model->adam_v[0], v_max = model->adam_v[0], v_sum = 0.0f;
+                int m_zero = 0, v_zero = 0, m_nan = 0, v_nan = 0;
+
+                for (int i = 0; i < static_cast<int>(model->adam_m.size()); ++i) {
+                    float m_val = model->adam_m[i];
+                    float v_val = model->adam_v[i];
+
+                    m_min = std::min(m_min, m_val);
+                    m_max = std::max(m_max, m_val);
+                    m_sum += m_val;
+                    if (m_val == 0.0f) m_zero++;
+                    if (std::isnan(m_val)) m_nan++;
+
+                    v_min = std::min(v_min, v_val);
+                    v_max = std::max(v_max, v_val);
+                    v_sum += v_val;
+                    if (v_val == 0.0f) v_zero++;
+                    if (std::isnan(v_val)) v_nan++;
+                }
+
+                printf("[ADAM DEBUG] Adam m: min=%.6f, max=%.6f, mean=%.6f, zeros=%d, nans=%d\n",
+                       m_min, m_max, m_sum / model->adam_m.size(), m_zero, m_nan);
+                printf("[ADAM DEBUG] Adam v: min=%.6f, max=%.6f, mean=%.6f, zeros=%d, nans=%d\n",
+                       v_min, v_max, v_sum / model->adam_v.size(), v_zero, v_nan);
+
+                // Show first few Adam values for detailed inspection
+                printf("[ADAM DEBUG] First 5 Adam m/v pairs and updates:\n");
+                for (int i = 0; i < std::min(5, (int)model->adam_m.size()); ++i) {
+                    float grad = gradients[i];
+                    float m_old = model->adam_m[i];
+                    float v_old = model->adam_v[i];
+
+                    // Calculate what the update would be
+                    float m_new = model->adam_beta1 * m_old + (1.0f - model->adam_beta1) * grad;
+                    float v_new = model->adam_beta2 * v_old + (1.0f - model->adam_beta2) * grad * grad;
+                    float update = adam_lr * m_new / (std::sqrt(v_new) + model->adam_eps);
+
+                    printf("  [%d] grad=%.4f, m=%.4f->%.4f, v=%.4f->%.4f, update=%.4f\n",
+                           i, grad, m_old, m_new, v_old, v_new, update);
+                }
+            } else {
+                printf("[ADAM DEBUG] ERROR: Adam state arrays are empty!\n");
+            }
         }
 
         #pragma omp parallel for
         for (int i = 0; i < static_cast<int>(embedding.size()); ++i) {
-            embedding[i] -= model->learning_rate * scale * gradients[i];
+            // Update biased first moment estimate with RAW gradients (critical!)
+            model->adam_m[i] = model->adam_beta1 * model->adam_m[i] +
+                              (1.0f - model->adam_beta1) * gradients[i];
+
+            // Update biased second moment estimate with RAW gradients (critical!)
+            model->adam_v[i] = model->adam_beta2 * model->adam_v[i] +
+                              (1.0f - model->adam_beta2) * gradients[i] * gradients[i];
+
+            // Compute Adam update with bias correction
+            float adam_update = adam_lr * model->adam_m[i] / (std::sqrt(model->adam_v[i]) + model->adam_eps);
+
+            // Apply gradient clipping AFTER Adam scaling (correct order)
+            // IMPROVED: More permissive clipping threshold for better manifold unfolding
+            float clipped_update = adam_update;
+            if (std::abs(adam_update) > 5.0f) {  // Increased threshold for better convergence
+                clipped_update = 5.0f * (adam_update > 0 ? 1.0f : -1.0f);
+            }
+
+            // Update parameters
+            embedding[i] -= clipped_update;
         }
 
+        // Monitor progress and compute loss - CRITICAL DEBUG: More frequent logging
         if (iter % 10 == 0 || iter == total_iters - 1) {
-            float loss = compute_pacmap_loss(embedding, model->triplets, w_n, w_mn, w_f, model->n_components);
+            float loss = compute_pacmap_loss(embedding, model->triplets,
+                                           w_n, w_mn, w_f, model->n_components);
             loss_history.push_back(loss);
 
-            float min_emb = *std::min_element(embedding.begin(), embedding.end());
-            float max_emb = *std::max_element(embedding.begin(), embedding.end());
-            printf("[DEBUG] Iter %d: Loss=%.6f, Embedding range=[%.6f, %.6f]\n", iter, loss, min_emb, max_emb);
-
             std::string phase = get_current_phase(iter, model->phase1_iters, model->phase2_iters);
+
+            // CRITICAL DEBUG: Check embedding spread
+            float min_emb = embedding[0], max_emb = embedding[0];
+            for (float val : embedding) {
+                min_emb = std::min(min_emb, val);
+                max_emb = std::max(max_emb, val);
+            }
+
             monitor_optimization_progress(iter, total_iters, loss, phase, callback);
 
-            // DISABLED early stopping - PACMAP needs full optimization to converge
-            // The loss can fluctuate normally during optimization phases
+            // Early termination check
+            if (iter > 200 && should_terminate_early(loss_history)) {
+                callback("Early Termination - Converged", iter, total_iters,
+                        static_cast<float>(iter) / total_iters * 100.0f,
+                        "Convergence detected");
+                break;
+            }
         }
+    }
+
+    auto loop_end = std::chrono::high_resolution_clock::now();
+    auto loop_duration = std::chrono::duration_cast<std::chrono::milliseconds>(loop_end - loop_start);
+    if (!loss_history.empty()) {
     }
 
     // Compute final safety statistics
@@ -116,38 +232,9 @@ void initialize_random_embedding(std::vector<float>& embedding, int n_samples, i
     }
 }
 
-void initialize_adagrad_optimization(PacMapModel* model, std::vector<float>& m, std::vector<float>& v) {
-    initialize_adagrad_state(m, v, model->n_samples * model->n_components);
-}
 
-void run_optimization_phase(PacMapModel* model, std::vector<float>& embedding,
-                          std::vector<float>& m, std::vector<float>& v,
-                          int start_iter, int end_iter, const std::string& phase_name,
-                          pacmap_progress_callback_internal callback) {
-
-    for (int iter = start_iter; iter < end_iter; ++iter) {
-        int phase1_end = model->phase1_iters;
-        int phase2_end = model->phase1_iters + model->phase2_iters;
-        auto [w_n, w_mn, w_f] = get_weights(iter, phase1_end, phase2_end);
-
-        std::vector<float> gradients(embedding.size());
-        compute_gradients(embedding, model->triplets, gradients,
-                         w_n, w_mn, w_f, model->n_components);
-
-        adagrad_update(embedding, gradients, m, v, iter, model->learning_rate);
-
-        if (iter % 100 == 0) {
-            float loss = compute_pacmap_loss(embedding, model->triplets,
-                                           w_n, w_mn, w_f, model->n_components);
-
-            std::string message = phase_name + " - Loss: " + std::to_string(loss);
-            int total_iters = model->phase1_iters + model->phase2_iters + model->phase3_iters;
-            callback(phase_name.c_str(), iter, total_iters,
-                    static_cast<float>(iter - start_iter) / (end_iter - start_iter) * 100.0f,
-                    message.c_str());
-        }
-    }
-}
+// REMOVED: run_optimization_phase function - unused dead code that took unused Adam state parameters
+// REMOVED: Old AdaGrad optimization functions - now using Adam optimizer in main optimize_embedding function
 
 std::vector<OptimizationPhase> get_optimization_phases(int phase1_iters, int phase2_iters, int phase3_iters) {
     std::vector<OptimizationPhase> phases;
@@ -309,9 +396,7 @@ OptimizationDiagnostics run_optimization_with_diagnostics(PacMapModel* model,
     auto start_time = std::chrono::high_resolution_clock::now();
 
     // Store initial loss
-    int phase1_end = model->phase1_iters;
-    int phase2_end = model->phase1_iters + model->phase2_iters;
-    auto [w_n, w_mn, w_f] = get_weights(0, phase1_end, phase2_end);
+    auto [w_n, w_mn, w_f] = get_weights(0, model->phase1_iters, model->phase1_iters + model->phase2_iters);
     diagnostics.initial_loss = compute_pacmap_loss(embedding, model->triplets,
                                                   w_n, w_mn, w_f, model->n_components);
 

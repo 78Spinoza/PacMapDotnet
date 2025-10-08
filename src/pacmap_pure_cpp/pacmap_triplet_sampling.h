@@ -15,7 +15,7 @@ extern void sample_FP_pair(PacMapModel* model, const std::vector<float>& normali
 
 // Distance-based sampling helpers
 extern void distance_based_sampling(PacMapModel* model, const std::vector<float>& data,
-                                   int target_pairs, float min_dist, float max_dist,
+                                   int oversample_factor, int target_pairs, float min_dist, float max_dist,
                                    std::vector<Triplet>& triplets, TripletType type);
 extern std::vector<float> compute_distance_percentiles(const std::vector<float>& data, int n_samples, int n_features, PacMapMetric metric);
 

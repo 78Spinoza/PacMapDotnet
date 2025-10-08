@@ -176,4 +176,95 @@ namespace distance_metrics {
         }
     }
 
+    // Find k nearest neighbors from a query point to all dataset points (exact search)
+    void find_knn_exact(const float* query_point, const float* dataset, int n_obs, int n_dim,
+                       PacMapMetric metric, int k_neighbors, std::vector<std::pair<float, int>>& neighbors_out,
+                       int query_index) {
+
+        neighbors_out.clear();
+        neighbors_out.reserve(k_neighbors);
+
+        // If query_index is provided, we need to skip the self-match
+        bool skip_self = (query_index >= 0);
+
+        // Use partial_sort to efficiently find k smallest distances
+        std::vector<std::pair<float, int>> all_distances;
+        all_distances.reserve(n_obs);
+
+        // Compute distances to all points
+        for (int i = 0; i < n_obs; ++i) {
+            // Skip self-match if query_index is provided
+            if (skip_self && i == query_index) {
+                continue;
+            }
+
+            float dist = compute_distance(query_point, dataset + i * n_dim, n_dim, metric);
+            all_distances.emplace_back(dist, i);
+        }
+
+        // Find k smallest distances using partial_sort for efficiency
+        int k_actual = std::min(k_neighbors, (int)all_distances.size());
+        if (k_actual > 0) {
+            std::partial_sort(all_distances.begin(), all_distances.begin() + k_actual, all_distances.end());
+
+            // Copy k smallest to output
+            neighbors_out.assign(all_distances.begin(), all_distances.begin() + k_actual);
+        }
+    }
+
+    // Compare two neighbor lists and calculate recall (intersection / union)
+    float calculate_recall(const std::vector<std::pair<float, int>>& exact_neighbors,
+                          const int* hnsw_neighbor_indices, int k_neighbors) {
+
+        if (exact_neighbors.empty() || k_neighbors == 0) {
+            return 0.0f;
+        }
+
+        int intersection = 0;
+        std::unordered_set<int> exact_set;
+
+        // Build set of exact neighbor indices
+        for (const auto& pair : exact_neighbors) {
+            exact_set.insert(pair.second);
+        }
+
+        // Count intersection with HNSW neighbors
+        for (int i = 0; i < k_neighbors; ++i) {
+            if (hnsw_neighbor_indices[i] >= 0 &&
+                exact_set.find(hnsw_neighbor_indices[i]) != exact_set.end()) {
+                intersection++;
+            }
+        }
+
+        // Calculate recall as intersection / min(k_neighbors, exact_neighbors.size())
+        int min_size = std::min(k_neighbors, (int)exact_neighbors.size());
+        return min_size > 0 ? (float)intersection / min_size : 0.0f;
+    }
+
+    // Build distance matrix with progress reporting (all-to-all distances)
+    void build_distance_matrix(const float* data, int n_obs, int n_dim, PacMapMetric metric,
+                              float* distance_matrix, pacmap_progress_callback_v2 progress_callback,
+                              int current_obs, int total_obs) {
+
+        int total_pairs = n_obs * (n_obs - 1) / 2;
+        int pairs_processed = 0;
+
+        // Fill upper triangle of distance matrix
+        for (int i = 0; i < n_obs; ++i) {
+            for (int j = i + 1; j < n_obs; ++j) {
+                float dist = compute_distance(data + i * n_dim, data + j * n_dim, n_dim, metric);
+                distance_matrix[i * n_obs + j] = dist;
+                distance_matrix[j * n_obs + i] = dist;  // Symmetric
+
+                pairs_processed++;
+
+                // Report progress if callback provided
+                if (progress_callback && (pairs_processed % 1000 == 0 || pairs_processed == total_pairs)) {
+                    float percent = (float)pairs_processed / total_pairs * 100.0f;
+                    progress_callback("Building Distance Matrix", current_obs + pairs_processed, total_obs, percent, nullptr);
+                }
+            }
+        }
+    }
+
 }

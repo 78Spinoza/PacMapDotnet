@@ -3,6 +3,7 @@
 #include "pacmap_model.h"
 #include <cmath>
 #include <algorithm>
+#include <unordered_set>
 
 // Distance metric implementations for UMAP
 namespace distance_metrics {

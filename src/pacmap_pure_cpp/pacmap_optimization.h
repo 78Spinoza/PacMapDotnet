@@ -4,18 +4,13 @@
 #include "pacmap_gradient.h"
 #include <vector>
 
-// Main optimization function with AdaGrad and three-phase weights
+// Main optimization function with Adam optimizer and three-phase weights
 extern void optimize_embedding(PacMapModel* model, float* embedding_out, pacmap_progress_callback_v2 callback);
 
 // Initialization utilities
 extern void initialize_random_embedding(std::vector<float>& embedding, int n_samples, int n_components, std::mt19937& rng);
-extern void initialize_adagrad_optimization(PacMapModel* model, std::vector<float>& m, std::vector<float>& v);
 
-// Optimization phases
-extern void run_optimization_phase(PacMapModel* model, std::vector<float>& embedding,
-                                  std::vector<float>& m, std::vector<float>& v,
-                                  int start_iter, int end_iter, const std::string& phase_name,
-                                  pacmap_progress_callback_v2 callback);
+// REMOVED: run_optimization_phase function declaration - unused dead code
 
 // Three-phase optimization control
 struct OptimizationPhase {

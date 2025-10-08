@@ -135,12 +135,12 @@ namespace PacMapDemo
 
                 var partColors = new Dictionary<string, OxyColor>
                 {
-                    { "feet", OxyColors.Orange },
-                    { "legs", OxyColors.Blue },
-                    { "body", OxyColors.Green },
-                    { "head", OxyColors.Purple },
-                    { "tusks", OxyColors.Yellow },
-                    { "trunk", OxyColors.Red }
+                    { "feet", OxyColors.DarkOrange },
+                    { "legs", OxyColors.RoyalBlue },
+                    { "body", OxyColors.ForestGreen },
+                    { "head", OxyColors.MediumPurple },
+                    { "tusks", OxyColors.Gold },
+                    { "trunk", OxyColors.Crimson }
                 };
 
                 // Create a composite plot with 3 views (XY, XZ, YZ)
@@ -211,8 +211,8 @@ namespace PacMapDemo
                     Console.WriteLine($"   {char.ToUpper(part.Key[0]) + part.Key.Substring(1)}: {part.Value} points ({percentage:F1}%)");
                 }
 
-                // Export XY view (top view) - Medium size
-                var exporter = new OxyPlot.WindowsForms.PngExporter { Width = 1200, Height = 900, Resolution = 150 };
+                // Export XY view (top view)
+                var exporter = new OxyPlot.WindowsForms.PngExporter { Width = 1600, Height = 1200, Resolution = 300 };
                 string xyPath = outputPath.Replace(".png", "_XY_TopView.png");
                 using (var stream = File.Create(xyPath))
                 {
@@ -252,6 +252,14 @@ namespace PacMapDemo
         /// </summary>
         public static void PlotMammothPacMAP(float[,] embedding, double[,] originalData, string title, string outputPath)
         {
+            PlotMammothPacMAP(embedding, originalData, title, outputPath, null);
+        }
+
+        /// <summary>
+        /// Create PacMAP 2D embedding visualization with anatomical part coloring and parameters
+        /// </summary>
+        public static void PlotMammothPacMAP(float[,] embedding, double[,] originalData, string title, string outputPath, Dictionary<string, object>? paramInfo)
+        {
             try
             {
                 Console.WriteLine($"Creating PacMAP embedding plot: {title}");
@@ -261,12 +269,12 @@ namespace PacMapDemo
 
                 var partColors = new Dictionary<string, OxyColor>
                 {
-                    { "feet", OxyColors.Orange },
-                    { "legs", OxyColors.Blue },
-                    { "body", OxyColors.Green },
-                    { "head", OxyColors.Purple },
-                    { "tusks", OxyColors.Yellow },
-                    { "trunk", OxyColors.Red }
+                    { "feet", OxyColors.DarkOrange },
+                    { "legs", OxyColors.RoyalBlue },
+                    { "body", OxyColors.ForestGreen },
+                    { "head", OxyColors.MediumPurple },
+                    { "tusks", OxyColors.Gold },
+                    { "trunk", OxyColors.Crimson }
                 };
 
                 var plotModel = new PlotModel
@@ -276,9 +284,34 @@ namespace PacMapDemo
                     PlotAreaBorderColor = OxyColors.Black
                 };
 
-                // Add X-Y axes for 2D embedding
-                plotModel.Axes.Add(new LinearAxis { Position = AxisPosition.Bottom, Title = "X Coordinate (PacMAP Dimension 1)" });
-                plotModel.Axes.Add(new LinearAxis { Position = AxisPosition.Left, Title = "Y Coordinate (PacMAP Dimension 2)" });
+                // Add X-Y axes for 2D embedding with symmetric coordinate system
+                plotModel.Axes.Add(new LinearAxis {
+                    Position = AxisPosition.Bottom,
+                    Title = "X Coordinate (PacMAP Dimension 1)",
+                    Minimum = -60,
+                    Maximum = 60,
+                    MajorStep = 20,
+                    MinorStep = 10
+                });
+                plotModel.Axes.Add(new LinearAxis {
+                    Position = AxisPosition.Left,
+                    Title = "Y Coordinate (PacMAP Dimension 2)",
+                    Minimum = -60,
+                    Maximum = 60,
+                    MajorStep = 20,
+                    MinorStep = 10
+                });
+
+                // Add legend with standard configuration
+                plotModel.Legends.Add(new Legend
+                {
+                    LegendTitle = "Mammoth Anatomy",
+                    LegendPlacement = LegendPlacement.Inside,
+                    LegendPosition = LegendPosition.TopRight,
+                    LegendBackground = OxyColors.White,
+                    LegendBorder = OxyColors.Black,
+                    LegendTextColor = OxyColors.Black
+                });
 
                 // Group points by anatomical part
                 var partGroups = new Dictionary<string, (List<double> x, List<double> y)>();
@@ -308,7 +341,7 @@ namespace PacMapDemo
                             MarkerType = MarkerType.Circle,
                             MarkerFill = partColors[part],
                             MarkerStroke = partColors[part],
-                            MarkerSize = 3
+                            MarkerSize = 1  // Smaller points for better visualization
                         };
 
                         for (int i = 0; i < xPoints.Count; i++)
@@ -320,8 +353,8 @@ namespace PacMapDemo
                     }
                 }
 
-                // Export - Medium size
-                var exporter = new OxyPlot.WindowsForms.PngExporter { Width = 1600, Height = 1200, Resolution = 150 };
+                // Export - Smaller size like mammoth_original_3d_YZ_FrontView
+                var exporter = new OxyPlot.WindowsForms.PngExporter { Width = 1600, Height = 1200, Resolution = 300 };
                 using (var stream = File.Create(outputPath))
                 {
                     exporter.Export(plotModel, stream);
@@ -457,87 +490,8 @@ namespace PacMapDemo
             return plotModel;
         }
 
-        /// <summary>
-        /// Plot PACMAP mammoth embedding
-        /// </summary>
-        public static void PlotMammothPacMAP(float[,] embedding, double[,] originalData, string title, string outputPath, Dictionary<string, object> paramInfo)
-        {
-            var plotModel = new PlotModel { Title = title, Background = OxyColors.White };
-
-            // Create scatter series with anatomical parts
-            var parts = AssignMammothParts(originalData);
-            var uniqueParts = parts.Distinct().ToArray();
-
-            foreach (var part in uniqueParts)
-            {
-                var points = new List<ScatterPoint>();
-                var colors = new List<OxyColor>();
-
-                for (int i = 0; i < parts.Length; i++)
-                {
-                    if (parts[i] == part)
-                    {
-                        points.Add(new ScatterPoint(embedding[i, 0], embedding[i, 1]));
-                    }
-                }
-
-                var scatterSeries = new ScatterSeries
-                {
-                    Title = part,
-                    MarkerType = MarkerType.Circle,
-                    MarkerSize = 3,
-                    MarkerFill = GetPartColor(part)
-                };
-
-                foreach (var point in points)
-                {
-                    scatterSeries.Points.Add(point);
-                }
-
-                plotModel.Series.Add(scatterSeries);
-            }
-
-            plotModel.Axes.Add(new LinearAxis {
-                Position = AxisPosition.Bottom,
-                Title = "X",
-                AxislineColor = OxyColors.Black,
-                TicklineColor = OxyColors.Black,
-                TextColor = OxyColors.Black
-            });
-            plotModel.Axes.Add(new LinearAxis {
-                Position = AxisPosition.Left,
-                Title = "Y",
-                AxislineColor = OxyColors.Black,
-                TicklineColor = OxyColors.Black,
-                TextColor = OxyColors.Black
-            });
-
-            // Set plot area background to white
-            plotModel.PlotAreaBackground = OxyColors.White;
-            plotModel.Background = OxyColors.White;
-
-            // Add legend
-            plotModel.IsLegendVisible = true;
-            var defaultLegend = new OxyPlot.Legends.Legend
-            {
-                LegendBackground = OxyColors.White,
-                LegendBorder = OxyColors.Black,
-                LegendTextColor = OxyColors.Black
-            };
-            plotModel.Legends.Add(defaultLegend);
-
-            // Hyperparameters will be added to the title instead
-
-            // Export to PNG - Medium size with hyperparameters
-            var exporter = new PngExporter { Width = 1920, Height = 1440, Resolution = 150 };
-            using (var stream = File.Create(outputPath))
-            {
-                exporter.Export(plotModel, stream);
-            }
-
-            Console.WriteLine($"   📊 Plot saved: {outputPath} (Ultra High Resolution)");
-        }
-
+  
+  
         /// <summary>
         /// Plot simple PACMAP embedding
         /// </summary>
@@ -579,7 +533,7 @@ namespace PacMapDemo
             plotModel.Background = OxyColors.White;
 
             // Export to PNG
-            var exporter = new PngExporter { Width = 800, Height = 600 };
+            var exporter = new PngExporter { Width = 1600, Height = 1200 };
             using (var stream = File.Create(outputPath))
             {
                 exporter.Export(plotModel, stream);
@@ -592,12 +546,13 @@ namespace PacMapDemo
         {
             return part switch
             {
-                "head" => OxyColors.Red,
-                "trunk" => OxyColors.Brown,
-                "tail" => OxyColors.Orange,
-                "legs" => OxyColors.Gray,
-                "tusks" => OxyColors.White,
-                _ => OxyColors.Blue
+                "feet" => OxyColors.Orange,
+                "legs" => OxyColors.Blue,
+                "body" => OxyColors.Green,
+                "head" => OxyColors.Purple,
+                "tusks" => OxyColors.Yellow,
+                "trunk" => OxyColors.Red,
+                _ => OxyColors.Gray
             };
         }
 

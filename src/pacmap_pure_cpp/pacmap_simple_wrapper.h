@@ -32,7 +32,7 @@ extern "C" {
 #define PACMAP_ERROR_OPTIMIZATION_FAILURE -9
 
 // Version information
-#define PACMAP_WRAPPER_VERSION_STRING "1.6.0"
+#define PACMAP_WRAPPER_VERSION_STRING "2.0.8-DISTANCE-FIXED"
 
 // Distance metrics
     typedef enum {
@@ -175,9 +175,13 @@ extern "C" {
     PACMAP_API PacMapMetric pacmap_get_metric(PacMapModel* model);
     PACMAP_API int pacmap_get_random_seed(PacMapModel* model);
     PACMAP_API float pacmap_get_learning_rate(PacMapModel* model);
+    PACMAP_API float pacmap_get_adam_beta1(PacMapModel* model);
+    PACMAP_API float pacmap_get_adam_beta2(PacMapModel* model);
     PACMAP_API int pacmap_get_phase_iters(PacMapModel* model, int* phase1_iters, int* phase2_iters, int* phase3_iters);
     PACMAP_API int pacmap_set_random_seed(PacMapModel* model, int seed);
     PACMAP_API int pacmap_set_learning_rate(PacMapModel* model, float learning_rate);
+    PACMAP_API int pacmap_set_adam_beta1(PacMapModel* model, float beta1);
+    PACMAP_API int pacmap_set_adam_beta2(PacMapModel* model, float beta2);
     PACMAP_API int pacmap_reset_model(PacMapModel* model);
     PACMAP_API int pacmap_copy_model(PacMapModel* source, PacMapModel** destination);
     PACMAP_API int pacmap_is_fitted(PacMapModel* model);

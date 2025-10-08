@@ -312,7 +312,7 @@ namespace PacMapSharp
         #region Constants
 
         // Expected DLL version - must match C++ PACMAP_WRAPPER_VERSION_STRING
-        private const string EXPECTED_DLL_VERSION = "1.6.0";
+        private const string EXPECTED_DLL_VERSION = "2.0.8-DISTANCE-FIXED";
 
         #endregion
 
@@ -339,7 +339,9 @@ namespace PacMapSharp
         // PACMAP-specific parameters
         private float _mnRatio = 0.5f;
         private float _fpRatio = 2.0f;
-        private float _learningRate = 0.1f;
+        private float _learningRate = 1.0f;  // Updated default for Adam optimizer
+        private float _adamBeta1 = 0.9f;
+        private float _adamBeta2 = 0.999f;
         private (int phase1, int phase2, int phase3) _numIters = (100, 100, 250);
 
         #endregion
@@ -360,6 +362,16 @@ namespace PacMapSharp
         /// Gets the learning rate for the Adam optimizer
         /// </summary>
         public float LearningRate => _learningRate;
+
+        /// <summary>
+        /// Gets the Adam beta1 parameter for momentum
+        /// </summary>
+        public float AdamBeta1 => _adamBeta1;
+
+        /// <summary>
+        /// Gets the Adam beta2 parameter for RMSprop-like decay
+        /// </summary>
+        public float AdamBeta2 => _adamBeta2;
 
         /// <summary>
         /// Gets the number of iterations for each optimization phase
@@ -422,9 +434,12 @@ namespace PacMapSharp
         /// </summary>
         /// <param name="mnRatio">Mid-near pair ratio for global structure preservation (default: 0.5)</param>
         /// <param name="fpRatio">Far-pair ratio for uniform distribution (default: 2.0)</param>
-        /// <param name="learningRate">Learning rate for Adam optimizer (default: 0.1)</param>
+        /// <param name="learningRate">Learning rate for Adam optimizer (default: 1.0)</param>
+        /// <param name="adamBeta1">Adam beta1 parameter for momentum (default: 0.9)</param>
+        /// <param name="adamBeta2">Adam beta2 parameter for RMSprop-like decay (default: 0.999)</param>
         /// <param name="numIters">Number of iterations for each optimization phase (default: (100, 100, 250))</param>
-        public PacMapModel(float mnRatio = 0.5f, float fpRatio = 2.0f, float learningRate = 0.1f,
+        public PacMapModel(float mnRatio = 0.5f, float fpRatio = 2.0f, float learningRate = 1.0f,
+                            float adamBeta1 = 0.9f, float adamBeta2 = 0.999f,
                             (int, int, int) numIters = default((int, int, int)))
         {
             // CRITICAL: Verify DLL version before any native calls to prevent binary mismatches
@@ -437,6 +452,8 @@ namespace PacMapSharp
             _mnRatio = mnRatio;
             _fpRatio = fpRatio;
             _learningRate = learningRate;
+            _adamBeta1 = adamBeta1;
+            _adamBeta2 = adamBeta2;
 
             // Handle default value for numIters
             _numIters = numIters.Equals(default((int, int, int))) ? (100, 100, 250) : numIters;

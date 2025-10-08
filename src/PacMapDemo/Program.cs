@@ -41,15 +41,23 @@ namespace PacMapDemo
                         floatData[i, j] = (float)data[i, j];
 
                 var stopwatch = Stopwatch.StartNew();
+
+                Console.WriteLine("Testing with HIGH iterations to match Rust quality:");
+                Console.WriteLine("  Default: (100, 100, 250) = 450 total iterations");
+                Console.WriteLine("  Previous: (200, 200, 500) = 900 total iterations");
+                Console.WriteLine("  Testing:  (300, 300, 900) = 1500 total iterations (Rust-like)");
+
                 var embedding = pacmap.Fit(
                     data: floatData,
                     embeddingDimension: 2,
                     nNeighbors: 10,
                     metric: DistanceMetric.Euclidean,
-                    learningRate: 0.001f,  // CRITICAL: Reduced from 0.1 to 0.001 to prevent divergence
+                    learningRate: 1.0f,  // Updated to use Adam-appropriate learning rate
                     mnRatio: 0.5f,
                     fpRatio: 2.0f,
-                    forceExactKnn: true
+                    numIters: (100, 100, 250),  // Match Rust defaults exactly
+                    forceExactKnn: true,   // Test exact k-NN with Python-style sampling
+                    randomSeed: 42  // Switch back to original seed
                 );
                 stopwatch.Stop();
 

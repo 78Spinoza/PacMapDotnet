@@ -52,14 +52,6 @@ namespace fit_utils {
         }
 
               try {
-            // DEBUG: Print input parameters
-            printf("[DEBUG] PACMAP FIT START - Parameters: n_obs=%d, n_dim=%d, embedding_dim=%d, n_neighbors=%d\n",
-                   n_obs, n_dim, embedding_dim, n_neighbors);
-            printf("[DEBUG] PACMAP FIT - Ratios: MN=%.2f, FP=%.2f, LR=%.4f, Seed=%d\n",
-                   mn_ratio, fp_ratio, learning_rate, random_seed);
-            printf("[DEBUG] PACMAP FIT - Phase iterations: %d, %d, %d\n",
-                   phase1_iters, phase2_iters, phase3_iters);
-
             // Initialize PACMAP model parameters
             model->n_samples = n_obs;
             model->n_features = n_dim;
@@ -78,8 +70,6 @@ namespace fit_utils {
             model->hnsw_m = M > 0 ? M : 16;
             model->hnsw_ef_construction = ef_construction > 0 ? ef_construction : 200;
             model->hnsw_ef_search = ef_search > 0 ? ef_search : 200;
-
-            printf("[DEBUG] PACMAP FIT - Model parameters initialized\n");
 
             
             if (progress_callback) {
@@ -135,14 +125,13 @@ namespace fit_utils {
 
             sample_triplets(model, normalized_data.data(), progress_callback);
 
-            // Initialize AdaGrad optimizer state
+            // Initialize Adam optimizer state (handled in optimization loop)
             size_t embedding_size = static_cast<size_t>(n_obs) * static_cast<size_t>(embedding_dim);
-            model->adagrad_m.resize(embedding_size, 0.0f);
-            model->adagrad_v.resize(embedding_size, 0.0f);
+            // Adam state is now initialized in the optimization function
 
 
             if (progress_callback) {
-                progress_callback("Optimizer Setup", 3, 100, 20.0f, "Initializing AdaGrad optimizer state");
+                progress_callback("Optimizer Setup", 3, 100, 20.0f, "Initializing Adam optimizer state");
             }
 
             // Initialize embedding with improved random variance (Fix B)
@@ -163,14 +152,10 @@ namespace fit_utils {
                 for (size_t i = 0; i < embedding_size; i++) embedding[i] = embedding[i] / std_dev * 1e-4f;
             }
 
-            printf("[DEBUG] PACMAP FIT - Embedding initialized: mean=%.6f, std_dev=%.6f\n", mean, std_dev);
-
             // PACMAP Step 2: Three-phase Optimization
             if (progress_callback) {
                 progress_callback("Optimization", 4, 100, 25.0f, "Starting three-phase PACMAP optimization");
             }
-
-            printf("[DEBUG] PACMAP FIT - Starting optimization phases\n");
 
             auto opt_start = std::chrono::high_resolution_clock::now();
 
@@ -178,8 +163,6 @@ namespace fit_utils {
 
             auto opt_end = std::chrono::high_resolution_clock::now();
             auto opt_duration = std::chrono::duration_cast<std::chrono::milliseconds>(opt_end - opt_start);
-
-            printf("[DEBUG] PACMAP FIT - Optimization completed in %lld ms\n", opt_duration.count());
 
             // Compute embedding statistics for transform safety
             std::vector<float> embedding_distances;
@@ -255,13 +238,10 @@ namespace fit_utils {
 
             model->is_fitted = true;
 
-            printf("[DEBUG] PACMAP FIT - Model fitted successfully, final embedding stats calculated\n");
-
             if (progress_callback) {
                 progress_callback("PACMAP Complete", 100, 100, 100.0f, "PACMAP fitting completed successfully");
             }
 
-            printf("[DEBUG] PACMAP FIT - END - Returning success\n");
             return PACMAP_SUCCESS;
         }
         catch (const std::exception& e) {

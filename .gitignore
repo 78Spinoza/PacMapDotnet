@@ -193,3 +193,23 @@ secrets/
 # Claude settings and documentation
 .claude/
 docs/CLAUDE.md
+CLAUDE.md
+
+# Build directories and temporary files
+src/pacmap_pure_cpp/CMakeFiles/
+src/pacmap_pure_cpp/build-windows/
+src/pacmap_pure_cpp/build-linux/
+src/pacmap_pure_cpp/test-build/
+src/pacmap_pure_cpp/tmp_backup/
+
+# Error logs and temporary files
+src/error*.txt
+temp_*.cpp
+
+# Test files that shouldn't be in repo
+src/PacMapDemo/SimpleTest.cs
+src/pacmap_pure_cpp/test_adam_gaussian.cpp
+
+# Results directories
+Results/
+docs/PCAInt.txt

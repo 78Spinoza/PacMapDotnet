@@ -169,6 +169,36 @@ extern "C" {
         return model ? model->always_save_embedding_data : false;
     }
 
+    PACMAP_API float pacmap_get_learning_rate(PacMapModel* model) {
+        return model ? model->learning_rate : 1.0f;
+    }
+
+    PACMAP_API float pacmap_get_adam_beta1(PacMapModel* model) {
+        return model ? model->adam_beta1 : 0.9f;
+    }
+
+    PACMAP_API float pacmap_get_adam_beta2(PacMapModel* model) {
+        return model ? model->adam_beta2 : 0.999f;
+    }
+
+    PACMAP_API int pacmap_set_learning_rate(PacMapModel* model, float learning_rate) {
+        if (!model) return PACMAP_ERROR_INVALID_PARAMS;
+        model->learning_rate = learning_rate;
+        return PACMAP_SUCCESS;
+    }
+
+    PACMAP_API int pacmap_set_adam_beta1(PacMapModel* model, float beta1) {
+        if (!model) return PACMAP_ERROR_INVALID_PARAMS;
+        model->adam_beta1 = beta1;
+        return PACMAP_SUCCESS;
+    }
+
+    PACMAP_API int pacmap_set_adam_beta2(PacMapModel* model, float beta2) {
+        if (!model) return PACMAP_ERROR_INVALID_PARAMS;
+        model->adam_beta2 = beta2;
+        return PACMAP_SUCCESS;
+    }
+
     PACMAP_API int pacmap_save_model(PacMapModel* model, const char* filename) {
         return persistence_utils::save_model(model, filename);
     }

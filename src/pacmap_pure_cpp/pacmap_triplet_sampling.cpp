@@ -73,14 +73,65 @@ void sample_triplets(PacMapModel* model, float* data, pacmap_progress_callback_i
     if (model->triplets.size() > 0) {
         // Check if triplets have good diversity in indices
         std::unordered_set<int> unique_anchors, unique_neighbors;
+        std::unordered_map<TripletType, int> type_counts;
+
         for (const auto& triplet : model->triplets) {
             unique_anchors.insert(triplet.anchor);
             unique_neighbors.insert(triplet.neighbor);
+            type_counts[triplet.type]++;
         }
-                  
-        // Sample first few triplets for inspection
+
+        printf("[PAIR DEBUG] Triplet Analysis:\n");
+        printf("  - Total triplets: %zu\n", model->triplets.size());
+        printf("  - Unique anchors: %zu (%.1f%% of all points)\n",
+               unique_anchors.size(), 100.0f * unique_anchors.size() / model->n_samples);
+        printf("  - Unique neighbors: %zu\n", unique_neighbors.size());
+        printf("  - Type distribution: NEIGHBOR=%d, MID_NEAR=%d, FURTHER=%d\n",
+               type_counts[NEIGHBOR], type_counts[MID_NEAR], type_counts[FURTHER]);
+
+        // Sample first few triplets for inspection with distance analysis
+        printf("[PAIR DEBUG] Sample triplets (first 10):\n");
         for (int i = 0; i < std::min(10, (int)model->triplets.size()); ++i) {
             const auto& t = model->triplets[i];
+            float distance = compute_sampling_distance(
+                normalized_data.data() + t.anchor * model->n_features,
+                normalized_data.data() + t.neighbor * model->n_features,
+                model->n_features, model->metric);
+
+            const char* type_str = (t.type == NEIGHBOR) ? "NEIGHBOR" :
+                                   (t.type == MID_NEAR) ? "MID_NEAR" : "FURTHER";
+            printf("  %d: (%d,%d) type=%s dist=%.3f\n", i, t.anchor, t.neighbor, type_str, distance);
+        }
+
+        // Distance statistics by type
+        printf("[PAIR DEBUG] Distance statistics by triplet type:\n");
+        for (auto const& [type, count] : type_counts) {
+            if (count == 0) continue;
+
+            float min_dist = std::numeric_limits<float>::infinity();
+            float max_dist = 0.0f;
+            float total_dist = 0.0f;
+            int valid_samples = 0;
+
+            for (const auto& t : model->triplets) {
+                if (t.type != type) continue;
+
+                float dist = compute_sampling_distance(
+                    normalized_data.data() + t.anchor * model->n_features,
+                    normalized_data.data() + t.neighbor * model->n_features,
+                    model->n_features, model->metric);
+
+                min_dist = std::min(min_dist, dist);
+                max_dist = std::max(max_dist, dist);
+                total_dist += dist;
+                valid_samples++;
+            }
+
+            const char* type_str = (type == NEIGHBOR) ? "NEIGHBOR" :
+                                   (type == MID_NEAR) ? "MID_NEAR" : "FURTHER";
+            printf("  %s: count=%d, dist_range=[%.3f, %.3f], avg=%.3f\n",
+                   type_str, count, min_dist, max_dist,
+                   valid_samples > 0 ? total_dist / valid_samples : 0.0f);
         }
     }
 
@@ -98,54 +149,94 @@ void sample_neighbors_pair(PacMapModel* model, const std::vector<float>& normali
 
     neighbor_triplets.clear();
     neighbor_triplets.reserve(model->n_samples * model->n_neighbors);
+    printf("[DEBUG] Using PYTHON-STYLE neighbor pair sampling (simple sklearn approach)\n");
 
-    // Parallel neighbor sampling using HNSW (review optimization)
-    #pragma omp parallel for
-    for (int i = 0; i < model->n_samples; ++i) {
-        auto knn_results = model->original_space_index->searchKnn(
-            normalized_data.data() + i * model->n_features,
-            model->n_neighbors + 1);
+    // PYTHON-style approach: Exactly like sklearn NearestNeighbors
+    // Find k+1 neighbors (including self), then skip self when creating pairs
 
-        // Convert priority_queue to vector for access
-        std::vector<std::pair<float, size_t>> knn;
-        while (!knn_results.empty()) {
-            knn.push_back(knn_results.top());
-            knn_results.pop();
+    if (model->force_exact_knn) {
+        printf("[DEBUG] Using EXACT k-NN (brute-force) like Python sklearn\n");
+
+        #pragma omp parallel for if(model->n_samples > 1000)
+        for (int i = 0; i < model->n_samples; ++i) {
+            std::vector<std::pair<float, int>> knn;
+            distance_metrics::find_knn_exact(
+                normalized_data.data() + i * model->n_features,
+                normalized_data.data(),
+                model->n_samples,
+                model->n_features,
+                model->metric,
+                model->n_neighbors + 1,  // k_neighbors + 1 (includes self, like Python)
+                knn,
+                i  // query_index to skip self
+            );
+
+            // Python style: skip first neighbor (self) and use the rest
+            // Start from j=1 to skip self, just like Python's indices[i, 1:]
+            #pragma omp critical
+            {
+                for (int j = 1; j < model->n_neighbors + 1 && j < static_cast<int>(knn.size()); ++j) {
+                    int neighbor_idx = knn[j].second;
+                    neighbor_triplets.emplace_back(i, neighbor_idx, NEIGHBOR);
+                }
+            }
         }
-        std::reverse(knn.begin(), knn.end());  // Since priority_queue gives max first
+    } else {
+        printf("[DEBUG] Using HNSW k-NN like Python sklearn\n");
 
-        std::vector<Triplet> local_triplets;
-        for (size_t j = 1; j < knn.size(); ++j) {  // Skip self (first result)
-            local_triplets.emplace_back(i, static_cast<int>(knn[j].second), NEIGHBOR);
-        }
+        #pragma omp parallel for if(model->n_samples > 1000)
+        for (int i = 0; i < model->n_samples; ++i) {
+            auto knn_results = model->original_space_index->searchKnn(
+                normalized_data.data() + i * model->n_features,
+                model->n_neighbors + 1);  // k_neighbors + 1 (includes self, like Python)
 
-        // Merge results safely
-        #pragma omp critical
-        {
-            neighbor_triplets.insert(neighbor_triplets.end(),
-                                   local_triplets.begin(), local_triplets.end());
+            // Convert priority_queue to vector and reverse to get sorted order
+            std::vector<std::pair<float, size_t>> knn;
+            while (!knn_results.empty()) {
+                knn.push_back(knn_results.top());
+                knn_results.pop();
+            }
+            std::reverse(knn.begin(), knn.end());
+
+            // Python style: skip first neighbor (self) and use the rest
+            // Start from j=1 to skip self, just like Python's indices[i, 1:]
+            #pragma omp critical
+            {
+                for (int j = 1; j < model->n_neighbors + 1 && j < static_cast<int>(knn.size()); ++j) {
+                    int neighbor_idx = static_cast<int>(knn[j].second);
+                    neighbor_triplets.emplace_back(i, neighbor_idx, NEIGHBOR);
+                }
+            }
         }
     }
+
+    printf("[DEBUG] PYTHON-STYLE neighbor sampling completed: %d neighbor triplets generated\n", (int)neighbor_triplets.size());
 }
 
 void sample_MN_pair(PacMapModel* model, const std::vector<float>& normalized_data,
                    std::vector<Triplet>& mn_triplets, int n_mn) {
 
     mn_triplets.clear();
+    printf("[DEBUG] Using ORIGINAL MN sampling (distance-based approach)\n");
 
-    // Compute distance percentiles for mid-near range (25th-75th percentile)
+    // ORIGINAL approach: Distance-based sampling for mid-near pairs
+    // Compute 25th and 75th percentiles for distance-based MN sampling
     auto percentiles = compute_distance_percentiles(normalized_data,
                                                    std::min(model->n_samples, 1000),
                                                    model->n_features,
                                                    model->metric);
-    float p25_dist = percentiles[0];
-    float p75_dist = percentiles[1];
+    float p25_dist = percentiles[0];  // 25th percentile
+    float p75_dist = percentiles[1];  // 75th percentile
 
-    // Distance-based sampling for mid-near pairs
+    // Distance-based sampling for mid-near pairs (25th-75th percentile range)
+    int target_mn_triplets = model->n_samples * n_mn;
     distance_based_sampling(model, normalized_data,
-                           model->n_samples * n_mn,  // FIXED: Removed *2 oversampling causing imbalance
+                           model->n_samples * n_mn * 2,  // Oversample for uniqueness
+                           target_mn_triplets,
                            p25_dist, p75_dist,
                            mn_triplets, MID_NEAR);
+
+    printf("[DEBUG] ORIGINAL MN sampling completed: %d triplets generated\n", (int)mn_triplets.size());
 }
 
 void sample_FP_pair(PacMapModel* model, const std::vector<float>& normalized_data,
@@ -161,14 +252,17 @@ void sample_FP_pair(PacMapModel* model, const std::vector<float>& normalized_dat
     float p90_dist = percentiles[2];  // 90th percentile
 
     // Distance-based sampling for far pairs
+    // IMPROVED: Better triplet balance with optimized sampling
+    int target_fp_triplets = model->n_samples * n_fp;
     distance_based_sampling(model, normalized_data,
-                           model->n_samples * n_fp,  // FIXED: Removed *3 oversampling causing imbalance
+                           model->n_samples * n_fp * 3,  // Oversample more for far pairs
+                           target_fp_triplets,
                            p90_dist, std::numeric_limits<float>::infinity(),
                            fp_triplets, FURTHER);
 }
 
 void distance_based_sampling(PacMapModel* model, const std::vector<float>& data,
-                           int target_pairs, float min_dist, float max_dist,
+                           int oversample_factor, int target_pairs, float min_dist, float max_dist,
                            std::vector<Triplet>& triplets, TripletType type) {
 
     std::uniform_int_distribution<int> dist(0, model->n_samples - 1);
@@ -176,7 +270,7 @@ void distance_based_sampling(PacMapModel* model, const std::vector<float>& data,
     int pairs_found = 0;
 
     // Adaptive sampling loop with oversampling
-    int max_attempts = target_pairs * 10;  // Prevent infinite loops
+    int max_attempts = oversample_factor;  // Use oversample_factor parameter
     int attempts = 0;
 
     while (pairs_found < target_pairs && attempts < max_attempts) {
@@ -304,5 +398,4 @@ void print_sampling_statistics(const std::vector<Triplet>& triplets) {
             case FURTHER: fp_count++; break;
         }
     }
-
-    }
+}
