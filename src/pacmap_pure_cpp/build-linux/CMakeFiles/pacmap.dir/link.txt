@@ -1,1 +1,0 @@
-/usr/bin/c++ -fPIC -O3 -DNDEBUG -shared -Wl,-soname,libpacmap.so -o lib/libpacmap.so CMakeFiles/pacmap.dir/pacmap_simple_wrapper.cpp.o CMakeFiles/pacmap.dir/pacmap_simple_minimal.cpp.o 

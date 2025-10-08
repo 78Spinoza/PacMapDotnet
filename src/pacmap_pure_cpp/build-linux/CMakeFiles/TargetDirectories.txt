@@ -1,8 +1,0 @@
-/src/build-linux/CMakeFiles/pacmap.dir
-/src/build-linux/CMakeFiles/run_all_tests.dir
-/src/build-linux/CMakeFiles/test_minimal_standalone.dir
-/src/build-linux/CMakeFiles/test_simple_minimal.dir
-/src/build-linux/CMakeFiles/test_dll_export.dir
-/src/build-linux/CMakeFiles/test_basic_integration.dir
-/src/build-linux/CMakeFiles/edit_cache.dir
-/src/build-linux/CMakeFiles/rebuild_cache.dir

@@ -1,3 +1,0 @@
-C:/PacMapDotnet/src/pacmap_pure_cpp/build-windows/CMakeFiles/pacmap.dir
-C:/PacMapDotnet/src/pacmap_pure_cpp/build-windows/CMakeFiles/ALL_BUILD.dir
-C:/PacMapDotnet/src/pacmap_pure_cpp/build-windows/CMakeFiles/ZERO_CHECK.dir
