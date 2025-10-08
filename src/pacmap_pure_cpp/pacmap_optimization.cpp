@@ -34,8 +34,11 @@ void optimize_embedding(PacMapModel* model, float* embedding_out, pacmap_progres
 
     // CRITICAL DEBUG: Print exact hyperparameters and KNN mode
     float std_dev = model->initialization_std_dev;
-    printf("\n=== PACMAP OPTIMIZATION START (ADAM v2.0.0 - CLIPPING THRESHOLD ADJUST) ===\n");
+    printf("[OPTIM DEBUG] Starting: total_iters=%d, init_std_dev=%.6f, n_triplets=%zu\n",
+           total_iters, std_dev, model->triplets.size());
+    printf("\n=== PACMAP OPTIMIZATION START (ADAM v2.0.0 - GRADIENT-FIXED) ===\n");
     printf("🔥 CONFIRMED: Using ADAM OPTIMIZER with bias correction!\n");
+    printf("🔥 CRITICAL FIXES APPLIED: No gradient normalization, w_MN=0 in Phase 3, std_dev=1e-4\n");
     printf("Hyperparameters:\n");
     printf("  Learning Rate: %.6f\n", model->learning_rate);
     printf("  Adam Beta1: %.3f, Beta2: %.3f, Epsilon: %.2e\n",
@@ -77,10 +80,10 @@ void optimize_embedding(PacMapModel* model, float* embedding_out, pacmap_progres
                        std::sqrt(1.0f - std::pow(model->adam_beta2, iter + 1)) /
                        (1.0f - std::pow(model->adam_beta1, iter + 1));
 
-        // ADAM DEBUG: Detailed tracking every 50 iterations
-        if (iter % 50 == 0 || iter < 10) {
-            printf("[ADAM DEBUG] Iter %d: lr=%.6f, beta1=%.3f, beta2=%.3f, eps=%.2e\n",
-                   iter, adam_lr, model->adam_beta1, model->adam_beta2, model->adam_eps);
+        // ENHANCED DEBUG: Track optimization progress every 10 iterations
+        if (iter % 10 == 0) {
+            printf("[OPTIM DEBUG] Iter %d: lr=%.4e, w_n=%.1f, w_mn=%.1f, w_f=%.1f\n",
+                   iter, adam_lr, w_n, w_mn, w_f);
 
             // Sample a few gradient statistics
             float grad_min = gradients[0], grad_max = gradients[0], grad_sum = 0.0f;
@@ -178,6 +181,14 @@ void optimize_embedding(PacMapModel* model, float* embedding_out, pacmap_progres
             float loss = compute_pacmap_loss(embedding, model->triplets,
                                            w_n, w_mn, w_f, model->n_components);
             loss_history.push_back(loss);
+
+            // Enhanced debug for loss and gradient magnitude
+            float delta_max = 0.0f;
+            for (float g : gradients) {
+                delta_max = std::max(delta_max, std::abs(g));
+            }
+            printf("[OPTIM DEBUG] Iter %d: loss=%.4e, delta_max=%.4e\n",
+                   iter, loss, delta_max);
 
             std::string phase = get_current_phase(iter, model->phase1_iters, model->phase2_iters);
 

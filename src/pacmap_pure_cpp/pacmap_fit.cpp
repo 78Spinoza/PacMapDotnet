@@ -62,6 +62,9 @@ namespace fit_utils {
             model->fp_ratio = fp_ratio;
             model->learning_rate = learning_rate;
             model->initialization_std_dev = initialization_std_dev;
+
+            printf("[FIT DEBUG] Init: n_samples=%d, n_dim=%d, embed_dim=%d, n_neighbors=%d, mn_ratio=%.2f, fp_ratio=%.2f, init_std_dev=%.6f\n",
+                   n_obs, n_dim, embedding_dim, n_neighbors, mn_ratio, fp_ratio, initialization_std_dev);
             model->phase1_iters = phase1_iters;
             model->phase2_iters = phase2_iters;
             model->phase3_iters = phase3_iters;
@@ -127,6 +130,9 @@ namespace fit_utils {
 
             sample_triplets(model, normalized_data.data(), progress_callback);
 
+            printf("[FIT DEBUG] Triplets: total=%d, neighbor=%d, mn=%d, fp=%d\n",
+                   model->total_triplets, model->neighbor_triplets, model->mid_near_triplets, model->far_triplets);
+
             // Initialize Adam optimizer state (handled in optimization loop)
             size_t embedding_size = static_cast<size_t>(n_obs) * static_cast<size_t>(embedding_dim);
             // Adam state is now initialized in the optimization function
@@ -159,6 +165,15 @@ namespace fit_utils {
 
             auto opt_end = std::chrono::high_resolution_clock::now();
             auto opt_duration = std::chrono::duration_cast<std::chrono::milliseconds>(opt_end - opt_start);
+
+            // Debug final embedding statistics
+            std::vector<float> embedding_vec(embedding, embedding + n_obs * embedding_dim);
+            float init_mean = std::accumulate(embedding_vec.begin(), embedding_vec.end(), 0.0f) / embedding_vec.size();
+            float init_std = 0.0f;
+            for (float e : embedding_vec) init_std += (e - init_mean) * (e - init_mean);
+            init_std = std::sqrt(init_std / embedding_vec.size());
+            printf("[FIT DEBUG] Final Embedding: mean=%.4f, std=%.4f, target_std=%.6f\n",
+                   init_mean, init_std, initialization_std_dev);
 
             // Compute embedding statistics for transform safety
             std::vector<float> embedding_distances;

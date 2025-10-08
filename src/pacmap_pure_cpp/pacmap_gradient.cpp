@@ -22,16 +22,20 @@ std::tuple<float, float, float> get_weights(int current_iter, int phase1_end, in
         float progress = (float)current_iter / phase1_end;
         w_n = 2.0f;  // FIXED: Should be 2.0f to match Rust exactly
         w_mn = 1000.0f * (1.0f - progress) + 3.0f * progress;  // 1000→3 (correct)
+        printf("[WEIGHT DEBUG] Phase 1 (iter %d): w_n=%.1f, w_mn=%.1f, progress=%.2f\n",
+               current_iter, w_n, w_mn, progress);
     } else if (current_iter < phase2_end) {
         // Phase 2: Balance phase (10-40%): stable weights
         w_n = 3.0f;  // FIXED: Should be 3.0f to match Rust exactly
         w_mn = 3.0f;  // Correct
+        printf("[WEIGHT DEBUG] Phase 2 (iter %d): w_n=%.1f, w_mn=%.1f\n",
+               current_iter, w_n, w_mn);
     } else {
-        // Phase 3: Local structure (40-100%): w_mn: 3→0 transition
-        int total_iters = phase1_end + (phase2_end - phase1_end) + (current_iter - phase2_end) + 1;
-        float progress_in_phase3 = (float)(current_iter - phase2_end) / (total_iters - phase2_end);
+        // Phase 3: Local structure (40-100%): w_mn = 0 fixed (no mid-near attraction)
         w_n = 1.0f;  // Correct - matches Rust
-        w_mn = 3.0f * (1.0f - progress_in_phase3);  // FIXED: Gradual 3→0 transition
+        w_mn = 0.0f;  // FIXED: No mid-near attraction in local refinement phase
+        printf("[WEIGHT DEBUG] Phase 3 (iter %d): w_n=%.1f, w_mn=%.1f (FIXED - should be 0!)\n",
+               current_iter, w_n, w_mn);
     }
 
     return {w_n, w_mn, w_f};
@@ -41,6 +45,9 @@ void compute_gradients(const std::vector<float>& embedding, const std::vector<Tr
                        std::vector<float>& gradients, float w_n, float w_mn, float w_f, int n_components) {
 
     gradients.assign(embedding.size(), 0.0f);
+
+    printf("[GRADIENT DEBUG] Starting compute_gradients: n_triplets=%zu, n_components=%d, w_n=%.1f, w_mn=%.1f, w_f=%.1f\n",
+           triplets.size(), n_components, w_n, w_mn, w_f);
 
     // Parallel gradient computation with atomic operations (review requirement)
     #pragma omp parallel for schedule(dynamic, 1000)
@@ -79,13 +86,20 @@ void compute_gradients(const std::vector<float>& embedding, const std::vector<Tr
                 continue;  // Should never happen
         }
 
+        // Debug per-triplet gradient contribution (sample every 100 triplets)
+        if (idx % 100 == 0) {
+            float distance = std::sqrt(std::max(d_ij, 1e-8f));
+            printf("[GRADIENT DEBUG] Triplet %d: type=%s, anchor=%d, neighbor=%d, d_ij=%.4f, coeff=%.4e\n",
+                   idx, (t.type == NEIGHBOR ? "NB" : t.type == MID_NEAR ? "MN" : "FP"),
+                   t.anchor, t.neighbor, distance, coeff);
+        }
+
         // Apply gradients symmetrically (Newton's third law)
-        // CRITICAL FIX: Since d_ij = 1.0 + sum(squared_diffs), we need sqrt for gradient direction
-        float distance_for_gradient = std::sqrt(std::max(d_ij, 1e-8f));
-        float scale = coeff / distance_for_gradient;
+        // CRITICAL FIX: Remove distance normalization to match reference implementation
+        // The gradient should be coeff * diff directly, not coeff * diff / distance
         for (int d = 0; d < n_components; ++d) {
             float diff = embedding[idx_a + d] - embedding[idx_n + d];
-            float gradient_component = scale * diff;
+            float gradient_component = coeff * diff;  // Direct multiply without distance normalization
 
             // Thread-safe atomic operations (review requirement for determinism)
             #pragma omp atomic
@@ -95,25 +109,30 @@ void compute_gradients(const std::vector<float>& embedding, const std::vector<Tr
         }
     }
 
-    // CRITICAL FIX: Normalize gradients by triplet count to match Rust implementation
-    // This prevents gradient explosion in large datasets
-    if (!triplets.empty()) {
-        float normalization_factor = 1.0f / static_cast<float>(triplets.size());
-        #pragma omp parallel for
-        for (int i = 0; i < static_cast<int>(gradients.size()); ++i) {
-            gradients[i] *= normalization_factor;
-        }
+    // CRITICAL FIX: Remove gradient normalization to match reference implementation
+    // The reference uses raw gradient sums, not averaged gradients
+    // This allows stronger updates for larger datasets as intended
 
-        // Debug output for gradient normalization
-        printf("[GRADIENT DEBUG] Normalized %zu gradients by factor %.6f\n",
-               gradients.size(), normalization_factor);
+    // Debug gradient stats after summation
+    float grad_min = gradients[0], grad_max = gradients[0], grad_sum = 0.0f;
+    int grad_nan = 0, grad_inf = 0;
+    for (size_t i = 0; i < gradients.size(); ++i) {
+        grad_min = std::min(grad_min, gradients[i]);
+        grad_max = std::max(grad_max, gradients[i]);
+        grad_sum += gradients[i];
+        if (std::isnan(gradients[i])) grad_nan++;
+        if (std::isinf(gradients[i])) grad_inf++;
     }
+    float grad_mean = grad_sum / gradients.size();
+    printf("[GRADIENT DEBUG] Post-sum: min=%.4e, max=%.4e, mean=%.4e, nan=%d, inf=%d, size=%zu\n",
+           grad_min, grad_max, grad_mean, grad_nan, grad_inf, gradients.size());
 }
 
 float compute_pacmap_loss(const std::vector<float>& embedding, const std::vector<Triplet>& triplets,
                          float w_n, float w_mn, float w_f, int n_components) {
 
-    printf("[DEBUG] *** LOSS FUNCTION v3.0 - NEW FORMULAS ACTIVE ***\n");
+    printf("[LOSS DEBUG] Computing loss: n_triplets=%zu, w_n=%.1f, w_mn=%.1f, w_f=%.1f\n",
+           triplets.size(), w_n, w_mn, w_f);
     // CRITICAL FIX: Updated loss function from error5.txt
     float total_loss = 0.0f;
 
@@ -155,7 +174,9 @@ float compute_pacmap_loss(const std::vector<float>& embedding, const std::vector
         total_loss += loss_term;
     }
 
-    return total_loss / static_cast<float>(triplets.size());  // Average loss
+    float avg_loss = total_loss / static_cast<float>(triplets.size());  // Average loss
+    printf("[LOSS DEBUG] Loss: %.4e, n_triplets=%zu\n", avg_loss, triplets.size());
+    return avg_loss;
 }
 
 bool check_convergence(const std::vector<float>& loss_history, float threshold, int window) {

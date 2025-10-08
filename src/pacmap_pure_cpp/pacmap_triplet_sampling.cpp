@@ -141,6 +141,7 @@ void sample_triplets(PacMapModel* model, float* data, pacmap_progress_callback_i
     model->mid_near_triplets = static_cast<int>(mn_triplets.size());
     model->far_triplets = static_cast<int>(fp_triplets.size());
 
+    printf("[TRIPLET DEBUG] Completed sampling: %zu total triplets generated\n", model->triplets.size());
     callback("Sampling Triplets", 100, 100, 100.0f, nullptr);
 }
 
@@ -243,7 +244,7 @@ void sample_MN_pair(PacMapModel* model, const std::vector<float>& normalized_dat
                     float d = compute_sampling_distance(
                         normalized_data.data() + i * model->n_features,
                         normalized_data.data() + j * model->n_features,
-                        model->n_features, model->metric);
+                        model->n_features, PACMAP_METRIC_EUCLIDEAN);  // CRITICAL FIX: Always use Euclidean for MN pairs
                     distances.emplace_back(d, j);
                     sampled_indices.insert(j);
                 }

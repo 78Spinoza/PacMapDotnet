@@ -63,7 +63,7 @@ struct PacMapModel {
     float mn_ratio = 0.5f;     // Mid-near pair ratio
     float fp_ratio = 2.0f;     // Far pair ratio
     float learning_rate = 1.0f; // Adam optimizer learning rate
-    float initialization_std_dev = 0.1f; // Standard deviation for embedding initialization
+    float initialization_std_dev = 1e-4f; // Standard deviation for embedding initialization (matches reference)
     int phase1_iters = 100;    // Global structure phase
     int phase2_iters = 100;    // Balance phase
     int phase3_iters = 250;    // Local structure phase
@@ -102,7 +102,7 @@ struct PacMapModel {
     std::vector<float> adam_v;     // Second moment vector (RMSprop-like)
     float adam_beta1 = 0.9f;       // Adam beta1 parameter (momentum decay)
     float adam_beta2 = 0.999f;     // Adam beta2 parameter (RMSprop decay)
-    float adam_eps = 1e-8f;        // Adam epsilon parameter for numerical stability
+    float adam_eps = 1e-7f;        // Adam epsilon parameter for numerical stability (matches reference)
 
     // Factory fields for HNSW space creation
     std::unique_ptr<hnswlib::SpaceInterface<float>> original_space_factory;

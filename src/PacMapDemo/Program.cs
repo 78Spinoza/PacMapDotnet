@@ -30,21 +30,21 @@ namespace PacMapDemo
 
                 // Create PACMAP and embed - Force Exact KNN to test
                 Console.WriteLine("Creating embedding with Exact KNN (no HNSW)...");
-                Console.WriteLine("🔧 TESTING ORIGINAL HIGH RATIOS WITH GENTLE LEARNING:");
+                Console.WriteLine("🔧 TESTING ORIGINAL HIGH RATIOS WITH HIGH LEARNING RATE:");
                 Console.WriteLine("   - RESTORED MN_ratio (0.5) - original neighbor clustering force");
                 Console.WriteLine("   - RESTORED FP_ratio (2.0) - original far point separation force");
-                Console.WriteLine("   - VERY LOW learning_rate (0.01) - very gentle optimization");
-                Console.WriteLine("   - HIGH initialization_std_dev (2.0) - better initial spread");
+                Console.WriteLine("   - HIGH learning_rate (1.0) - strong optimization");
+                Console.WriteLine("   - VERY SMALL initialization_std_dev (0.001) - tight initial clustering");
                 Console.WriteLine();
 
                 // Try better hyperparameters for mammoth structure
                 var pacmap = new PacMapModel(
                     mnRatio: 0.5f,     // RESTORED - original neighbor clustering force
                     fpRatio: 2.0f,     // RESTORED - original far point separation force
-                    learningRate: 0.01f, // VERY LOW learning rate as requested
+                    learningRate: 1.0f,  // RESTORED to original high learning rate
                     adamBeta1: 0.9f,
                     adamBeta2: 0.999f,
-                    initializationStdDev: 2.0f,  // Keep higher for better spread
+                    initializationStdDev: 0.001f,  // VERY SMALL - tight initial clustering
                     numIters: (300, 300, 900)     // Keep moderate iterations
                 );
                 DisplayModelHyperparameters(pacmap, "PACMAP Model (Optimized)");
@@ -69,7 +69,7 @@ namespace PacMapDemo
                     embeddingDimension: 2,
                     nNeighbors: 10,
                     metric: DistanceMetric.Euclidean,
-                    learningRate: 0.01f,  // VERY LOW learning rate as requested
+                    learningRate: 1.0f,  // HIGH learning rate
                     mnRatio: 0.5f,     // RESTORED original high value
                     fpRatio: 2.0f,     // RESTORED original high value
                     numIters: (300, 300, 900),  // Keep moderate iterations

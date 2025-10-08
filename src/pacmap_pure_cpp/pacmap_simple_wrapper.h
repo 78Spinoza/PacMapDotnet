@@ -32,7 +32,7 @@ extern "C" {
 #define PACMAP_ERROR_OPTIMIZATION_FAILURE -9
 
 // Version information
-#define PACMAP_WRAPPER_VERSION_STRING "2.1.0-INITSTDDEV-FIX"
+#define PACMAP_WRAPPER_VERSION_STRING "2.1.0-GRADIENT-FIXED"
 
 // Distance metrics
     typedef enum {
@@ -107,7 +107,7 @@ extern "C" {
         int use_quantization = 0,
         int random_seed = -1,
         int autoHNSWParam = 1,
-        float initialization_std_dev = 0.1f);
+        float initialization_std_dev = 1e-4f);
 
     // Global callback management functions
     PACMAP_API void pacmap_set_global_callback(pacmap_progress_callback_v2 callback);
