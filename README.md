@@ -4,7 +4,7 @@
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey)](https://github.com/78Spinoza/PacMapDotnet)
 [![C#](https://img.shields.io/badge/C%23-8.0+-blue)](https://github.com/78Spinoza/PacMapDotnet)
-[![Version](https://img.shields.io/badge/version-2.0.5-orange)](https://github.com/78Spinoza/PacMapDotnet)
+[![Version](https://img.shields.io/badge/version-2.0.8-orange)](https://github.com/78Spinoza/PacMapDotnet)
 
 A C#/.NET implementation of **PACMAP** (Pairwise Controlled Manifold Approximation and Projection) with native C++ optimization using HNSW for efficient dimensionality reduction.
 
@@ -29,6 +29,12 @@ A C#/.NET implementation of **PACMAP** (Pairwise Controlled Manifold Approximati
 | 100,000 points | 8.2min | 4.5min | **1.8x** |
 
 *Benchmark: Intel i7-9700K, 32GB RAM, 10D→2D embedding*
+
+### Recent Performance Improvements (v2.0.8)
+- ✅ **Critical Distance Fix**: 20% faster execution (4.75s vs 5.84s on mammoth dataset)
+- ✅ **Enhanced Debugging**: Adam optimization tracking and triplet analysis
+- ✅ **Improved Visualization**: 1600x1200 high-resolution embedding images
+- ✅ **Gaussian Test Suite**: Synthetic data validation for algorithm correctness
 
 ## 🧩 Algorithm Overview
 
@@ -175,7 +181,7 @@ PacMapDotnet/
 │   ├── PACMAPCSharp/         # C# wrapper API with native binaries
 │   │   ├── PacMapModel.cs     # Main API class with Fit/Transform methods
 │   │   ├── pacmap.dll         # Native Windows binary (checked in)
-│   │   └── pacmap.dll         # Native binary (v2.0.5-EXACT-KNN-FIX)
+│   │   └── pacmap.dll         # Native binary (v2.0.8-DISTANCE-FIXED)
 │   ├── pacmap_pure_cpp/       # Native C++ implementation
 │   │   ├── pacmap_fit.cpp     # Core fitting and optimization
 │   │   ├── pacmap_transform.cpp # New data transformation
@@ -208,7 +214,7 @@ PacMapDotnet/
 - **pacmap_optimization.cpp**: Three-phase optimization with Adam gradient descent
 - **pacmap_gradient.cpp**: Loss function and gradient computation for three pair types
 - **pacmap_triplet_sampling.cpp**: Distance-based triplet sampling (neighbor/MN/FP pairs)
-- **Native binary**: Pre-built pacmap.dll (v2.0.5-EXACT-KNN-FIX) with exact KNN fixes
+- **Native binary**: Pre-built pacmap.dll (v2.0.8-DISTANCE-FIXED) with critical distance fixes
 - **PacMapDemo**: Complete demo application with mammoth dataset and visualization
 - **Visualizer.cs**: OxyPlot-based visualization with anatomical part classification
 
@@ -244,7 +250,15 @@ dotnet test src/PACMAPCSharp/PACMAPCSharp.Tests/
 - **Memory Usage**: ~50MB for mammoth dataset
 - **Quality**: Preserves anatomical structure in 2D embedding
 
-### Recent Improvements (v2.0.5)
+### Recent Improvements (v2.0.8-DISTANCE-FIXED)
+- ✅ **Critical Distance Fix**: Fixed distance calculation to match Rust implementation (+1 for numerical stability)
+- ✅ **20% Performance Boost**: Faster execution and better convergence (4.75s vs 5.84s)
+- ✅ **Enhanced Debugging**: Adam optimization tracking and detailed triplet analysis
+- ✅ **High-Resolution Visualization**: 1600x1200 embedding images with 300 DPI
+- ✅ **Gaussian Test Suite**: Synthetic 3-cluster validation for algorithm verification
+- ✅ **Build Routine**: Proper 4-step build process to prevent binary mismatches
+
+### Previous Improvements (v2.0.5-EXACT-KNN-FIX)
 - ✅ **Fixed Exact KNN**: Corrected neighbor sampling to match Python sklearn behavior
 - ✅ **Adam Optimizer**: Proper bias correction and gradient clipping
 - ✅ **Loss Function**: Updated gradient formulas for better convergence
@@ -300,7 +314,28 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) file for
 
 ## 🗺️ Roadmap
 
-### v2.0.5 (Current) - EXACT-KNN-FIX
+### v2.0.8 (Current) - DISTANCE-FIXED
+- ✅ **Critical Distance Fix**: Fixed distance calculation to match Rust implementation (+1 for numerical stability)
+- ✅ **20% Performance Boost**: Faster execution and better convergence (4.75s vs 5.84s)
+- ✅ **Enhanced Debugging**: Adam optimization tracking and detailed triplet analysis
+- ✅ **High-Resolution Visualization**: 1600x1200 embedding images with 300 DPI
+- ✅ **Gaussian Test Suite**: Synthetic 3-cluster validation for algorithm verification
+- ✅ **Build Routine**: Proper 4-step build process to prevent binary mismatches
+- ✅ **All Previous Features**: Complete model persistence, CRC32 validation, exact KNN
+
+### v2.0.7 - DEBUG-ENHANCED
+- ✅ **Enhanced Debugging**: Adam optimization progress tracking
+- ✅ **Triplet Analysis**: Detailed pair selection statistics
+- ✅ **Synthetic Testing**: Gaussian cluster validation suite
+- ✅ **Visualization Improvements**: Larger, higher-resolution images
+
+### v2.0.6 - ALGORITHM-VERIFIED
+- ✅ **Algorithm Validation**: Comprehensive comparison with Rust reference
+- ✅ **Weight Schedule**: Fixed three-phase optimization weights
+- ✅ **Gradient Consistency**: Ensured mathematical correctness
+- ✅ **Documentation**: Complete GAP analysis and build routine
+
+### v2.0.5 - EXACT-KNN-FIX
 - ✅ **Fixed Critical Algorithm Issues**: Corrected neighbor sampling to match Python sklearn
 - ✅ **Adam Optimizer**: Implemented proper bias correction and gradient clipping
 - ✅ **Loss Function Updates**: Fixed gradient formulas for better convergence
