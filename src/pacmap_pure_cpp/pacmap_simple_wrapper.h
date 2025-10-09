@@ -32,7 +32,7 @@ extern "C" {
 #define PACMAP_ERROR_OPTIMIZATION_FAILURE -9
 
 // Version information
-#define PACMAP_WRAPPER_VERSION_STRING "2.1.0-GRADIENT-FIXED"
+#define PACMAP_WRAPPER_VERSION_STRING "2.2.1-CLEAN-OUTPUT"
 
 // Distance metrics
     typedef enum {

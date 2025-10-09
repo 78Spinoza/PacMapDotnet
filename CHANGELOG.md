@@ -5,6 +5,34 @@ All notable changes to PacMapDotnet will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.1] - 2025-10-09
+
+### Added
+- Enhanced mid-near pair sampling algorithm with dual KNN/HNSW support
+- 67% increase in MN triplets for better global connectivity
+- Clean output mode with professional progress indicators
+- Two-image comparison system (Direct KNN vs HNSW) for performance and quality analysis
+- Optimized parameter organization with learningRate and useQuantization at end of API
+
+### Improved
+- Deterministic parallel code with per-thread RNGs for reproducible results
+- Full C# parameter control without hardcoded C++ overrides
+- Extended neighborhood search with guaranteed pairs per point
+- Professional output suitable for production environments
+- HNSW ~18% faster than Direct KNN (5.56s vs 6.87s on mammoth dataset)
+
+### Fixed
+- Removed verbose debug output that caused infinite loops
+- Fixed parameter clipping in image titles with concise layout
+- Corrected constructor parameter placement (randomSeed in Fit method, not constructor)
+- Enhanced mammoth body structure resolution through improved MN pair sampling
+
+### Technical
+- Dual architecture for KNN and HNSW triplet sampling
+- Per-thread random number generation for deterministic parallel execution
+- Extended search radius for improved mid-near pair discovery
+- Complete parameter synchronization across C++, CMake, and C# components
+
 ## [Unreleased]
 
 ### Added

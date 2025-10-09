@@ -1,6 +1,40 @@
 # PacMapDotnet Version History
 
-## Version 2.0.8 - DISTANCE-FIXED (Current)
+## Version 2.2.1 - CLEAN-OUTPUT & ENHANCED MN (Current)
+
+### 🚀 ENHANCED MID-NEAR PAIR SAMPLING
+- **BREAKTHROUGH**: 67% increase in MN triplets for better global connectivity
+- **DUAL ARCHITECTURE**: Enhanced support for both Direct KNN and HNSW triplet sampling
+- **DETERMINISTIC PARALLEL**: Per-thread RNGs for reproducible parallel execution
+- **EXTENDED SEARCH**: Improved neighborhood discovery with guaranteed pairs per point
+- **GLOBAL STRUCTURE**: Significantly better mammoth body structure preservation
+
+### 🧹 CLEAN PROFESSIONAL OUTPUT
+- **REMOVED**: Verbose debug output that caused infinite loops
+- **PROFESSIONAL**: Clean progress indicators suitable for production environments
+- **ENHANCED**: Two-image comparison system (Direct KNN vs HNSW)
+- **OPTIMIZED**: Parameter layout in images to prevent clipping
+- **IMPROVED**: Performance and quality comparison capabilities
+
+### ⚡ PARAMETER OPTIMIZATION
+- **API DESIGN**: Moved learningRate and useQuantization to end of method signatures
+- **RARELY CHANGED**: Parameters that users rarely modify now at the end for cleaner API
+- **FULL CONTROL**: Complete C# parameter control without hardcoded C++ overrides
+- **SYNCHRONIZED**: Parameter consistency across C++, CMake, and C# components
+
+### 📊 PERFORMANCE IMPROVEMENTS
+- **HNSW SPEED**: ~18% faster than Direct KNN (5.56s vs 6.87s on mammoth dataset)
+- **ENHANCED MN RATIO**: 1.2 ratio provides better global connectivity
+- **OPTIMIZED ITERATIONS**: (200, 200, 400) for better convergence
+- **MEMORY EFFICIENT**: Improved memory management for large datasets
+
+### 🔧 TECHNICAL IMPROVEMENTS
+- **PARALLEL DETERMINISM**: Thread-safe random number generation
+- **EXTENDED SAMPLING**: Better mid-near pair discovery algorithm
+- **PARAMETER CONTROL**: Removed hardcoded C++ parameter overrides
+- **VERSION SYNC**: Synchronized version numbers across all components
+
+## Version 2.0.8 - DISTANCE-FIXED (Previous)
 
 ### 🔧 CRITICAL DISTANCE FIXES
 - **CRITICAL FIX**: Distance calculation to match Rust implementation (+1 for numerical stability)

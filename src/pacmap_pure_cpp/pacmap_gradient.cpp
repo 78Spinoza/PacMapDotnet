@@ -46,8 +46,10 @@ void compute_gradients(const std::vector<float>& embedding, const std::vector<Tr
 
     gradients.assign(embedding.size(), 0.0f);
 
-    printf("[GRADIENT DEBUG] Starting compute_gradients: n_triplets=%zu, n_components=%d, w_n=%.1f, w_mn=%.1f, w_f=%.1f\n",
-           triplets.size(), n_components, w_n, w_mn, w_f);
+    // Progress-friendly gradient computation
+    if (triplets.size() > 10000) {
+        printf("   Computing gradients on %zu triplets...\n", triplets.size());
+    }
 
     // Parallel gradient computation with atomic operations (review requirement)
     #pragma omp parallel for schedule(dynamic, 1000)
@@ -86,13 +88,7 @@ void compute_gradients(const std::vector<float>& embedding, const std::vector<Tr
                 continue;  // Should never happen
         }
 
-        // Debug per-triplet gradient contribution (sample every 100 triplets)
-        if (idx % 100 == 0) {
-            float distance = std::sqrt(std::max(d_ij, 1e-8f));
-            printf("[GRADIENT DEBUG] Triplet %d: type=%s, anchor=%d, neighbor=%d, d_ij=%.4f, coeff=%.4e\n",
-                   idx, (t.type == NEIGHBOR ? "NB" : t.type == MID_NEAR ? "MN" : "FP"),
-                   t.anchor, t.neighbor, distance, coeff);
-        }
+        // Removed verbose per-triplet debug output for cleaner progress display
 
         // Apply gradients symmetrically (Newton's third law)
         // CRITICAL FIX: Remove distance normalization to match reference implementation
@@ -124,8 +120,10 @@ void compute_gradients(const std::vector<float>& embedding, const std::vector<Tr
         if (std::isinf(gradients[i])) grad_inf++;
     }
     float grad_mean = grad_sum / gradients.size();
-    printf("[GRADIENT DEBUG] Post-sum: min=%.4e, max=%.4e, mean=%.4e, nan=%d, inf=%d, size=%zu\n",
-           grad_min, grad_max, grad_mean, grad_nan, grad_inf, gradients.size());
+    // Cleaner gradient statistics - only show if there are issues
+    if (grad_nan > 0 || grad_inf > 0) {
+        printf("   ⚠️  Gradient issues detected: %d NaN, %d Inf values\n", grad_nan, grad_inf);
+    }
 }
 
 float compute_pacmap_loss(const std::vector<float>& embedding, const std::vector<Triplet>& triplets,

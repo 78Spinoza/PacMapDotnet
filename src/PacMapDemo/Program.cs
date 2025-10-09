@@ -28,26 +28,18 @@ namespace PacMapDemo
                 var (data, labels) = LoadMammothData();
                 Console.WriteLine($"Loaded: {data.GetLength(0)} points, {data.GetLength(1)} dimensions");
 
-                // Create PACMAP and embed - Force Exact KNN to test
-                Console.WriteLine("Creating embedding with Exact KNN (no HNSW)...");
-                Console.WriteLine("🔧 TESTING ORIGINAL HIGH RATIOS WITH HIGH LEARNING RATE:");
-                Console.WriteLine("   - RESTORED MN_ratio (0.5) - original neighbor clustering force");
+                // Create TWO embeddings: Direct KNN and HNSW for comparison
+                Console.WriteLine("🔧 TESTING ENHANCED MN_ratio (1.2) WITH ALL FIXES:");
+                Console.WriteLine("   - ENHANCED MN_ratio (1.2) - stronger global connectivity");
                 Console.WriteLine("   - RESTORED FP_ratio (2.0) - original far point separation force");
                 Console.WriteLine("   - HIGH learning_rate (1.0) - strong optimization");
-                Console.WriteLine("   - VERY SMALL initialization_std_dev (0.001) - tight initial clustering");
+                Console.WriteLine("   - OPTIMIZED initialization_std_dev (1e-4) - matches reference implementation");
+                Console.WriteLine("   - DETERMINISTIC parallel code - reproducible results");
                 Console.WriteLine();
 
-                // Try better hyperparameters for mammoth structure
-                var pacmap = new PacMapModel(
-                    mnRatio: 0.5f,     // RESTORED - original neighbor clustering force
-                    fpRatio: 2.0f,     // RESTORED - original far point separation force
-                    learningRate: 1.0f,  // RESTORED to original high learning rate
-                    adamBeta1: 0.9f,
-                    adamBeta2: 0.999f,
-                    initializationStdDev: 0.001f,  // VERY SMALL - tight initial clustering
-                    numIters: (300, 300, 900)     // Keep moderate iterations
-                );
-                DisplayModelHyperparameters(pacmap, "PACMAP Model (Optimized)");
+                Console.WriteLine("Testing with ENHANCED hyperparameters (~800 total iterations each):");
+                Console.WriteLine("  Enhanced: (200, 200, 400) = 800 total iterations (better convergence)");
+                Console.WriteLine();
 
                 // Convert double[,] to float[,]
                 int n = data.GetLength(0);
@@ -57,33 +49,72 @@ namespace PacMapDemo
                     for (int j = 0; j < d; j++)
                         floatData[i, j] = (float)data[i, j];
 
-                var stopwatch = Stopwatch.StartNew();
+                // 1️⃣ FIRST: Direct KNN Embedding
+                Console.WriteLine("==========================================");
+                Console.WriteLine("1️⃣  Creating Direct KNN Embedding...");
+                Console.WriteLine("==========================================");
 
-                Console.WriteLine("Testing with BALANCED hyperparameters to fix smushing:");
-                Console.WriteLine("  Default: (100, 100, 250) = 450 total iterations");
-                Console.WriteLine("  Previous: (500, 500, 1500) = 2500 total iterations (caused smushing)");
-                Console.WriteLine("  Testing:  (300, 300, 900) = 1500 total iterations (balanced)");
+                var pacmapKNN = new PacMapModel(
+                    mnRatio: 1.2f,
+                    fpRatio: 2.0f,
+                    learningRate: 1.0f,
+                    initializationStdDev: 1e-4f,
+                    numIters: (200, 200, 400)
+                );
 
-                var embedding = pacmap.Fit(
+                var stopwatchKNN = Stopwatch.StartNew();
+                var embeddingKNN = pacmapKNN.Fit(
                     data: floatData,
                     embeddingDimension: 2,
                     nNeighbors: 10,
+                    learningRate: 1.0f,
+                    mnRatio: 1.2f,
+                    fpRatio: 2.0f,
+                    numIters: (200, 200, 400),
                     metric: DistanceMetric.Euclidean,
-                    learningRate: 1.0f,  // HIGH learning rate
-                    mnRatio: 0.5f,     // RESTORED original high value
-                    fpRatio: 2.0f,     // RESTORED original high value
-                    numIters: (300, 300, 900),  // Keep moderate iterations
-                    forceExactKnn: true,   // Test exact k-NN with Python-style sampling
-                    randomSeed: 42  // Switch back to original seed
+                    forceExactKnn: true,  // Direct KNN
+                    randomSeed: 42
                 );
-                stopwatch.Stop();
+                stopwatchKNN.Stop();
 
-                Console.WriteLine($"Embedding created: {embedding.GetLength(0)} x {embedding.GetLength(1)}");
-                Console.WriteLine($"⏱️  Execution time: {stopwatch.Elapsed.TotalSeconds:F2} seconds");
+                Console.WriteLine($"✅ Direct KNN Embedding created: {embeddingKNN.GetLength(0)} x {embeddingKNN.GetLength(1)}");
+                Console.WriteLine($"⏱️  Direct KNN Execution time: {stopwatchKNN.Elapsed.TotalSeconds:F2} seconds");
 
-                // Create visualizations with real model info
-                Console.WriteLine("🎨 Creating visualizations...");
-                CreateVisualizations(embedding, data, labels, pacmap, stopwatch.Elapsed.TotalSeconds);
+                // 2️⃣ SECOND: HNSW Embedding
+                Console.WriteLine();
+                Console.WriteLine("==========================================");
+                Console.WriteLine("2️⃣  Creating HNSW Embedding...");
+                Console.WriteLine("==========================================");
+
+                var pacmapHNSW = new PacMapModel(
+                    mnRatio: 1.2f,
+                    fpRatio: 2.0f,
+                    learningRate: 1.0f,
+                    initializationStdDev: 1e-4f,
+                    numIters: (200, 200, 400)
+                );
+
+                var stopwatchHNSW = Stopwatch.StartNew();
+                var embeddingHNSW = pacmapHNSW.Fit(
+                    data: floatData,
+                    embeddingDimension: 2,
+                    nNeighbors: 10,
+                    learningRate: 1.0f,
+                    mnRatio: 1.2f,
+                    fpRatio: 2.0f,
+                    numIters: (200, 200, 400),
+                    metric: DistanceMetric.Euclidean,
+                    forceExactKnn: false,  // HNSW
+                    randomSeed: 42
+                );
+                stopwatchHNSW.Stop();
+
+                Console.WriteLine($"✅ HNSW Embedding created: {embeddingHNSW.GetLength(0)} x {embeddingHNSW.GetLength(1)}");
+                Console.WriteLine($"⏱️  HNSW Execution time: {stopwatchHNSW.Elapsed.TotalSeconds:F2} seconds");
+
+                Console.WriteLine();
+                Console.WriteLine("🎨 Creating visualizations for BOTH embeddings...");
+                CreateVisualizationsBoth(embeddingKNN, embeddingHNSW, data, labels, pacmapKNN, pacmapHNSW, stopwatchKNN.Elapsed.TotalSeconds, stopwatchHNSW.Elapsed.TotalSeconds);
 
                 // Open results folder
                 Console.WriteLine("📂 Opening Results folder...");
@@ -363,7 +394,7 @@ namespace PacMapDemo
                     ["metric"] = bestParams.metric.ToString().ToLower(),
                     ["random_seed"] = 42,
                     ["embedding_quality"] = bestQuality.ToString("F4"),
-                    ["init_std_dev"] = model.InitializationStdDev.ToString("F3"),
+                    ["init_std_dev"] = model.InitializationStdDev.ToString("E0"),
                     ["phase_iters"] = $"({model.NumIters.phase1}, {model.NumIters.phase2}, {model.NumIters.phase3})",
                     ["data_points"] = embedding.GetLength(0),
                     ["data_range_x"] = $"{data[0, 0]:F1} to {data[data.GetLength(0)-1, 0]:F1}",
@@ -601,7 +632,7 @@ namespace PacMapDemo
                     ["mn_ratio"] = modelInfo.MN_ratio.ToString("F2"),
                     ["fp_ratio"] = modelInfo.FP_ratio.ToString("F2"),
                     ["learning_rate"] = pacmap.LearningRate.ToString("F3"),
-                    ["init_std_dev"] = pacmap.InitializationStdDev.ToString("F3"),
+                    ["init_std_dev"] = pacmap.InitializationStdDev.ToString("E0"),
                     ["phase_iters"] = $"({pacmap.NumIters.phase1}, {pacmap.NumIters.phase2}, {pacmap.NumIters.phase3})",
                     ["data_points"] = modelInfo.TrainingSamples,
                     ["original_dimensions"] = modelInfo.InputDimension,
@@ -613,10 +644,16 @@ namespace PacMapDemo
                 };
                 paramInfo["execution_time"] = $"{executionTime:F2}s";
 
-                // Create title with hyperparameters
-                var line1 = $"PACMAP v{paramInfo["PACMAP Version"]} | n_neighbors={paramInfo["n_neighbors"]} | {paramInfo["distance_metric"]} | mn_ratio={paramInfo["mn_ratio"]} | fp_ratio={paramInfo["fp_ratio"]} | lr={paramInfo["learning_rate"]} | init_std={paramInfo["init_std_dev"]} | phases={paramInfo["phase_iters"]}";
-                var line2 = $"KNN: {paramInfo["KNN_Mode"]} | HNSW: M={paramInfo["hnsw_m"]}, ef={paramInfo["hnsw_ef_search"]} | Time: {paramInfo["execution_time"]}";
-                var titleWithParams = $"Mammoth PACMAP 2D Embedding\n{line1}\n{line2}";
+                // Create title with hyperparameters - more concise layout to prevent clipping
+                var version = paramInfo["PACMAP Version"].ToString().Replace(" (Corrected Gradients)", "").Replace("-CLEAN-OUTPUT", "");
+                var knnMode = paramInfo["KNN_Mode"].ToString();
+                var line1 = $"PACMAP v{version} | {knnMode} | k={paramInfo["n_neighbors"]} | {paramInfo["distance_metric"]}";
+                var line2 = $"mn={paramInfo["mn_ratio"]} fp={paramInfo["fp_ratio"]} lr={paramInfo["learning_rate"]} std={paramInfo["init_std_dev"]}";
+
+                // Add HNSW parameters if using HNSW
+                var hnswParams = knnMode.Contains("HNSW") ? $" | HNSW: M={paramInfo["hnsw_m"]}, ef={paramInfo["hnsw_ef_search"]}" : "";
+                var line3 = $"phases={paramInfo["phase_iters"]}{hnswParams} | Time: {paramInfo["execution_time"]}";
+                var titleWithParams = $"Mammoth PACMAP 2D Embedding\n{line1}\n{line2}\n{line3}";
 
                 Visualizer.PlotMammothPacMAP(embedding, originalData, titleWithParams, pacmapPath, paramInfo);
                 Console.WriteLine($"   ✅ Created: {Path.GetFileName(pacmapPath)}");
@@ -624,6 +661,140 @@ namespace PacMapDemo
                 Console.WriteLine($"   🚀 HNSW Status: {(modelInfo.ForceExactKnn ? "DISABLED" : "ACTIVE")}");
 
                 Console.WriteLine($"   🎉 All visualizations created successfully!");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"   ❌ Visualization creation failed: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Create visualizations for BOTH Direct KNN and HNSW embeddings
+        /// </summary>
+        static void CreateVisualizationsBoth(float[,] embeddingKNN, float[,] embeddingHNSW, double[,] originalData, int[] labels,
+                                         PacMapModel pacmapKNN, PacMapModel pacmapHNSW, double executionTimeKNN, double executionTimeHNSW)
+        {
+            try
+            {
+                Console.WriteLine("   📂 Setting up results directories...");
+                var resultsDir = "Results";
+                Directory.CreateDirectory(resultsDir);
+
+                // Clean up old images
+                var oldImages = Directory.GetFiles(resultsDir, "mammoth_*.png");
+                foreach (var oldImage in oldImages)
+                {
+                    try
+                    {
+                        File.Delete(oldImage);
+                        Console.WriteLine($"   ???  Deleted: {Path.GetFileName(oldImage)}");
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"   ⚠️  Warning: Could not delete {Path.GetFileName(oldImage)}: {ex.Message}");
+                    }
+                }
+                Console.WriteLine($"   ? Cleaned up {oldImages.Length} old image files");
+
+                // Create 3D original data visualization
+                var original3DPath = Path.Combine(resultsDir, "mammoth_original_3d.png");
+                Visualizer.PlotOriginalMammoth3DReal(originalData, "Original Mammoth 3D Data", original3DPath);
+                Console.WriteLine($"   ✅ Created: {Path.GetFileName(original3DPath)}");
+
+                Console.WriteLine();
+                Console.WriteLine("   ================================================");
+                Console.WriteLine("   📊 Creating Direct KNN Visualization...");
+                Console.WriteLine("   ================================================");
+
+                // Create Direct KNN 2D embedding visualization
+                var pacmapPathKNN = Path.Combine(resultsDir, "mammoth_pacmap_direct_knn.png");
+                Console.WriteLine($"   📈 Creating Direct KNN PACMAP 2D embedding: {Path.GetFileName(pacmapPathKNN)}");
+
+                // Get Direct KNN model information
+                var modelInfoKNN = pacmapKNN.ModelInfo;
+                var paramInfoKNN = new Dictionary<string, object>
+                {
+                    ["PACMAP Version"] = PacMapModel.GetVersion() + " (Corrected Gradients)",
+                    ["n_neighbors"] = modelInfoKNN.Neighbors,
+                    ["embedding_dimension"] = modelInfoKNN.OutputDimension,
+                    ["distance_metric"] = modelInfoKNN.Metric.ToString(),
+                    ["mn_ratio"] = modelInfoKNN.MN_ratio.ToString("F2"),
+                    ["fp_ratio"] = modelInfoKNN.FP_ratio.ToString("F2"),
+                    ["learning_rate"] = pacmapKNN.LearningRate.ToString("F3"),
+                    ["init_std_dev"] = pacmapKNN.InitializationStdDev.ToString("E0"),
+                    ["phase_iters"] = $"({pacmapKNN.NumIters.phase1}, {pacmapKNN.NumIters.phase2}, {pacmapKNN.NumIters.phase3})",
+                    ["data_points"] = modelInfoKNN.TrainingSamples,
+                    ["original_dimensions"] = modelInfoKNN.InputDimension,
+                    ["hnsw_m"] = modelInfoKNN.HnswM,
+                    ["hnsw_ef_construction"] = modelInfoKNN.HnswEfConstruction,
+                    ["hnsw_ef_search"] = modelInfoKNN.HnswEfSearch,
+                    ["KNN_Mode"] = "Direct KNN",
+                    ["random_seed"] = modelInfoKNN.RandomSeed
+                };
+                paramInfoKNN["execution_time"] = $"{executionTimeKNN:F2}s";
+
+                // Create Direct KNN title
+                var versionKNN = paramInfoKNN["PACMAP Version"].ToString().Replace(" (Corrected Gradients)", "").Replace("-CLEAN-OUTPUT", "");
+                var line1KNN = $"PACMAP v{versionKNN} | Direct KNN | k={paramInfoKNN["n_neighbors"]} | {paramInfoKNN["distance_metric"]}";
+                var line2KNN = $"mn={paramInfoKNN["mn_ratio"]} fp={paramInfoKNN["fp_ratio"]} lr={paramInfoKNN["learning_rate"]} std={paramInfoKNN["init_std_dev"]}";
+                var line3KNN = $"phases={paramInfoKNN["phase_iters"]} | Time: {paramInfoKNN["execution_time"]}";
+                var titleWithParamsKNN = $"Mammoth PACMAP 2D Embedding (Direct KNN)\n{line1KNN}\n{line2KNN}\n{line3KNN}";
+
+                Visualizer.PlotMammothPacMAP(embeddingKNN, originalData, titleWithParamsKNN, pacmapPathKNN, paramInfoKNN);
+                Console.WriteLine($"   ✅ Created: {Path.GetFileName(pacmapPathKNN)}");
+                Console.WriteLine($"   📊 Direct KNN Mode: EXACT (no approximation)");
+                Console.WriteLine($"   🚀 HNSW Status: DISABLED");
+
+                Console.WriteLine();
+                Console.WriteLine("   ================================================");
+                Console.WriteLine("   📊 Creating HNSW Visualization...");
+                Console.WriteLine("   ================================================");
+
+                // Create HNSW 2D embedding visualization
+                var pacmapPathHNSW = Path.Combine(resultsDir, "mammoth_pacmap_hnsw.png");
+                Console.WriteLine($"   📈 Creating HNSW PACMAP 2D embedding: {Path.GetFileName(pacmapPathHNSW)}");
+
+                // Get HNSW model information
+                var modelInfoHNSW = pacmapHNSW.ModelInfo;
+                var paramInfoHNSW = new Dictionary<string, object>
+                {
+                    ["PACMAP Version"] = PacMapModel.GetVersion() + " (Corrected Gradients)",
+                    ["n_neighbors"] = modelInfoHNSW.Neighbors,
+                    ["embedding_dimension"] = modelInfoHNSW.OutputDimension,
+                    ["distance_metric"] = modelInfoHNSW.Metric.ToString(),
+                    ["mn_ratio"] = modelInfoHNSW.MN_ratio.ToString("F2"),
+                    ["fp_ratio"] = modelInfoHNSW.FP_ratio.ToString("F2"),
+                    ["learning_rate"] = pacmapHNSW.LearningRate.ToString("F3"),
+                    ["init_std_dev"] = pacmapHNSW.InitializationStdDev.ToString("E0"),
+                    ["phase_iters"] = $"({pacmapHNSW.NumIters.phase1}, {pacmapHNSW.NumIters.phase2}, {pacmapHNSW.NumIters.phase3})",
+                    ["data_points"] = modelInfoHNSW.TrainingSamples,
+                    ["original_dimensions"] = modelInfoHNSW.InputDimension,
+                    ["hnsw_m"] = modelInfoHNSW.HnswM,
+                    ["hnsw_ef_construction"] = modelInfoHNSW.HnswEfConstruction,
+                    ["hnsw_ef_search"] = modelInfoHNSW.HnswEfSearch,
+                    ["KNN_Mode"] = "HNSW",
+                    ["random_seed"] = modelInfoHNSW.RandomSeed
+                };
+                paramInfoHNSW["execution_time"] = $"{executionTimeHNSW:F2}s";
+
+                // Create HNSW title
+                var versionHNSW = paramInfoHNSW["PACMAP Version"].ToString().Replace(" (Corrected Gradients)", "").Replace("-CLEAN-OUTPUT", "");
+                var line1HNSW = $"PACMAP v{versionHNSW} | HNSW | k={paramInfoHNSW["n_neighbors"]} | {paramInfoHNSW["distance_metric"]}";
+                var line2HNSW = $"mn={paramInfoHNSW["mn_ratio"]} fp={paramInfoHNSW["fp_ratio"]} lr={paramInfoHNSW["learning_rate"]} std={paramInfoHNSW["init_std_dev"]}";
+                var line3HNSW = $"phases={paramInfoHNSW["phase_iters"]} | HNSW: M={paramInfoHNSW["hnsw_m"]}, ef={paramInfoHNSW["hnsw_ef_search"]} | Time: {paramInfoHNSW["execution_time"]}";
+                var titleWithParamsHNSW = $"Mammoth PACMAP 2D Embedding (HNSW)\n{line1HNSW}\n{line2HNSW}\n{line3HNSW}";
+
+                Visualizer.PlotMammothPacMAP(embeddingHNSW, originalData, titleWithParamsHNSW, pacmapPathHNSW, paramInfoHNSW);
+                Console.WriteLine($"   ✅ Created: {Path.GetFileName(pacmapPathHNSW)}");
+                Console.WriteLine($"   📊 HNSW Mode: APPROXIMATE (faster)");
+                Console.WriteLine($"   🚀 HNSW Parameters: M={modelInfoHNSW.HnswM}, ef={modelInfoHNSW.HnswEfSearch}");
+
+                Console.WriteLine();
+                Console.WriteLine("   🎉 BOTH visualizations created successfully!");
+                Console.WriteLine($"   ⏱️  Performance Summary:");
+                Console.WriteLine($"      Direct KNN:  {executionTimeKNN:F2}s (exact, slower)");
+                Console.WriteLine($"      HNSW:        {executionTimeHNSW:F2}s (approximate, faster)");
+                Console.WriteLine($"      Speedup:     {(executionTimeKNN/executionTimeHNSW):F1}x");
             }
             catch (Exception ex)
             {

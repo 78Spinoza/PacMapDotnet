@@ -4,9 +4,9 @@
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey)](https://github.com/78Spinoza/PacMapDotnet)
 [![C#](https://img.shields.io/badge/C%23-8.0+-blue)](https://github.com/78Spinoza/PacMapDotnet)
-[![Version](https://img.shields.io/badge/version-2.0.8-orange)](https://github.com/78Spinoza/PacMapDotnet)
+[![Version](https://img.shields.io/badge/version-2.2.1-orange)](https://github.com/78Spinoza/PacMapDotnet)
 
-A C#/.NET implementation of **PACMAP** (Pairwise Controlled Manifold Approximation and Projection) with native C++ optimization using HNSW for efficient dimensionality reduction.
+A C#/.NET implementation of **PACMAP** (Pairwise Controlled Manifold Approximation and Projection) with native C++ optimization using HNSW for efficient dimensionality reduction. **Version 2.2.1** introduces enhanced mid-near pair sampling, clean output, and optimized parameter organization.
 
 ## 🚀 Features
 
@@ -30,7 +30,15 @@ A C#/.NET implementation of **PACMAP** (Pairwise Controlled Manifold Approximati
 
 *Benchmark: Intel i7-9700K, 32GB RAM, 10D→2D embedding*
 
-### Recent Performance Improvements (v2.0.8)
+### Latest Performance Improvements (v2.2.1)
+- ✅ **Enhanced Mid-Near Pair Sampling**: 67% increase in MN triplets for better global connectivity
+- ✅ **Clean Output**: Removed verbose debug output for professional usage
+- ✅ **Optimized Parameters**: Moved learningRate and useQuantization to end of API (rarely changed)
+- ✅ **Two-Image Comparison**: Direct KNN vs HNSW performance and quality comparison
+- ✅ **Parameter Control**: Full C# parameter control without hardcoded C++ overrides
+- ✅ **Improved Performance**: HNSW ~18% faster than Direct KNN (5.56s vs 6.87s)
+
+### Previous Improvements (v2.0.8)
 - ✅ **Critical Distance Fix**: 20% faster execution (4.75s vs 5.84s on mammoth dataset)
 - ✅ **Enhanced Debugging**: Adam optimization tracking and triplet analysis
 - ✅ **Improved Visualization**: 1600x1200 high-resolution embedding images
@@ -92,20 +100,27 @@ dotnet build src/PACMAPCSharp.sln
 using PacMapDotnet;
 
 // Create PACMAP instance
-var pacmap = new PacMapModel(
-    n_neighbors: 10,     // Number of nearest neighbors
-    MN_ratio: 0.5f,      // Mid-near pair ratio
-    FP_ratio: 2.0f,      // Far-pair ratio
-    lr: 1.0f,           // Learning rate
-    distance: DistanceMetric.Euclidean,
-    randomSeed: 42
-);
-
 // Generate sample data
 var data = GenerateSampleData(1000, 50); // 1000 samples, 50 dimensions
 
-// Fit and transform
-var embedding = pacmap.FitTransform(data);
+// Fit with optimized parameter order (learningRate and useQuantization at end)
+var embedding = pacmap.Fit(
+    data: data,
+    embeddingDimension: 2,
+    nNeighbors: 10,
+    mnRatio: 0.5f,
+    fpRatio: 2.0f,
+    numIters: (100, 100, 250),
+    metric: DistanceMetric.Euclidean,
+    forceExactKnn: false,
+    hnswM: 16,
+    hnswEfConstruction: 200,
+    hnswEfSearch: 200,
+    randomSeed: 42,
+    autoHNSWParam: true,
+    learningRate: 1.0f,      // Moved to end - rarely changed
+    useQuantization: false   // Moved to end - rarely changed
+);
 
 // embedding is now a float[1000, 2] array
 Console.WriteLine($"Embedding shape: [{embedding.GetLength(0)}, {embedding.GetLength(1)}]");
@@ -114,16 +129,20 @@ Console.WriteLine($"Embedding shape: [{embedding.GetLength(0)}, {embedding.GetLe
 ### Advanced Usage
 
 ```csharp
-// Custom optimization phases
-var pacmap = new PacMapModel(
-    n_neighbors: 15,
-    MN_ratio: 1.0f,
-    FP_ratio: 3.0f,
-    num_iters: (150, 150, 700), // Custom phase iterations
-    distance: DistanceMetric.Cosine,
-    forceExactKnn: false,        // Use HNSW optimization
-    useQuantization: true,       // Enable memory optimization
-    randomSeed: 12345
+// Custom optimization phases with enhanced mid-near pairs
+var embedding = pacmap.Fit(
+    data: data,
+    embeddingDimension: 2,
+    nNeighbors: 15,
+    mnRatio: 1.2f,              // Enhanced MN ratio for better global connectivity
+    fpRatio: 2.0f,
+    numIters: (200, 200, 400),  // Enhanced optimization phases
+    metric: DistanceMetric.Cosine,
+    forceExactKnn: false,       // Use HNSW optimization
+    randomSeed: 12345,
+    autoHNSWParam: true,
+    learningRate: 1.0f,         // Adam optimizer default
+    useQuantization: true       // Enable memory optimization
 );
 
 // Transform new data using existing model
@@ -140,16 +159,20 @@ var loadedModel = PacMapModel.Load("mymodel.pmm");
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `n_components` | int | 2 | Output embedding dimensions |
-| `n_neighbors` | int | 10 | Number of nearest neighbors |
-| `MN_ratio` | float | 0.5 | Mid-near pair ratio (global structure) |
-| `FP_ratio` | float | 2.0 | Far-pair ratio (uniform distribution) |
-| `lr` | float | 1.0 | Learning rate |
-| `num_iters` | tuple | (100, 100, 250) | Three-phase iterations |
-| `distance` | DistanceMetric | Euclidean | Distance metric |
+| `embeddingDimension` | int | 2 | Output embedding dimensions |
+| `nNeighbors` | int | 10 | Number of nearest neighbors |
+| `mnRatio` | float | 0.5 | Mid-near pair ratio (global structure) |
+| `fpRatio` | float | 2.0 | Far-pair ratio (uniform distribution) |
+| `numIters` | tuple | (100, 100, 250) | Three-phase iterations |
+| `metric` | DistanceMetric | Euclidean | Distance metric |
 | `forceExactKnn` | bool | false | Force exact nearest neighbors (slower) |
-| `useQuantization` | bool | false | Enable 16-bit quantization |
+| `hnswM` | int | 16 | HNSW graph degree parameter |
+| `hnswEfConstruction` | int | 200 | HNSW build quality parameter |
+| `hnswEfSearch` | int | 200 | HNSW query quality parameter |
 | `randomSeed` | int | -1 | Random seed for reproducibility |
+| `autoHNSWParam` | bool | true | Auto-tune HNSW parameters based on data size |
+| `learningRate` | float | 1.0 | Adam optimizer learning rate (rarely changed) |
+| `useQuantization` | bool | false | Enable 16-bit quantization (rarely changed) |
 
 ## 📈 Distance Metrics
 
@@ -250,7 +273,15 @@ dotnet test src/PACMAPCSharp/PACMAPCSharp.Tests/
 - **Memory Usage**: ~50MB for mammoth dataset
 - **Quality**: Preserves anatomical structure in 2D embedding
 
-### Recent Improvements (v2.0.8-DISTANCE-FIXED)
+### Latest Improvements (v2.2.1-CLEAN-OUTPUT)
+- ✅ **Enhanced Mid-Near Pair Sampling**: 67% increase in MN triplets for better global connectivity
+- ✅ **Clean Output**: Removed verbose debug output for professional usage
+- ✅ **Optimized Parameters**: Moved learningRate and useQuantization to end of API (rarely changed)
+- ✅ **Two-Image Comparison**: Direct KNN vs HNSW performance and quality comparison
+- ✅ **Parameter Control**: Full C# parameter control without hardcoded C++ overrides
+- ✅ **Improved Performance**: HNSW ~18% faster than Direct KNN (5.56s vs 6.87s)
+
+### Previous Improvements (v2.0.8-DISTANCE-FIXED)
 - ✅ **Critical Distance Fix**: Fixed distance calculation to match Rust implementation (+1 for numerical stability)
 - ✅ **20% Performance Boost**: Faster execution and better convergence (4.75s vs 5.84s)
 - ✅ **Enhanced Debugging**: Adam optimization tracking and detailed triplet analysis
@@ -314,13 +345,13 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) file for
 
 ## 🗺️ Roadmap
 
-### v2.0.8 (Current) - DISTANCE-FIXED
-- ✅ **Critical Distance Fix**: Fixed distance calculation to match Rust implementation (+1 for numerical stability)
-- ✅ **20% Performance Boost**: Faster execution and better convergence (4.75s vs 5.84s)
-- ✅ **Enhanced Debugging**: Adam optimization tracking and detailed triplet analysis
-- ✅ **High-Resolution Visualization**: 1600x1200 embedding images with 300 DPI
-- ✅ **Gaussian Test Suite**: Synthetic 3-cluster validation for algorithm verification
-- ✅ **Build Routine**: Proper 4-step build process to prevent binary mismatches
+### v2.2.1 (Current) - CLEAN-OUTPUT & ENHANCED MN
+- ✅ **Enhanced Mid-Near Pair Sampling**: 67% increase in MN triplets for better global connectivity
+- ✅ **Clean Output**: Removed verbose debug output for professional usage
+- ✅ **Optimized Parameters**: Moved learningRate and useQuantization to end of API (rarely changed)
+- ✅ **Two-Image Comparison**: Direct KNN vs HNSW performance and quality comparison
+- ✅ **Parameter Control**: Full C# parameter control without hardcoded C++ overrides
+- ✅ **Improved Performance**: HNSW ~18% faster than Direct KNN (5.56s vs 6.87s)
 - ✅ **All Previous Features**: Complete model persistence, CRC32 validation, exact KNN
 
 ### v2.0.7 - DEBUG-ENHANCED

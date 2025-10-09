@@ -145,7 +145,7 @@ namespace fit_utils {
             // CRITICAL FIX: Initialize embedding to match Rust implementation exactly
             // Rust uses simple random normal initialization without post-scaling
             std::mt19937 generator(random_seed >= 0 ? random_seed : 42);
-            std::normal_distribution<float> dist(0.0f, 0.1f); // Standard initialization similar to Rust
+            std::normal_distribution<float> dist(0.0f, 1e-4f); // CRITICAL FIX: Match reference implementation exactly
             for (size_t i = 0; i < embedding_size; i++) {
                 embedding[i] = dist(generator);
             }
