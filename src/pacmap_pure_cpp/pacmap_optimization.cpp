@@ -98,15 +98,11 @@ void optimize_embedding(PacMapModel* model, float* embedding_out, pacmap_progres
             }
             float grad_mean = grad_sum / gradients.size();
 
-            printf("[ADAM DEBUG] Gradients: min=%.6f, max=%.6f, mean=%.6f, nan=%d, inf=%d\n",
-                   grad_min, grad_max, grad_mean, grad_nan, grad_inf);
-
-            // CRITICAL ADAM STATE VERIFICATION
-            printf("[ADAM DEBUG] Adam state verification:\n");
-            printf("  - adam_m.size() = %zu (should equal embedding.size() = %zu)\n",
-                   model->adam_m.size(), embedding.size());
-            printf("  - adam_v.size() = %zu (should equal embedding.size() = %zu)\n",
-                   model->adam_v.size(), embedding.size());
+            // Only show gradient issues if they exist
+            if (grad_nan > 0 || grad_inf > 0 || grad_max > 100.0f) {
+                printf("   ⚠️  Gradient issues: min=%.6f, max=%.6f, nan=%d, inf=%d\n",
+                       grad_min, grad_max, grad_nan, grad_inf);
+            }
 
             // Sample Adam state statistics
             if (!model->adam_m.empty() && !model->adam_v.empty()) {
@@ -131,28 +127,7 @@ void optimize_embedding(PacMapModel* model, float* embedding_out, pacmap_progres
                     if (std::isnan(v_val)) v_nan++;
                 }
 
-                printf("[ADAM DEBUG] Adam m: min=%.6f, max=%.6f, mean=%.6f, zeros=%d, nans=%d\n",
-                       m_min, m_max, m_sum / model->adam_m.size(), m_zero, m_nan);
-                printf("[ADAM DEBUG] Adam v: min=%.6f, max=%.6f, mean=%.6f, zeros=%d, nans=%d\n",
-                       v_min, v_max, v_sum / model->adam_v.size(), v_zero, v_nan);
-
-                // Show first few Adam values for detailed inspection
-                printf("[ADAM DEBUG] First 5 Adam m/v pairs and updates:\n");
-                for (int i = 0; i < std::min(5, (int)model->adam_m.size()); ++i) {
-                    float grad = gradients[i];
-                    float m_old = model->adam_m[i];
-                    float v_old = model->adam_v[i];
-
-                    // Calculate what the update would be
-                    float m_new = model->adam_beta1 * m_old + (1.0f - model->adam_beta1) * grad;
-                    float v_new = model->adam_beta2 * v_old + (1.0f - model->adam_beta2) * grad * grad;
-                    float update = adam_lr * m_new / (std::sqrt(v_new) + model->adam_eps);
-
-                    printf("  [%d] grad=%.4f, m=%.4f->%.4f, v=%.4f->%.4f, update=%.4f\n",
-                           i, grad, m_old, m_new, v_old, v_new, update);
-                }
-            } else {
-                printf("[ADAM DEBUG] ERROR: Adam state arrays are empty!\n");
+                // Removed verbose Adam state debug for cleaner output
             }
         }
 
@@ -344,7 +319,8 @@ void apply_optimization_strategy(PacMapModel* model, OptimizationStrategy strate
 
         case OptimizationStrategy::MEMORY_EFFICIENT:
             // Reduce triplet counts for memory efficiency
-            model->mn_ratio *= 0.8f;
+            // ERROR11-FIX-DETERMINISTIC: Do not modify mn_ratio - it should come from C# interface
+            // model->mn_ratio *= 0.8f;  // REMOVED: Prevents C# parameter control
             model->fp_ratio *= 0.8f;
             break;
 

@@ -314,7 +314,7 @@ namespace PacMapSharp
         #region Constants
 
         // Expected DLL version - must match C++ PACMAP_WRAPPER_VERSION_STRING
-        private const string EXPECTED_DLL_VERSION = "2.1.0-GRADIENT-FIXED";
+        private const string EXPECTED_DLL_VERSION = "2.2.1-CLEAN-OUTPUT";
 
         #endregion
 
@@ -509,16 +509,16 @@ namespace PacMapSharp
         /// <param name="nNeighbors">Number of nearest neighbors (default: 10)</param>
         /// <param name="mnRatio">Mid-near pair ratio for global structure (default: 0.5)</param>
         /// <param name="fpRatio">Far-pair ratio for uniform distribution (default: 2.0)</param>
-        /// <param name="learningRate">Learning rate for AdaGrad optimizer (default: 0.1)</param>
         /// <param name="numIters">Three-phase iterations (phase1, phase2, phase3) (default: (100, 100, 250))</param>
         /// <param name="metric">Distance metric to use (default: Euclidean)</param>
         /// <param name="forceExactKnn">Force exact brute-force k-NN instead of HNSW approximation (default: false)</param>
         /// <param name="hnswM">HNSW graph degree parameter (default: 16)</param>
         /// <param name="hnswEfConstruction">HNSW build quality parameter (default: 200)</param>
         /// <param name="hnswEfSearch">HNSW query quality parameter (default: 200)</param>
-        /// <param name="useQuantization">Enable 16-bit quantization for memory reduction (default: false)</param>
         /// <param name="randomSeed">Random seed for reproducibility (default: -1 for non-deterministic)</param>
         /// <param name="autoHNSWParam">Auto-tune HNSW parameters based on data size (default: true)</param>
+        /// <param name="learningRate">Learning rate for Adam optimizer (default: 1.0)</param>
+        /// <param name="useQuantization">Enable 16-bit quantization for memory reduction (default: false)</param>
         /// <returns>Embedding coordinates [samples, embeddingDimension]</returns>
         /// <exception cref="ArgumentNullException">Thrown when data is null</exception>
         /// <exception cref="ArgumentException">Thrown when parameters are invalid</exception>
@@ -527,24 +527,24 @@ namespace PacMapSharp
                             int nNeighbors = 10,
                             float mnRatio = 0.5f,
                             float fpRatio = 2.0f,
-                            float learningRate = 0.1f,
                             (int, int, int) numIters = default((int, int, int)),
                             DistanceMetric metric = DistanceMetric.Euclidean,
                             bool forceExactKnn = false,
                             int hnswM = 16,
                             int hnswEfConstruction = 200,
                             int hnswEfSearch = 200,
-                            bool useQuantization = false,
                             int randomSeed = -1,
-                            bool autoHNSWParam = true)
+                            bool autoHNSWParam = true,
+                            float learningRate = 1.0f,
+                            bool useQuantization = false)
         {
             // Handle default value for numIters
             var actualNumIters = numIters.Equals(default((int, int, int))) ? (100, 100, 250) : numIters;
 
             return FitInternal(data, embeddingDimension, nNeighbors, mnRatio, fpRatio,
-                             learningRate, actualNumIters, metric, forceExactKnn,
+                             actualNumIters, metric, forceExactKnn,
                              progressCallback: null, hnswM, hnswEfConstruction, hnswEfSearch,
-                             useQuantization, randomSeed, autoHNSWParam);
+                             randomSeed, autoHNSWParam, learningRate, useQuantization);
         }
 
         /// <summary>
@@ -556,13 +556,13 @@ namespace PacMapSharp
         /// <param name="nNeighbors">Number of nearest neighbors (default: 10)</param>
         /// <param name="mnRatio">Mid-near pair ratio for global structure (default: 0.5)</param>
         /// <param name="fpRatio">Far-pair ratio for uniform distribution (default: 2.0)</param>
-        /// <param name="learningRate">Learning rate for AdaGrad optimizer (default: 0.1)</param>
         /// <param name="numIters">Three-phase iterations (phase1, phase2, phase3) (default: (100, 100, 250))</param>
         /// <param name="metric">Distance metric to use (default: Euclidean)</param>
         /// <param name="forceExactKnn">Force exact brute-force k-NN instead of HNSW approximation (default: false)</param>
-        /// <param name="useQuantization">Enable 16-bit quantization for memory reduction (default: false)</param>
         /// <param name="randomSeed">Random seed for reproducibility (default: -1 for non-deterministic)</param>
         /// <param name="autoHNSWParam">Auto-tune HNSW parameters based on data size (default: true)</param>
+        /// <param name="learningRate">Learning rate for Adam optimizer (default: 1.0)</param>
+        /// <param name="useQuantization">Enable 16-bit quantization for memory reduction (default: false)</param>
         /// <returns>Embedding coordinates [samples, embeddingDimension]</returns>
         /// <exception cref="ArgumentNullException">Thrown when data or progressCallback is null</exception>
         /// <exception cref="ArgumentException">Thrown when parameters are invalid</exception>
@@ -572,13 +572,13 @@ namespace PacMapSharp
                                        int nNeighbors = 10,
                                        float mnRatio = 0.5f,
                                        float fpRatio = 2.0f,
-                                       float learningRate = 0.1f,
                                        (int, int, int) numIters = default((int, int, int)),
                                        DistanceMetric metric = DistanceMetric.Euclidean,
                                        bool forceExactKnn = false,
-                                       bool useQuantization = false,
                                        int randomSeed = -1,
-                                       bool autoHNSWParam = true)
+                                       bool autoHNSWParam = true,
+                                       float learningRate = 1.0f,
+                                       bool useQuantization = false)
         {
             if (progressCallback == null)
                 throw new ArgumentNullException(nameof(progressCallback));
@@ -587,9 +587,9 @@ namespace PacMapSharp
             var actualNumIters = numIters.Equals(default((int, int, int))) ? (100, 100, 250) : numIters;
 
             return FitInternal(data, embeddingDimension, nNeighbors, mnRatio, fpRatio,
-                             learningRate, actualNumIters, metric, forceExactKnn,
+                             actualNumIters, metric, forceExactKnn,
                              progressCallback, hnswM: 16, hnswEfConstruction: 200, hnswEfSearch: 200,
-                             useQuantization, randomSeed, autoHNSWParam);
+                             randomSeed, autoHNSWParam, learningRate, useQuantization);
         }
 
         /// <summary>
@@ -752,7 +752,6 @@ namespace PacMapSharp
                                    int nNeighbors,
                                    float mnRatio,
                                    float fpRatio,
-                                   float learningRate,
                                    (int, int, int) numIters,
                                    DistanceMetric metric,
                                    bool forceExactKnn,
@@ -760,9 +759,10 @@ namespace PacMapSharp
                                    int hnswM = 16,
                                    int hnswEfConstruction = 200,
                                    int hnswEfSearch = 200,
-                                   bool useQuantization = false,
                                    int randomSeed = -1,
-                                   bool autoHNSWParam = true)
+                                   bool autoHNSWParam = true,
+                                   float learningRate = 1.0f,
+                                   bool useQuantization = false)
         {
             if (data == null)
                 throw new ArgumentNullException(nameof(data));

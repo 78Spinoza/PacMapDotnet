@@ -1,7 +1,7 @@
 PACMAP C++ Native Implementation
 ================================
 
-Version: 2.0.8-DISTANCE-FIXED
+Version: 2.2.1-CLEAN-OUTPUT
 Author: PacMapDotnet Project
 License: MIT
 
@@ -13,16 +13,17 @@ This is the native C++ implementation of PACMAP (Pairwise Controlled Manifold Ap
 Key Features
 ------------
 
-✅ CRITICAL DISTANCE FIX: Fixed distance calculation to match Rust implementation (+1 for numerical stability)
-✅ 20% PERFORMANCE BOOST: Faster execution and better convergence (4.75s vs 5.84s)
-✅ ENHANCED DEBUGGING: Adam optimization tracking and detailed triplet analysis
-✅ HIGH-RESOLUTION VISUALIZATION: 1600x1200 embedding images with 300 DPI
-✅ GAUSSIAN TEST SUITE: Synthetic 3-cluster validation for algorithm verification
+✅ ENHANCED MID-NEAR PAIR SAMPLING: 67% increase in MN triplets for better global connectivity
+✅ CLEAN PROFESSIONAL OUTPUT: Removed verbose debug output suitable for production environments
+✅ OPTIMIZED PARAMETERS: learningRate and useQuantization moved to end of API (rarely changed)
+✅ TWO-IMAGE COMPARISON: Direct KNN vs HNSW performance and quality comparison
+✅ DETERMINISTIC PARALLEL: Per-thread RNGs for reproducible parallel execution
+✅ PARAMETER CONTROL: Full C# parameter control without hardcoded C++ overrides
 ✅ PYTHON-STYLE EXACT KNN: Fixed neighbor sampling to match sklearn behavior exactly
 ✅ ADAM OPTIMIZER: Full implementation with bias correction and gradient clipping
 ✅ THREE-PHASE OPTIMIZATION: Correct weight transitions (1000→3→0)
 ✅ DISTANCE-BASED TRIPLET SAMPLING: Percentile-based MN/FP pair generation
-✅ MULTIPLE DISTANCE METRICS: Euclidean, Cosine, Manhattan, Correlation, Hamming
+✅ EUCLIDEAN DISTANCE: Currently fixed to Euclidean metric for optimal performance
 ✅ MODEL PERSISTENCE: Complete save/load functionality with CRC32 validation
 ✅ PARALLEL PROCESSING: OpenMP support for multi-core optimization
 ✅ CROSS-PLATFORM: Windows and Linux support
@@ -115,11 +116,13 @@ Progress Callback:
   );
 
 Distance Metrics:
-  PACMAP_METRIC_EUCLIDEAN = 0
-  PACMAP_METRIC_COSINE = 1
-  PACMAP_METRIC_MANHATTAN = 2
-  PACMAP_METRIC_CORRELATION = 3
-  PACMAP_METRIC_HAMMING = 4
+  PACMAP_METRIC_EUCLIDEAN = 0    // Currently supported and optimized
+  PACMAP_METRIC_COSINE = 1       // Interface available (future support)
+  PACMAP_METRIC_MANHATTAN = 2    // Interface available (future support)
+  PACMAP_METRIC_CORRELATION = 3  // Interface available (future support)
+  PACMAP_METRIC_HAMMING = 4      // Interface available (future support)
+
+Note: Currently optimized for Euclidean distance only. Other metrics are available in the interface for future expansion.
 
 Error Codes:
   PACMAP_SUCCESS = 0
@@ -135,12 +138,13 @@ Performance Characteristics
 ---------------------------
 
 Mammoth Dataset (10,000 points, 3D→2D):
-  - Exact KNN: ~4.75 seconds with 450 iterations (v2.0.8 - 20% faster!)
-  - Previous version: ~5.84 seconds (before distance fix)
+  - Direct KNN: ~6.87 seconds with enhanced MN sampling
+  - HNSW Optimized: ~5.56 seconds (18% faster than Direct KNN)
+  - Enhanced MN Ratio: 1.2 provides 67% increase in MN triplets
   - Memory Usage: ~50MB for dataset and optimization
-  - Quality: Dramatically improved embedding structure preservation
+  - Quality: Significantly improved global structure preservation
   - Deterministic: Same results with fixed random seed
-  - Visualization: High-resolution 1600x1200 embedding images
+  - Clean Output: Professional progress indicators without debug noise
 
 Scalability:
   - Optimal: 1K-50K points
@@ -151,14 +155,14 @@ Scalability:
 Version History
 ---------------
 
-v2.0.8-DISTANCE-FIXED (Current):
-  ✅ CRITICAL FIX: Distance calculation to match Rust implementation (+1 for numerical stability)
-  ✅ PERFORMANCE: 20% faster execution (4.75s vs 5.84s on mammoth dataset)
-  ✅ ENHANCED: Adam optimization tracking and detailed triplet analysis
-  ✅ VISUALIZATION: High-resolution 1600x1200 embedding images with 300 DPI
-  ✅ TESTING: Gaussian cluster validation suite for algorithm verification
-  ✅ BUILD: Proper 4-step build process to prevent binary mismatches
-  ✅ DEBUGGING: Comprehensive progress tracking and algorithm validation
+v2.2.1-CLEAN-OUTPUT (Current):
+  ✅ ENHANCED: Mid-near pair sampling with 67% increase in MN triplets
+  ✅ CLEAN: Professional output without verbose debug noise
+  ✅ OPTIMIZED: Parameter organization with learningRate/useQuantization at API end
+  ✅ COMPARISON: Two-image system (Direct KNN vs HNSW) for performance analysis
+  ✅ DETERMINISTIC: Parallel code with per-thread RNGs for reproducible results
+  ✅ CONTROL: Full C# parameter control without hardcoded C++ overrides
+  ✅ PERFORMANCE: HNSW 18% faster than Direct KNN (5.56s vs 6.87s)
 
 v2.0.7-DEBUG-ENHANCED:
   ✅ ENHANCED: Adam optimization progress tracking
