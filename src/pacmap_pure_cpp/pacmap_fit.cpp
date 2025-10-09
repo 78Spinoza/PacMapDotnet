@@ -63,9 +63,7 @@ namespace fit_utils {
             model->learning_rate = learning_rate;
             model->initialization_std_dev = initialization_std_dev;
 
-            printf("[FIT DEBUG] Init: n_samples=%d, n_dim=%d, embed_dim=%d, n_neighbors=%d, mn_ratio=%.2f, fp_ratio=%.2f, init_std_dev=%.6f\n",
-                   n_obs, n_dim, embedding_dim, n_neighbors, mn_ratio, fp_ratio, initialization_std_dev);
-            model->phase1_iters = phase1_iters;
+              model->phase1_iters = phase1_iters;
             model->phase2_iters = phase2_iters;
             model->phase3_iters = phase3_iters;
             model->metric = metric;
@@ -78,7 +76,7 @@ namespace fit_utils {
 
             
             if (progress_callback) {
-                progress_callback("Initializing PACMAP", 0, 100, 5.0f, "Setting up model parameters");
+                progress_callback("Initializing PACMAP", 1, 10, 10.0f, "Setting up model parameters");
             }
 
             // Convert input data to vector format and store in model for KNN direct mode
@@ -120,26 +118,24 @@ namespace fit_utils {
 
 
             if (progress_callback) {
-                progress_callback("Data Normalization", 1, 100, 10.0f, "Computing feature statistics");
+                progress_callback("Data Normalization", 2, 10, 20.0f, "Computing feature statistics");
             }
 
             // PACMAP Step 1: Triplet Sampling
             if (progress_callback) {
-                progress_callback("Triplet Sampling", 2, 100, 15.0f, "Sampling neighbor, mid-near, and far triplets");
+                progress_callback("Triplet Sampling", 3, 10, 30.0f, "Sampling neighbor, mid-near, and far triplets");
             }
 
             sample_triplets(model, normalized_data.data(), progress_callback);
 
-            printf("[FIT DEBUG] Triplets: total=%d, neighbor=%d, mn=%d, fp=%d\n",
-                   model->total_triplets, model->neighbor_triplets, model->mid_near_triplets, model->far_triplets);
-
+    
             // Initialize Adam optimizer state (handled in optimization loop)
             size_t embedding_size = static_cast<size_t>(n_obs) * static_cast<size_t>(embedding_dim);
             // Adam state is now initialized in the optimization function
 
 
             if (progress_callback) {
-                progress_callback("Optimizer Setup", 3, 100, 20.0f, "Initializing Adam optimizer state");
+                progress_callback("Optimizer Setup", 4, 10, 40.0f, "Initializing Adam optimizer state");
             }
 
             // CRITICAL FIX: Initialize embedding to match Rust implementation exactly
@@ -156,7 +152,7 @@ namespace fit_utils {
 
             // PACMAP Step 2: Three-phase Optimization
             if (progress_callback) {
-                progress_callback("Optimization", 4, 100, 25.0f, "Starting three-phase PACMAP optimization");
+                progress_callback("Three-phase Optimization", 5, 10, 50.0f, "Starting three-phase PACMAP optimization");
             }
 
             auto opt_start = std::chrono::high_resolution_clock::now();
@@ -172,9 +168,7 @@ namespace fit_utils {
             float init_std = 0.0f;
             for (float e : embedding_vec) init_std += (e - init_mean) * (e - init_mean);
             init_std = std::sqrt(init_std / embedding_vec.size());
-            printf("[FIT DEBUG] Final Embedding: mean=%.4f, std=%.4f, target_std=%.6f\n",
-                   init_mean, init_std, initialization_std_dev);
-
+      
             // Compute embedding statistics for transform safety
             std::vector<float> embedding_distances;
             int sample_size = std::min(n_obs, 1000);
@@ -212,7 +206,7 @@ namespace fit_utils {
     
             // Build embedding space HNSW index for AI inference and transform analysis
             if (progress_callback) {
-                progress_callback("Building Embedding Space Index", 99, 100, 99.0f, "Creating HNSW index for AI inference");
+                progress_callback("Building Embedding Space Index", 9, 10, 90.0f, "Creating HNSW index for AI inference");
             }
 
             try {
@@ -234,7 +228,7 @@ namespace fit_utils {
                 }
 
                 if (progress_callback) {
-                    progress_callback("Embedding Space Index Complete", 100, 100, 100.0f,
+                    progress_callback("Embedding Space Index Complete", 10, 10, 100.0f,
                                     "HNSW embedding index built successfully for AI inference");
                 }
             }
@@ -250,7 +244,7 @@ namespace fit_utils {
             model->is_fitted = true;
 
             if (progress_callback) {
-                progress_callback("PACMAP Complete", 100, 100, 100.0f, "PACMAP fitting completed successfully");
+                progress_callback("PACMAP Complete", 10, 10, 100.0f, "PACMAP fitting completed successfully");
             }
 
             return PACMAP_SUCCESS;

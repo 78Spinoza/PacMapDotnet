@@ -81,30 +81,10 @@ void sample_triplets(PacMapModel* model, float* data, pacmap_progress_callback_i
             type_counts[triplet.type]++;
         }
 
-        printf("[PAIR DEBUG] Triplet Analysis:\n");
-        printf("  - Total triplets: %zu\n", model->triplets.size());
-        printf("  - Unique anchors: %zu (%.1f%% of all points)\n",
-               unique_anchors.size(), 100.0f * unique_anchors.size() / model->n_samples);
-        printf("  - Unique neighbors: %zu\n", unique_neighbors.size());
-        printf("  - Type distribution: NEIGHBOR=%d, MID_NEAR=%d, FURTHER=%d\n",
-               type_counts[NEIGHBOR], type_counts[MID_NEAR], type_counts[FURTHER]);
+              // Triplet analysis completed - detailed output disabled for clean interface
+        // Progress is now reported via the enhanced progress callback system
 
-        // Sample first few triplets for inspection with distance analysis
-        printf("[PAIR DEBUG] Sample triplets (first 10):\n");
-        for (int i = 0; i < std::min(10, (int)model->triplets.size()); ++i) {
-            const auto& t = model->triplets[i];
-            float distance = compute_sampling_distance(
-                normalized_data.data() + t.anchor * model->n_features,
-                normalized_data.data() + t.neighbor * model->n_features,
-                model->n_features, model->metric);
-
-            const char* type_str = (t.type == NEIGHBOR) ? "NEIGHBOR" :
-                                   (t.type == MID_NEAR) ? "MID_NEAR" : "FURTHER";
-            printf("  %d: (%d,%d) type=%s dist=%.3f\n", i, t.anchor, t.neighbor, type_str, distance);
-        }
-
-        // Distance statistics by type
-        printf("[PAIR DEBUG] Distance statistics by triplet type:\n");
+        // Distance statistics by type - output disabled for clean interface
         for (auto const& [type, count] : type_counts) {
             if (count == 0) continue;
 
@@ -127,11 +107,7 @@ void sample_triplets(PacMapModel* model, float* data, pacmap_progress_callback_i
                 valid_samples++;
             }
 
-            const char* type_str = (type == NEIGHBOR) ? "NEIGHBOR" :
-                                   (type == MID_NEAR) ? "MID_NEAR" : "FURTHER";
-            printf("  %s: count=%d, dist_range=[%.3f, %.3f], avg=%.3f\n",
-                   type_str, count, min_dist, max_dist,
-                   valid_samples > 0 ? total_dist / valid_samples : 0.0f);
+            // Distance statistics output disabled for clean interface
         }
     }
 
@@ -141,7 +117,7 @@ void sample_triplets(PacMapModel* model, float* data, pacmap_progress_callback_i
     model->mid_near_triplets = static_cast<int>(mn_triplets.size());
     model->far_triplets = static_cast<int>(fp_triplets.size());
 
-    printf("[TRIPLET DEBUG] Completed sampling: %zu total triplets generated\n", model->triplets.size());
+        // Triplet sampling completed - detailed output disabled for clean interface
     callback("Sampling Triplets", 100, 100, 100.0f, nullptr);
 }
 
@@ -150,13 +126,11 @@ void sample_neighbors_pair(PacMapModel* model, const std::vector<float>& normali
 
     neighbor_triplets.clear();
     neighbor_triplets.reserve(model->n_samples * model->n_neighbors);
-    printf("[DEBUG] Using PYTHON-STYLE neighbor pair sampling (simple sklearn approach)\n");
 
     // PYTHON-style approach: Exactly like sklearn NearestNeighbors
     // Find k+1 neighbors (including self), then skip self when creating pairs
 
     if (model->force_exact_knn) {
-        printf("[DEBUG] Using EXACT k-NN (brute-force) like Python sklearn\n");
 
         #pragma omp parallel for if(model->n_samples > 1000)
         for (int i = 0; i < model->n_samples; ++i) {
@@ -183,7 +157,7 @@ void sample_neighbors_pair(PacMapModel* model, const std::vector<float>& normali
             }
         }
     } else {
-        printf("[DEBUG] Using HNSW k-NN like Python sklearn\n");
+            // HNSW k-NN mode enabled - detailed output disabled for clean interface
 
         #pragma omp parallel for if(model->n_samples > 1000)
         for (int i = 0; i < model->n_samples; ++i) {
@@ -211,14 +185,12 @@ void sample_neighbors_pair(PacMapModel* model, const std::vector<float>& normali
         }
     }
 
-    printf("[DEBUG] PYTHON-STYLE neighbor sampling completed: %d neighbor triplets generated\n", (int)neighbor_triplets.size());
-}
+   }
 
 void sample_MN_pair(PacMapModel* model, const std::vector<float>& normalized_data,
                    std::vector<Triplet>& mn_triplets, int n_mn) {
 
     mn_triplets.clear();
-    printf("[DEBUG] ERROR11-FIX-DETERMINISTIC: Using IMPROVED mid-near sampling with deterministic parallel code\n");
 
     // ERROR11-FIX-DETERMINISTIC: Improved mid-near sampling with guaranteed pairs per point
     // Supports both exact KNN (current) and HNSW (future speed optimization)
@@ -279,10 +251,7 @@ void sample_MN_pair(PacMapModel* model, const std::vector<float>& normalized_dat
         size_t actual_extended_k = neighbors.size();
         int current_extended_k = extended_k;
         if (actual_extended_k < static_cast<size_t>(extended_k)) {
-            if (i % 1000 == 0) { // Debug only for some points to avoid spam
-                printf("[DEBUG] Point %d has only %zu neighbors < %d, adjusting sampling\n",
-                       i, actual_extended_k, extended_k);
-            }
+            // Note: Sampling adjustment debug output disabled for clean interface
             current_extended_k = static_cast<int>(actual_extended_k);  // Adjust dynamically
         }
 
@@ -295,9 +264,7 @@ void sample_MN_pair(PacMapModel* model, const std::vector<float>& normalized_dat
         }
 
         if (mn_candidates.empty()) {
-            if (i % 1000 == 0) { // Debug only for some points to avoid spam
-                printf("[DEBUG] Point %d has no mid-near candidates, skipping\n", i);
-            }
+            // Note: Skip points without mid-near candidates - debug output disabled for clean interface
             continue;  // Skip if no mid-near available
         }
 
@@ -321,15 +288,12 @@ void sample_MN_pair(PacMapModel* model, const std::vector<float>& normalized_dat
         }
     }
 
-    printf("[DEBUG] ERROR11-FIX: MN sampling completed: target %d, found %d triplets (force_exact_knn=%d)\n",
-           n_mn * model->n_samples, static_cast<int>(mn_triplets.size()), model->force_exact_knn);
-}
+    }
 
 void sample_FP_pair(PacMapModel* model, const std::vector<float>& normalized_data,
                    std::vector<Triplet>& fp_triplets, int n_fp) {
 
     fp_triplets.clear();
-    printf("[DEBUG] CRITICAL FIX: Using RANDOM FP sampling without distance filtering (matching Rust implementation)\n");
 
     // CRITICAL FIX: Switch to pure random sampling (matching Rust sampling.rs)
     // Sample random points excluding neighbors and self, no distance filtering
@@ -375,8 +339,7 @@ void sample_FP_pair(PacMapModel* model, const std::vector<float>& normalized_dat
         }
     }
 
-    printf("[DEBUG] RANDOM FP sampling completed: %d triplets generated\n", (int)fp_triplets.size());
-}
+    }
 
 void distance_based_sampling(PacMapModel* model, const std::vector<float>& data,
                            int oversample_factor, int target_pairs, float min_dist, float max_dist,

@@ -1,7 +1,7 @@
 PACMAP C++ Native Implementation
 ================================
 
-Version: 2.2.1-CLEAN-OUTPUT
+Version: 2.3.0-ENHANCED-PROGRESS
 Author: PacMapDotnet Project
 License: MIT
 

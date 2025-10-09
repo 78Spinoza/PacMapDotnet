@@ -284,22 +284,22 @@ namespace PacMapDemo
                     PlotAreaBorderColor = OxyColors.Black
                 };
 
-                // Add X-Y axes for 2D embedding with symmetric coordinate system
+                // Add X-Y axes for 2D embedding with improved zoom range and label space
                 plotModel.Axes.Add(new LinearAxis {
                     Position = AxisPosition.Bottom,
                     Title = "X Coordinate (PacMAP Dimension 1)",
-                    Minimum = -60,
-                    Maximum = 60,
-                    MajorStep = 20,
-                    MinorStep = 10
+                    Minimum = -25,
+                    Maximum = 40,
+                    MajorStep = 10,
+                    MinorStep = 5
                 });
                 plotModel.Axes.Add(new LinearAxis {
                     Position = AxisPosition.Left,
                     Title = "Y Coordinate (PacMAP Dimension 2)",
-                    Minimum = -60,
-                    Maximum = 60,
-                    MajorStep = 20,
-                    MinorStep = 10
+                    Minimum = -30,
+                    Maximum = 30,
+                    MajorStep = 10,
+                    MinorStep = 5
                 });
 
                 // Add legend with standard configuration
@@ -516,6 +516,10 @@ namespace PacMapDemo
             plotModel.Axes.Add(new LinearAxis {
                 Position = AxisPosition.Bottom,
                 Title = "X",
+                Minimum = -25,
+                Maximum = 40,
+                MajorStep = 10,
+                MinorStep = 5,
                 AxislineColor = OxyColors.Black,
                 TicklineColor = OxyColors.Black,
                 TextColor = OxyColors.Black
@@ -523,6 +527,10 @@ namespace PacMapDemo
             plotModel.Axes.Add(new LinearAxis {
                 Position = AxisPosition.Left,
                 Title = "Y",
+                Minimum = -30,
+                Maximum = 30,
+                MajorStep = 10,
+                MinorStep = 5,
                 AxislineColor = OxyColors.Black,
                 TicklineColor = OxyColors.Black,
                 TextColor = OxyColors.Black

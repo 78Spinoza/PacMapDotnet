@@ -22,20 +22,14 @@ std::tuple<float, float, float> get_weights(int current_iter, int phase1_end, in
         float progress = (float)current_iter / phase1_end;
         w_n = 2.0f;  // FIXED: Should be 2.0f to match Rust exactly
         w_mn = 1000.0f * (1.0f - progress) + 3.0f * progress;  // 1000→3 (correct)
-        printf("[WEIGHT DEBUG] Phase 1 (iter %d): w_n=%.1f, w_mn=%.1f, progress=%.2f\n",
-               current_iter, w_n, w_mn, progress);
     } else if (current_iter < phase2_end) {
         // Phase 2: Balance phase (10-40%): stable weights
         w_n = 3.0f;  // FIXED: Should be 3.0f to match Rust exactly
         w_mn = 3.0f;  // Correct
-        printf("[WEIGHT DEBUG] Phase 2 (iter %d): w_n=%.1f, w_mn=%.1f\n",
-               current_iter, w_n, w_mn);
     } else {
         // Phase 3: Local structure (40-100%): w_mn = 0 fixed (no mid-near attraction)
         w_n = 1.0f;  // Correct - matches Rust
         w_mn = 0.0f;  // FIXED: No mid-near attraction in local refinement phase
-        printf("[WEIGHT DEBUG] Phase 3 (iter %d): w_n=%.1f, w_mn=%.1f (FIXED - should be 0!)\n",
-               current_iter, w_n, w_mn);
     }
 
     return {w_n, w_mn, w_f};
@@ -47,9 +41,7 @@ void compute_gradients(const std::vector<float>& embedding, const std::vector<Tr
     gradients.assign(embedding.size(), 0.0f);
 
     // Progress-friendly gradient computation
-    if (triplets.size() > 10000) {
-        printf("   Computing gradients on %zu triplets...\n", triplets.size());
-    }
+    // Note: Progress is now reported via the enhanced progress callback system
 
     // Parallel gradient computation with atomic operations (review requirement)
     #pragma omp parallel for schedule(dynamic, 1000)
@@ -129,9 +121,7 @@ void compute_gradients(const std::vector<float>& embedding, const std::vector<Tr
 float compute_pacmap_loss(const std::vector<float>& embedding, const std::vector<Triplet>& triplets,
                          float w_n, float w_mn, float w_f, int n_components) {
 
-    printf("[LOSS DEBUG] Computing loss: n_triplets=%zu, w_n=%.1f, w_mn=%.1f, w_f=%.1f\n",
-           triplets.size(), w_n, w_mn, w_f);
-    // CRITICAL FIX: Updated loss function from error5.txt
+        // CRITICAL FIX: Updated loss function from error5.txt
     float total_loss = 0.0f;
 
     for (const auto& triplet : triplets) {
@@ -155,7 +145,7 @@ float compute_pacmap_loss(const std::vector<float>& embedding, const std::vector
                 // NEW LOSS: w_n * 10.0f * d_ij² / (10.0f + d_ij²)
                 loss_term = w_n * 10.0f * d_ij * d_ij / (10.0f + d_ij * d_ij);
                 if (triplet.anchor == 0 && triplet.neighbor == 1) {
-                    printf("[DEBUG] NEW LOSS FUNCTION ACTIVE! NEIGHBOR loss=%.6f, dist=%.6f\n", loss_term, d_ij);
+                    // Note: Loss function debugging disabled for clean output
                 }
                 break;
             case MID_NEAR:
@@ -173,8 +163,7 @@ float compute_pacmap_loss(const std::vector<float>& embedding, const std::vector
     }
 
     float avg_loss = total_loss / static_cast<float>(triplets.size());  // Average loss
-    printf("[LOSS DEBUG] Loss: %.4e, n_triplets=%zu\n", avg_loss, triplets.size());
-    return avg_loss;
+        return avg_loss;
 }
 
 bool check_convergence(const std::vector<float>& loss_history, float threshold, int window) {
