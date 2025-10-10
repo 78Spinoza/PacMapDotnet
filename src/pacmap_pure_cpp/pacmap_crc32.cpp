@@ -123,4 +123,19 @@ namespace crc_utils {
         return hash ^ 0xFFFFFFFF;
     }
 
+    uint32_t update_crc32(uint32_t crc, const void* data, size_t length) {
+        uint32_t new_crc = crc ^ 0xFFFFFFFF; // Convert from final format to running format
+        const uint8_t* bytes = static_cast<const uint8_t*>(data);
+
+        for (size_t i = 0; i < length; ++i) {
+            new_crc = crc32_table[(new_crc ^ bytes[i]) & 0xFF] ^ (new_crc >> 8);
+        }
+
+        return new_crc ^ 0xFFFFFFFF; // Convert back to final format
+    }
+
+    uint32_t init_crc32() {
+        return 0xFFFFFFFF; // Initial CRC value
+    }
+
 } // namespace crc_utils

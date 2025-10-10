@@ -254,7 +254,9 @@ namespace PacMapSharp
                                                       out float minEmbeddingDistance, out float p95EmbeddingDistance, out float p99EmbeddingDistance,
                                                       out float mildEmbeddingOutlierThreshold, out float extremeEmbeddingOutlierThreshold,
                                                       out float meanEmbeddingDistance, out float stdEmbeddingDistance,
-                                                      out uint originalSpaceCrc, out uint embeddingSpaceCrc, out uint modelVersionCrc);
+                                                      out uint originalSpaceCrc, out uint embeddingSpaceCrc, out uint modelVersionCrc,
+                                                      out float initializationStdDev, out int alwaysSaveEmbeddingData,
+                                                      out float p25Distance, out float p75Distance, out float adamEps);
 
         [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_is_fitted")]
         private static extern int WindowsIsFitted(IntPtr model);
@@ -301,7 +303,9 @@ namespace PacMapSharp
                                                     out float minEmbeddingDistance, out float p95EmbeddingDistance, out float p99EmbeddingDistance,
                                                     out float mildEmbeddingOutlierThreshold, out float extremeEmbeddingOutlierThreshold,
                                                     out float meanEmbeddingDistance, out float stdEmbeddingDistance,
-                                                    out uint originalSpaceCrc, out uint embeddingSpaceCrc, out uint modelVersionCrc);
+                                                    out uint originalSpaceCrc, out uint embeddingSpaceCrc, out uint modelVersionCrc,
+                                                    out float initializationStdDev, out int alwaysSaveEmbeddingData,
+                                                    out float p25Distance, out float p75Distance, out float adamEps);
 
         [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_is_fitted")]
         private static extern int LinuxIsFitted(IntPtr model);
@@ -314,7 +318,7 @@ namespace PacMapSharp
         #region Constants
 
         // Expected DLL version - must match C++ PACMAP_WRAPPER_VERSION_STRING
-        private const string EXPECTED_DLL_VERSION = "2.3.0-ENHANCED-PROGRESS";
+        private const string EXPECTED_DLL_VERSION = "2.4.0-PERSIST";
 
         #endregion
 
@@ -408,7 +412,9 @@ namespace PacMapSharp
                                                   out var minEmbeddingDistance, out var p95EmbeddingDistance, out var p99EmbeddingDistance,
                                                   out var mildEmbeddingOutlierThreshold, out var extremeEmbeddingOutlierThreshold,
                                                   out var meanEmbeddingDistance, out var stdEmbeddingDistance,
-                                                  out var originalSpaceCrc, out var embeddingSpaceCrc, out var modelVersionCrc);
+                                                  out var originalSpaceCrc, out var embeddingSpaceCrc, out var modelVersionCrc,
+                                                  out var initializationStdDev, out var alwaysSaveEmbeddingData,
+                                                  out var p25Distance, out var p75Distance, out var adamEps);
                 ThrowIfError(result);
 
                 return new PacMapModelInfo(nVertices, nDim, embeddingDim, nNeighbors, mnRatio, fpRatio, metric, hnswM, hnswEfConstruction, hnswEfSearch,
@@ -416,7 +422,9 @@ namespace PacMapSharp
                                           minEmbeddingDistance, p95EmbeddingDistance, p99EmbeddingDistance,
                                           mildEmbeddingOutlierThreshold, extremeEmbeddingOutlierThreshold,
                                           meanEmbeddingDistance, stdEmbeddingDistance,
-                                          originalSpaceCrc, embeddingSpaceCrc, modelVersionCrc);
+                                          originalSpaceCrc, embeddingSpaceCrc, modelVersionCrc,
+                                          initializationStdDev, alwaysSaveEmbeddingData != 0,
+                                          p25Distance, p75Distance, adamEps);
             }
         }
 
@@ -914,20 +922,24 @@ namespace PacMapSharp
                                               out float minEmbeddingDistance, out float p95EmbeddingDistance, out float p99EmbeddingDistance,
                                               out float mildEmbeddingOutlierThreshold, out float extremeEmbeddingOutlierThreshold,
                                               out float meanEmbeddingDistance, out float stdEmbeddingDistance,
-                                              out uint originalSpaceCrc, out uint embeddingSpaceCrc, out uint modelVersionCrc)
+                                              out uint originalSpaceCrc, out uint embeddingSpaceCrc, out uint modelVersionCrc,
+                                              out float initializationStdDev, out int alwaysSaveEmbeddingData,
+                                              out float p25Distance, out float p75Distance, out float adamEps)
         {
             return IsWindows ? WindowsGetModelInfo(model, out nVertices, out nDim, out embeddingDim, out nNeighbors,
                                                       out mnRatio, out fpRatio, out metric, out hnswM, out hnswEfConstruction, out hnswEfSearch,
                                                       out forceExactKnn, out randomSeed, out minEmbeddingDistance, out p95EmbeddingDistance, out p99EmbeddingDistance,
                                                       out mildEmbeddingOutlierThreshold, out extremeEmbeddingOutlierThreshold,
                                                       out meanEmbeddingDistance, out stdEmbeddingDistance,
-                                                      out originalSpaceCrc, out embeddingSpaceCrc, out modelVersionCrc)
+                                                      out originalSpaceCrc, out embeddingSpaceCrc, out modelVersionCrc,
+                                                      out initializationStdDev, out alwaysSaveEmbeddingData, out p25Distance, out p75Distance, out adamEps)
                              : LinuxGetModelInfo(model, out nVertices, out nDim, out embeddingDim, out nNeighbors,
                                                      out mnRatio, out fpRatio, out metric, out hnswM, out hnswEfConstruction, out hnswEfSearch,
                                                      out forceExactKnn, out randomSeed, out minEmbeddingDistance, out p95EmbeddingDistance, out p99EmbeddingDistance,
                                                      out mildEmbeddingOutlierThreshold, out extremeEmbeddingOutlierThreshold,
                                                      out meanEmbeddingDistance, out stdEmbeddingDistance,
-                                                     out originalSpaceCrc, out embeddingSpaceCrc, out modelVersionCrc);
+                                                     out originalSpaceCrc, out embeddingSpaceCrc, out modelVersionCrc,
+                                                     out initializationStdDev, out alwaysSaveEmbeddingData, out p25Distance, out p75Distance, out adamEps);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -1293,6 +1305,33 @@ namespace PacMapSharp
         /// </summary>
         public uint ModelVersionCrc { get; }
 
+        /// <summary>
+        /// Gets the standard deviation used for embedding initialization during training
+        /// </summary>
+        public float InitializationStdDev { get; }
+
+        /// <summary>
+        /// Gets whether embedding data is always saved during model persistence
+        /// </summary>
+        public bool AlwaysSaveEmbeddingData { get; }
+
+        /// <summary>
+        /// Gets the 25th percentile distance in the original feature space
+        /// Used for distance-based sampling and outlier detection
+        /// </summary>
+        public float P25Distance { get; }
+
+        /// <summary>
+        /// Gets the 75th percentile distance in the original feature space
+        /// Used for distance-based sampling and outlier detection
+        /// </summary>
+        public float P75Distance { get; }
+
+        /// <summary>
+        /// Gets the Adam optimizer epsilon parameter for numerical stability
+        /// </summary>
+        public float AdamEps { get; }
+
         internal PacMapModelInfo(int trainingSamples, int inputDimension, int outputDimension, int neighbors,
                                float mnRatio, float fpRatio, DistanceMetric metric,
                                int hnswM, int hnswEfConstruction, int hnswEfSearch,
@@ -1300,7 +1339,9 @@ namespace PacMapSharp
                                float minEmbeddingDistance, float p95EmbeddingDistance, float p99EmbeddingDistance,
                                float mildEmbeddingOutlierThreshold, float extremeEmbeddingOutlierThreshold,
                                float meanEmbeddingDistance, float stdEmbeddingDistance,
-                               uint originalSpaceCrc, uint embeddingSpaceCrc, uint modelVersionCrc)
+                               uint originalSpaceCrc, uint embeddingSpaceCrc, uint modelVersionCrc,
+                               float initializationStdDev, bool alwaysSaveEmbeddingData,
+                               float p25Distance, float p75Distance, float adamEps)
         {
             TrainingSamples = trainingSamples;
             InputDimension = inputDimension;
@@ -1326,6 +1367,13 @@ namespace PacMapSharp
             OriginalSpaceCrc = originalSpaceCrc;
             EmbeddingSpaceCrc = embeddingSpaceCrc;
             ModelVersionCrc = modelVersionCrc;
+
+            // Additional persistence fields
+            InitializationStdDev = initializationStdDev;
+            AlwaysSaveEmbeddingData = alwaysSaveEmbeddingData;
+            P25Distance = p25Distance;
+            P75Distance = p75Distance;
+            AdamEps = adamEps;
         }
 
         /// <summary>

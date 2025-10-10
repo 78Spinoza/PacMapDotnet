@@ -34,4 +34,10 @@ namespace crc_utils {
     std::string crc32_to_string(uint32_t crc);
     uint32_t string_to_crc32(const std::string& str);
 
+    // Update CRC32 with new data (for incremental computation)
+    uint32_t update_crc32(uint32_t crc, const void* data, size_t length);
+
+    // Initialize CRC32 computation (returns initial value)
+    uint32_t init_crc32();
+
 } // namespace crc_utils

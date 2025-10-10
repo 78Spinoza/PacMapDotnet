@@ -4,9 +4,9 @@
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey)](https://github.com/78Spinoza/PacMapDotnet)
 [![C#](https://img.shields.io/badge/C%23-8.0+-blue)](https://github.com/78Spinoza/PacMapDotnet)
-[![Version](https://img.shields.io/badge/version-2.2.1-orange)](https://github.com/78Spinoza/PacMapDotnet)
+[![Version](https://img.shields.io/badge/version-2.4.0--PERSIST-orange)](https://github.com/78Spinoza/PacMapDotnet)
 
-A C#/.NET implementation of **PACMAP** (Pairwise Controlled Manifold Approximation and Projection) with native C++ optimization using HNSW for efficient dimensionality reduction. **Version 2.2.1** introduces enhanced mid-near pair sampling, clean output, and optimized parameter organization.
+A C#/.NET implementation of **PACMAP** (Pairwise Controlled Manifold Approximation and Projection) with native C++ optimization using HNSW for efficient dimensionality reduction. **Version 2.4.0-PERSIST** introduces enhanced model persistence with comprehensive state preservation, fixed field ordering, and CRC32 validation.
 
 ## 🚀 Features
 
@@ -30,13 +30,13 @@ A C#/.NET implementation of **PACMAP** (Pairwise Controlled Manifold Approximati
 
 *Benchmark: Intel i7-9700K, 32GB RAM, 10D→2D embedding*
 
-### Latest Performance Improvements (v2.2.1)
-- ✅ **Enhanced Mid-Near Pair Sampling**: 67% increase in MN triplets for better global connectivity
-- ✅ **Clean Output**: Removed verbose debug output for professional usage
-- ✅ **Optimized Parameters**: Moved learningRate and useQuantization to end of API (rarely changed)
-- ✅ **Two-Image Comparison**: Direct KNN vs HNSW performance and quality comparison
-- ✅ **Parameter Control**: Full C# parameter control without hardcoded C++ overrides
-- ✅ **Improved Performance**: HNSW ~18% faster than Direct KNN (5.56s vs 6.87s)
+### Latest Performance Improvements (v2.4.0-PERSIST)
+- ✅ **Enhanced Model Persistence**: Comprehensive state preservation with CRC32 validation
+- ✅ **Fixed Field Ordering**: Critical save/load functionality with proper field alignment
+- ✅ **Streamlined I/O**: Optimized stream-based save/load operations with compression
+- ✅ **Enhanced Validation**: Robust error checking and corruption detection
+- ✅ **Version Synchronization**: Consistent versioning across C++ and C# components
+- ✅ **All Previous Features**: Enhanced MN pairs, clean output, optimized parameters
 
 ### Previous Improvements (v2.0.8)
 - ✅ **Critical Distance Fix**: 20% faster execution (4.75s vs 5.84s on mammoth dataset)
@@ -204,7 +204,7 @@ PacMapDotnet/
 │   ├── PACMAPCSharp/         # C# wrapper API with native binaries
 │   │   ├── PacMapModel.cs     # Main API class with Fit/Transform methods
 │   │   ├── pacmap.dll         # Native Windows binary (checked in)
-│   │   └── pacmap.dll         # Native binary (v2.0.8-DISTANCE-FIXED)
+│   │   └── pacmap.dll         # Native binary (v2.4.0-PERSIST)
 │   ├── pacmap_pure_cpp/       # Native C++ implementation
 │   │   ├── pacmap_fit.cpp     # Core fitting and optimization
 │   │   ├── pacmap_transform.cpp # New data transformation
@@ -237,7 +237,7 @@ PacMapDotnet/
 - **pacmap_optimization.cpp**: Three-phase optimization with Adam gradient descent
 - **pacmap_gradient.cpp**: Loss function and gradient computation for three pair types
 - **pacmap_triplet_sampling.cpp**: Distance-based triplet sampling (neighbor/MN/FP pairs)
-- **Native binary**: Pre-built pacmap.dll (v2.0.8-DISTANCE-FIXED) with critical distance fixes
+- **Native binary**: Pre-built pacmap.dll (v2.4.0-PERSIST) with enhanced persistence and CRC32 validation
 - **PacMapDemo**: Complete demo application with mammoth dataset and visualization
 - **Visualizer.cs**: OxyPlot-based visualization with anatomical part classification
 

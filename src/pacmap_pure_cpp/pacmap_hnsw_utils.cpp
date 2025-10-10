@@ -213,54 +213,57 @@ namespace hnsw_utils {
         }
     }
 
-    // STREAM-ONLY APPROACH WITH SIZE HEADERS AND CRC32 - Enhanced HNSW stream serialization
+    // LZ4-COMPRESSED HNSW STREAM SERIALIZATION (following UWOt pattern)
     void save_hnsw_to_stream_compressed(std::ostream& output, hnswlib::HierarchicalNSW<float>* hnsw_index) {
-        std::cout << "[STREAM] HNSW Save: Starting stream-only approach with size headers and CRC32..." << std::endl;
+        std::cout << "[STREAM] HNSW Save: Starting LZ4-compressed approach..." << std::endl;
 
         if (!hnsw_index) {
             throw std::runtime_error("HNSW index is null");
         }
 
         try {
-            // Use stringstream to capture HNSW data for CRC computation
+            // Save HNSW index to stringstream to get uncompressed data
             std::stringstream hnsw_data_stream;
             hnsw_index->saveIndex(hnsw_data_stream);
 
-            // Get the HNSW data as string for CRC computation
+            // Get the HNSW data as string
             std::string hnsw_data = hnsw_data_stream.str();
-            uint32_t actual_size = static_cast<uint32_t>(hnsw_data.size());
+            uint32_t uncompressed_size = static_cast<uint32_t>(hnsw_data.size());
 
-            // Compute CRC32 of the HNSW data
-            uint32_t data_crc32 = crc_utils::compute_crc32(hnsw_data.data(), actual_size);
+            std::cout << "[STREAM] HNSW Save: Uncompressed size: " << uncompressed_size << " bytes" << std::endl;
 
-            // Write headers to output stream using endian-safe functions
-            std::cout << "[STREAM] HNSW Save: Writing headers - size: " << actual_size
-                      << ", CRC32: " << std::hex << data_crc32 << std::dec << std::endl;
-            endian_utils::write_value(output, actual_size);
-            endian_utils::write_value(output, actual_size);
-            endian_utils::write_value(output, data_crc32);
+            // Compress with LZ4
+            int max_compressed_size = LZ4_compressBound(static_cast<int>(uncompressed_size));
+            std::vector<char> compressed_data(max_compressed_size);
 
-            // Check if header write was successful
-            if (!output.good()) {
-                throw std::runtime_error("Failed to write HNSW headers to stream");
+            int compressed_size = LZ4_compress_default(
+                hnsw_data.data(), compressed_data.data(),
+                static_cast<int>(uncompressed_size), max_compressed_size);
+
+            if (compressed_size <= 0) {
+                throw std::runtime_error("LZ4 compression failed for HNSW data");
             }
 
-            std::cout << "[STREAM] HNSW Save: Headers written successfully" << std::endl;
+            uint32_t final_compressed_size = static_cast<uint32_t>(compressed_size);
+            std::cout << "[STREAM] HNSW Save: Compressed to " << final_compressed_size << " bytes "
+                      << "(ratio: " << (100.0 * final_compressed_size / uncompressed_size) << "%)" << std::endl;
 
-            // Write HNSW data to output stream
-            output.write(hnsw_data.data(), actual_size);
+            // Write headers to output stream using endian-safe functions
+            endian_utils::write_value(output, uncompressed_size);
+            endian_utils::write_value(output, final_compressed_size);
 
-            // Check if data write was successful
+            // Write compressed data to output stream
+            output.write(compressed_data.data(), final_compressed_size);
+
+            // Check if write was successful
             if (!output.good()) {
-                throw std::runtime_error("Failed to write HNSW data to stream");
+                throw std::runtime_error("Failed to write compressed HNSW data to stream");
             }
 
             // Flush the stream to ensure data is written
             output.flush();
 
-            std::cout << "[STREAM] HNSW Save: Stream saveIndex() with " << actual_size
-                      << " bytes, CRC32: " << std::hex << data_crc32 << std::dec
-                      << " completed successfully" << std::endl;
+            std::cout << "[STREAM] HNSW Save: ✅ LZ4 compression completed successfully" << std::endl;
 
         } catch (const std::exception& e) {
             std::cout << "[STREAM] HNSW Save: Exception: " << e.what() << std::endl;
@@ -271,61 +274,73 @@ namespace hnsw_utils {
     void load_hnsw_from_stream_compressed(std::istream& input, hnswlib::HierarchicalNSW<float>* hnsw_index,
         hnswlib::SpaceInterface<float>* space) {
         try {
-            std::cout << "[STREAM] HNSW Load: Starting stream-only approach with CRC32 validation..." << std::endl;
+            std::cout << "[STREAM] HNSW Load: Starting LZ4-decompression approach..." << std::endl;
 
             // Check stream state first
             if (!input.good()) {
-                throw std::runtime_error("Input stream is in bad state before reading headers");
+                throw std::runtime_error("Input stream is in bad state before reading");
             }
 
             // Check current stream position
             std::streampos current_pos = input.tellg();
             std::cout << "[STREAM] HNSW Load: Current stream position: " << current_pos << std::endl;
 
-            // Read headers using endian-safe functions for compatibility with existing format
-            uint32_t original_size, compressed_size, expected_crc32;
-            if (!endian_utils::read_value(input, original_size) ||
-                !endian_utils::read_value(input, compressed_size) ||
-                !endian_utils::read_value(input, expected_crc32)) {
-                throw std::runtime_error("Failed to read HNSW headers - stream error or EOF");
+            // Read compression headers using endian-safe functions (must match save format)
+            uint32_t uncompressed_size, compressed_size;
+            if (!endian_utils::read_value(input, uncompressed_size) ||
+                !endian_utils::read_value(input, compressed_size)) {
+                throw std::runtime_error("Failed to read HNSW compression headers - stream error or EOF");
             }
 
-            std::cout << "[STREAM] HNSW Load: Read headers - original: " << original_size
-                      << ", compressed: " << compressed_size
-                      << ", CRC32: " << std::hex << expected_crc32 << std::dec << std::endl;
+            std::cout << "[STREAM] HNSW Load: Read headers - uncompressed: " << uncompressed_size
+                      << ", compressed: " << compressed_size << std::endl;
 
-            // Validate sizes - allow zero if this is a marker for no data
-            if (original_size == 0 && compressed_size == 0) {
-                std::cout << "[STREAM] HNSW Load: Zero size headers detected - this might indicate empty HNSW data" << std::endl;
-                throw std::runtime_error("Invalid HNSW size headers - both sizes are zero");
+            // Validate sizes - zero is allowed for empty HNSW data
+            if (uncompressed_size == 0 && compressed_size == 0) {
+                std::cout << "[STREAM] HNSW Load: Zero size detected - empty HNSW index" << std::endl;
+                return; // Successfully loaded empty HNSW
             }
 
-            // Read HNSW data into buffer for CRC validation
-            std::vector<char> data_buffer(original_size);
-            input.read(data_buffer.data(), original_size);
+            // Security validation (following UWOt pattern)
+            const uint32_t MAX_DECOMPRESSED_SIZE = 100 * 1024 * 1024; // 100MB limit
+            const uint32_t MAX_COMPRESSED_SIZE = 80 * 1024 * 1024;    // 80MB limit
 
-            if (!input.good() || input.gcount() != static_cast<std::streamsize>(original_size)) {
-                throw std::runtime_error("Failed to read HNSW data");
+            if (uncompressed_size > MAX_DECOMPRESSED_SIZE) {
+                throw std::runtime_error("HNSW uncompressed size too large (potential corruption)");
+            }
+            if (compressed_size > MAX_COMPRESSED_SIZE) {
+                throw std::runtime_error("HNSW compressed size too large (potential corruption)");
             }
 
-            // Compute and validate CRC32 before loading
-            uint32_t computed_crc32 = crc_utils::compute_crc32(data_buffer.data(), original_size);
+            // Read compressed data into buffer
+            std::vector<char> compressed_data(compressed_size);
+            input.read(compressed_data.data(), compressed_size);
 
-            std::cout << "[STREAM] HNSW Load: Computed CRC32: " << std::hex << computed_crc32
-                      << ", Expected: " << expected_crc32 << std::dec << std::endl;
-
-            if (computed_crc32 != expected_crc32) {
-                throw std::runtime_error("HNSW data CRC32 validation failed - index corruption detected!");
+            if (!input.good() || input.gcount() != static_cast<std::streamsize>(compressed_size)) {
+                throw std::runtime_error("Failed to read HNSW compressed data - unexpected EOF");
             }
 
-            // Create stringstream from validated data for loading
+            // Decompress with LZ4
+            std::vector<char> decompressed_data(uncompressed_size);
+            int decompressed_result = LZ4_decompress_safe(
+                compressed_data.data(), decompressed_data.data(),
+                static_cast<int>(compressed_size), static_cast<int>(uncompressed_size));
+
+            if (decompressed_result != static_cast<int>(uncompressed_size)) {
+                throw std::runtime_error("LZ4 decompression failed for HNSW data");
+            }
+
+            std::cout << "[STREAM] HNSW Load: ✅ LZ4 decompression successful - "
+                      << decompressed_result << " bytes" << std::endl;
+
+            // Create stringstream from decompressed data for loading
             std::stringstream data_stream;
-            data_stream.write(data_buffer.data(), original_size);
+            data_stream.write(decompressed_data.data(), uncompressed_size);
 
-            // Load HNSW from validated data stream
+            // Load HNSW from decompressed data stream
             hnsw_index->loadIndex(data_stream, space);
 
-            std::cout << "[STREAM] HNSW Load: ✅ CRC32 validation passed - Stream loadIndex() completed successfully" << std::endl;
+            std::cout << "[STREAM] HNSW Load: ✅ loadIndex() completed successfully" << std::endl;
 
         } catch (const std::exception& e) {
             std::cout << "[STREAM] HNSW Load: Exception: " << e.what() << std::endl;

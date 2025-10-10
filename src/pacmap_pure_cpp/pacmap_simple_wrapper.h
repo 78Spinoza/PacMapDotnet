@@ -32,7 +32,7 @@ extern "C" {
 #define PACMAP_ERROR_OPTIMIZATION_FAILURE -9
 
 // Version information
-#define PACMAP_WRAPPER_VERSION_STRING "2.3.0-ENHANCED-PROGRESS"
+#define PACMAP_WRAPPER_VERSION_STRING "2.4.0-PERSIST"
 
 // Distance metrics
     typedef enum {
@@ -155,7 +155,9 @@ extern "C" {
         float* min_embedding_distance, float* p95_embedding_distance, float* p99_embedding_distance,
         float* mild_embedding_outlier_threshold, float* extreme_embedding_outlier_threshold,
         float* mean_embedding_distance, float* std_embedding_distance,
-        uint32_t* original_space_crc, uint32_t* embedding_space_crc, uint32_t* model_version_crc);
+        uint32_t* original_space_crc, uint32_t* embedding_space_crc, uint32_t* model_version_crc,
+        float* initialization_std_dev, int* always_save_embedding_data,
+        float* p25_distance, float* p75_distance, float* adam_eps);
 
     
     PACMAP_API int pacmap_get_triplet_info(PacMapModel* model,

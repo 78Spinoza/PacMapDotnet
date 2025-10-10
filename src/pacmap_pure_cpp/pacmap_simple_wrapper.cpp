@@ -94,7 +94,12 @@ extern "C" {
         float* std_embedding_distance,
         uint32_t* original_space_crc,
         uint32_t* embedding_space_crc,
-        uint32_t* model_version_crc) {
+        uint32_t* model_version_crc,
+        float* initialization_std_dev,
+        int* always_save_embedding_data,
+        float* p25_distance,
+        float* p75_distance,
+        float* adam_eps) {
         // Direct access to model fields including all persistence fields
         if (!model) return PACMAP_ERROR_INVALID_PARAMS;
 
@@ -122,6 +127,13 @@ extern "C" {
         if (original_space_crc) *original_space_crc = model->original_space_crc;
         if (embedding_space_crc) *embedding_space_crc = model->embedding_space_crc;
         if (model_version_crc) *model_version_crc = model->model_version_crc;
+
+        // Additional persistence fields
+        if (initialization_std_dev) *initialization_std_dev = model->initialization_std_dev;
+        if (always_save_embedding_data) *always_save_embedding_data = model->always_save_embedding_data ? 1 : 0;
+        if (p25_distance) *p25_distance = model->p25_distance;
+        if (p75_distance) *p75_distance = model->p75_distance;
+        if (adam_eps) *adam_eps = model->adam_eps;
 
         return PACMAP_SUCCESS;
     }

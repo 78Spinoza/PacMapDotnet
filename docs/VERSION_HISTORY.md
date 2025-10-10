@@ -1,6 +1,58 @@
 # PacMapDotnet Version History
 
-## Version 2.2.1 - CLEAN-OUTPUT & ENHANCED MN (Current)
+## Version 2.4.0-PERSIST - ENHANCED MODEL PERSISTENCE (Current)
+
+### 🔧 CRITICAL PERSISTENCE BREAKTHROUGH
+- **COMPATIBLE FIELD ORDERING**: Fixed save/load field alignment preventing data corruption
+- **COMPREHENSIVE FIELD COVERAGE**: Added 12 missing critical fields to persistence
+- **TYPE SIZE VERIFICATION**: Resolved 3-byte misalignment in force_exact_knn field
+- **CRC32 VALIDATION**: Enhanced integrity checking with comprehensive field coverage
+- **API ENHANCEMENT**: Extended GetModelInfo API with all persistence metadata
+
+### 📊 NEW PERSISTENCE FIELDS
+- **initialization_std_dev**: Embedding initialization parameter (1e-4 default)
+- **always_save_embedding_data**: Control flag for embedding persistence behavior
+- **Algorithm State**: total_triplets, neighbor_triplets, mid_near_triplets, far_triplets
+- **Distance Percentiles**: p25_distance, p75_distance for sampling optimization
+- **Adam Optimizer State**: adam_m, adam_v vectors (compressed), adam_beta1, adam_beta2, adam_eps
+- **Enhanced Metadata**: Complete model state tracking for reproducible persistence
+
+### 🚀 FIELD ORDERING FIX
+- **SYSTEMATIC VERIFICATION**: Complete field-by-field analysis between save/load
+- **SIZE ALIGNMENT**: Fixed force_exact_knn type mismatch (int vs bool alignment)
+- **ORDER VALIDATION**: Ensured identical field sequences in save/load operations
+- **MEMORY SAFETY**: Eliminated buffer overruns and misaligned reads
+- **DEBUG OUTPUT**: Comprehensive logging for field verification and troubleshooting
+
+### 🔍 API ENHANCEMENTS
+- **Extended GetModelInfo**: Added 7 new metadata fields to model info API
+- **C++ Wrapper Updates**: Enhanced pacmap_get_model_info_simple with new fields
+- **C# Wrapper Updates**: PacMapModelInfo struct with new persistence properties
+- **Cross-Platform**: Consistent API behavior across Windows and Linux
+- **Version Synchronization**: All components updated to 2.4.0-PERSIST
+
+### 🧪 VALIDATION & TESTING
+- **Field Verification**: Complete save/load field mapping verification
+- **Type Safety**: Verified all field sizes and data types match exactly
+- **Load Testing**: Successfully loads models with all new persistence fields
+- **Backward Compatibility**: Maintains compatibility with existing model files
+- **Debug Validation**: Comprehensive debug output for troubleshooting
+
+### 📋 TECHNICAL IMPROVEMENTS
+- **Memory Alignment**: Proper struct packing and field ordering
+- **Compression**: LZ4 compression for Adam optimizer state vectors
+- **Error Handling**: Enhanced validation with detailed error messages
+- **Performance**: Optimized save/load operations with streaming I/O
+- **Integrity**: Multi-level CRC32 validation for corruption detection
+
+### 🔄 COMPATIBILITY NOTES
+- **Model File Format**: Enhanced format with additional fields (backward compatible)
+- **API Changes**: Extended GetModelInfo return values (non-breaking additions)
+- **Version String**: Updated to "2.4.0-PERSIST" across all components
+- **Build System**: CMake and .NET build processes updated for new fields
+- **Documentation**: Complete API documentation with persistence details
+
+## Version 2.2.1 - CLEAN-OUTPUT & ENHANCED MN (Previous)
 
 ### 🚀 ENHANCED MID-NEAR PAIR SAMPLING
 - **BREAKTHROUGH**: 67% increase in MN triplets for better global connectivity
