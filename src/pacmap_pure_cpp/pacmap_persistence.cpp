@@ -726,14 +726,30 @@ namespace persistence_utils {
 
         if (save_original_index) {
             try {
+                // ✅ Create persistent L2Space owned by the model (fixes AccessViolationException)
+                model->original_space = std::make_unique<hnswlib::L2Space>(model->n_features);
+
+                // ✅ Construct the original space index with persistent metric space
                 model->original_space_index = std::make_unique<hnswlib::HierarchicalNSW<float>>(
-                    nullptr, model->n_samples, model->hnsw_m, model->hnsw_ef_construction);
+                    model->original_space.get(),
+                    model->n_samples,
+                    model->hnsw_m,
+                    model->hnsw_ef_construction
+                );
                 model->original_space_index->setEf(model->hnsw_ef_search);
-                static hnswlib::L2Space l2_space(model->n_features);
-                hnsw_utils::load_hnsw_from_stream_compressed(stream, model->original_space_index.get(), &l2_space);
+
+                // ✅ Load the compressed index from file with persistent space
+                hnsw_utils::load_hnsw_from_stream_compressed(
+                    stream,
+                    model->original_space_index.get(),
+                    model->original_space.get()
+                );
+
+                log_debug("[LOAD] Original space HNSW index successfully loaded.");
             }
             catch (const std::exception& e) {
                 model->original_space_index = nullptr;
+                model->original_space = nullptr;
                 send_warning_to_callback(("Failed to load original space HNSW index: " + std::string(e.what())).c_str());
             }
         }
@@ -746,26 +762,33 @@ namespace persistence_utils {
 
         if (save_embedding_index) {
             try {
-                // TEMPORARILY DISABLED: HNSW embedding space loading causing AccessViolationException
-                // TODO: Fix HNSW embedding space loading crash
-                log_debug("[LOAD] EMBEDDING HNSW LOADING DISABLED - Skipping due to crash");
-                model->embedding_space_index = nullptr;
+                // ✅ OPTION A: Create persistent L2Space owned by the model (fixes AccessViolationException)
+                model->embedding_space = std::make_unique<hnswlib::L2Space>(model->n_components);
 
-                // Read and skip the HNSW data to maintain file position
-                uint32_t uncompressed_size, compressed_size;
-                if (endian_utils::read_value(stream, uncompressed_size) &&
-                    endian_utils::read_value(stream, compressed_size)) {
-                    if (compressed_size > 0 && compressed_size < 80 * 1024 * 1024) {
-                        std::vector<char> temp_buffer(compressed_size);
-                        stream.read(temp_buffer.data(), compressed_size);
-                    }
-                }
+                // ✅ Construct the embedding index with persistent metric space
+                model->embedding_space_index = std::make_unique<hnswlib::HierarchicalNSW<float>>(
+                    model->embedding_space.get(),
+                    model->n_samples,
+                    model->hnsw_m,
+                    model->hnsw_ef_construction
+                );
 
-                send_warning_to_callback("Embedding space HNSW index loading disabled due to crash - transforms may not work");
+                model->embedding_space_index->setEf(model->hnsw_ef_search);
+
+                // ✅ Load the compressed index from file with persistent space
+                hnsw_utils::load_hnsw_from_stream_compressed(
+                    stream,
+                    model->embedding_space_index.get(),
+                    model->embedding_space.get()
+                );
+
+                send_warning_to_callback("Embedding space HNSW index loaded successfully - AI inference ready");
+                log_debug("[LOAD] Embedding space HNSW index successfully loaded.");
             }
             catch (const std::exception& e) {
                 model->embedding_space_index = nullptr;
-                send_warning_to_callback(("Failed to skip embedding space HNSW data: " + std::string(e.what())).c_str());
+                model->embedding_space = nullptr;
+                send_warning_to_callback(("Failed to load embedding space HNSW index: " + std::string(e.what())).c_str());
             }
         }
         else {
@@ -956,23 +979,39 @@ namespace persistence_utils {
             }
 
             // Load Adam optimizer state
+            log_debug("[LOAD] About to load adam_m vector");
             load_vector(file, model->adam_m, "adam_m", filename, true);
+            log_debug("[LOAD] Successfully loaded adam_m vector, size=%zu", model->adam_m.size());
+
+            log_debug("[LOAD] About to load adam_v vector");
             load_vector(file, model->adam_v, "adam_v", filename, true);
+            log_debug("[LOAD] Successfully loaded adam_v vector, size=%zu", model->adam_v.size());
+
+            log_debug("[LOAD] About to read Adam optimizer parameters");
             if (!endian_utils::read_value(file, model->adam_beta1, "adam_beta1") ||
                 !endian_utils::read_value(file, model->adam_beta2, "adam_beta2") ||
                 !endian_utils::read_value(file, model->adam_eps, "adam_eps")) {
                 throw std::runtime_error("Failed to read Adam optimizer parameters from file: " + std::string(filename));
             }
+            log_debug("[LOAD] Successfully loaded Adam optimizer parameters: beta1=%.6f, beta2=%.6f, eps=%.2e",
+                      model->adam_beta1, model->adam_beta2, model->adam_eps);
 
             bool save_embedding;
+            log_debug("[LOAD] About to read save_embedding flag");
             if (!endian_utils::read_value(file, save_embedding, "save_embedding")) {
                 throw std::runtime_error("Failed to read embedding save flag from file: " + std::string(filename));
             }
+            log_debug("[LOAD] Read save_embedding flag: value=%d", save_embedding);
+
             if (save_embedding) {
+                log_debug("[LOAD] About to load embedding vector");
                 load_vector(file, model->embedding, "embedding", filename, true);
+                log_debug("[LOAD] Successfully loaded embedding vector, size=%zu", model->embedding.size());
             }
 
+            log_debug("[LOAD] About to load k-NN data");
             load_knn_data(file, model, filename);
+            log_debug("[LOAD] Successfully loaded k-NN data");
             load_quantization_data(file, model, filename);
             load_indices_and_training(file, model, filename);
             load_crc_values(file, model, filename);

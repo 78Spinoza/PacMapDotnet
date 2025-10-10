@@ -108,6 +108,10 @@ struct PacMapModel {
     std::unique_ptr<hnswlib::SpaceInterface<float>> original_space_factory;
     std::unique_ptr<hnswlib::SpaceInterface<float>> embedding_space_factory;
 
+    // ✅ Persistent metric spaces (fixes AccessViolationException from dangling pointers)
+    std::unique_ptr<hnswlib::L2Space> original_space;
+    std::unique_ptr<hnswlib::L2Space> embedding_space;
+
     // Unified triplet storage (review optimization)
     std::vector<Triplet> triplets;
 

@@ -210,11 +210,12 @@ namespace fit_utils {
             }
 
             try {
-                // Create embedding space HNSW index using the fitted embedding coordinates
-                // This enables the second step of transform: searching in embedding space
-                static hnswlib::L2Space embedding_space(model->n_components);
+                // ✅ Create persistent L2Space owned by the model (fixes AccessViolationException)
+                model->embedding_space = std::make_unique<hnswlib::L2Space>(model->n_components);
+
+                // ✅ Construct embedding space HNSW index with persistent metric space
                 model->embedding_space_index = std::make_unique<hnswlib::HierarchicalNSW<float>>(
-                    &embedding_space,
+                    model->embedding_space.get(),
                     model->n_samples,
                     model->hnsw_m,
                     model->hnsw_ef_construction
@@ -234,6 +235,8 @@ namespace fit_utils {
             }
             catch (const std::exception& e) {
                 // Embedding space index creation failed - not critical for basic functionality
+                model->embedding_space_index = nullptr;
+                model->embedding_space = nullptr;
                 if (progress_callback) {
                     progress_callback("Warning", 100, 100, 100.0f,
                                     ("Embedding space HNSW index creation failed: " + std::string(e.what())).c_str());
