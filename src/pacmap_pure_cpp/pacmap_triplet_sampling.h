@@ -5,13 +5,13 @@
 #include <random>
 
 // Core triplet sampling functions
-extern void sample_triplets(PacMapModel* model, float* data, pacmap_progress_callback_v2 callback);
+extern void sample_triplets(PacMapModel* model, float* data, pacmap_progress_callback_internal callback);
 extern void sample_neighbors_pair(PacMapModel* model, const std::vector<float>& normalized_data,
-                                 std::vector<Triplet>& neighbor_triplets);
+                                 std::vector<Triplet>& neighbor_triplets, pacmap_progress_callback_internal callback = nullptr);
 extern void sample_MN_pair(PacMapModel* model, const std::vector<float>& normalized_data,
-                         std::vector<Triplet>& mn_triplets, int n_mn);
+                         std::vector<Triplet>& mn_triplets, int n_mn, pacmap_progress_callback_internal callback = nullptr);
 extern void sample_FP_pair(PacMapModel* model, const std::vector<float>& normalized_data,
-                         std::vector<Triplet>& fp_triplets, int n_fp);
+                         std::vector<Triplet>& fp_triplets, int n_fp, pacmap_progress_callback_internal callback = nullptr);
 
 // Distance-based sampling helpers
 extern void distance_based_sampling(PacMapModel* model, const std::vector<float>& data,
@@ -22,7 +22,7 @@ extern std::vector<float> compute_distance_percentiles(const std::vector<float>&
 // HNSW optimization for triplet sampling
 extern std::unique_ptr<hnswlib::HierarchicalNSW<float>> create_hnsw_index(
     const float* data, int n_samples, int n_features, PacMapMetric metric,
-    int M, int ef_construction);
+    int M, int ef_construction, pacmap_progress_callback_internal callback = nullptr);
 
 // Triplet validation and filtering
 extern bool is_valid_triplet(const Triplet& triplet, int n_samples);

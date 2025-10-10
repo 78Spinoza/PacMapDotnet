@@ -21,13 +21,17 @@ namespace persistence_utils {
     static constexpr uint64_t MAX_VECTOR_SIZE = 100 * 1024 * 1024; // 100M elements
     static constexpr size_t CHUNK_SIZE = 1024 * 1024; // 1MB chunks for I/O
 
-    // Logging function (replace with your logging framework if available)
+    // Logging function (controlled by PACMAP_VERBOSE environment variable)
     static void log_debug(const char* format, ...) {
+#ifdef PACMAP_VERBOSE
         va_list args;
         va_start(args, format);
         vprintf(format, args);
         printf("\n");
         va_end(args);
+#else
+        (void)format; // Suppress unused parameter warning
+#endif
     }
 
     namespace endian_utils {
@@ -99,6 +103,7 @@ namespace persistence_utils {
     }
 
     void dump_file_contents(const char* filename, size_t bytes_to_dump = 128) {
+#ifdef PACMAP_VERBOSE
         std::ifstream file(filename, std::ios::binary);
         if (!file.is_open()) {
             log_debug("[DEBUG ERROR] Cannot open file %s for dumping", filename);
@@ -114,6 +119,10 @@ namespace persistence_utils {
         }
         printf("\n");
         file.close();
+#else
+        (void)filename;      // Suppress unused parameter warning
+        (void)bytes_to_dump; // Suppress unused parameter warning
+#endif
     }
 
     // Helper functions for modularity

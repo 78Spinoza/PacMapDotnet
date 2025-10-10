@@ -69,8 +69,12 @@ namespace PacMapDemo
                 );
 
                 var stopwatchKNN = Stopwatch.StartNew();
-                var embeddingKNN = pacmapKNN.Fit(
+                var embeddingKNN = pacmapKNN.FitWithProgress(
                     data: floatData,
+                    progressCallback: (phase, current, total, percent, message) =>
+                    {
+                        Console.Write($"\r   [{phase}] Progress: {current}/{total} ({percent:F1}%) {message}            ");
+                    },
                     embeddingDimension: 2,
                     nNeighbors: 10,
                     learningRate: 1.0f,
@@ -81,10 +85,24 @@ namespace PacMapDemo
                     forceExactKnn: true,  // Direct KNN
                     randomSeed: 42
                 );
+                Console.WriteLine(); // New line after progress
                 stopwatchKNN.Stop();
 
                 Console.WriteLine($"✅ Direct KNN Embedding created: {embeddingKNN.GetLength(0)} x {embeddingKNN.GetLength(1)}");
                 Console.WriteLine($"⏱️  Direct KNN Execution time: {stopwatchKNN.Elapsed.TotalSeconds:F2} seconds");
+
+                // Save Direct KNN model and test transform
+                Console.WriteLine("💾 Saving Direct KNN model...");
+                string modelPathKNN = "Results/pacmap_direct_knn.pmm";
+                Directory.CreateDirectory("Results");
+                pacmapKNN.Save(modelPathKNN);
+                Console.WriteLine($"✅ Model saved: {modelPathKNN}");
+
+                // Load and transform with Direct KNN model
+                Console.WriteLine("📂 Loading Direct KNN model and transforming...");
+                var loadedModelKNN = PacMapModel.Load(modelPathKNN);
+                var transformedKNN = loadedModelKNN.Transform(floatData);
+                Console.WriteLine($"✅ Transform completed: {transformedKNN.GetLength(0)} x {transformedKNN.GetLength(1)}");
 
                 // 2️⃣ SECOND: HNSW Embedding
                 Console.WriteLine();
@@ -101,8 +119,12 @@ namespace PacMapDemo
                 );
 
                 var stopwatchHNSW = Stopwatch.StartNew();
-                var embeddingHNSW = pacmapHNSW.Fit(
+                var embeddingHNSW = pacmapHNSW.FitWithProgress(
                     data: floatData,
+                    progressCallback: (phase, current, total, percent, message) =>
+                    {
+                        Console.Write($"\r   [{phase}] Progress: {current}/{total} ({percent:F1}%) {message}            ");
+                    },
                     embeddingDimension: 2,
                     nNeighbors: 10,
                     learningRate: 1.0f,
@@ -113,14 +135,28 @@ namespace PacMapDemo
                     forceExactKnn: false,  // HNSW
                     randomSeed: 42
                 );
+                Console.WriteLine(); // New line after progress
                 stopwatchHNSW.Stop();
 
                 Console.WriteLine($"✅ HNSW Embedding created: {embeddingHNSW.GetLength(0)} x {embeddingHNSW.GetLength(1)}");
                 Console.WriteLine($"⏱️  HNSW Execution time: {stopwatchHNSW.Elapsed.TotalSeconds:F2} seconds");
 
+                // Save HNSW model and test transform
+                Console.WriteLine("💾 Saving HNSW model...");
+                string modelPathHNSW = "Results/pacmap_hnsw.pmm";
+                pacmapHNSW.Save(modelPathHNSW);
+                Console.WriteLine($"✅ Model saved: {modelPathHNSW}");
+
+                // Load and transform with HNSW model
+                Console.WriteLine("📂 Loading HNSW model and transforming...");
+                var loadedModelHNSW = PacMapModel.Load(modelPathHNSW);
+                var transformedHNSW = loadedModelHNSW.Transform(floatData);
+                Console.WriteLine($"✅ Transform completed: {transformedHNSW.GetLength(0)} x {transformedHNSW.GetLength(1)}");
+
                 Console.WriteLine();
                 Console.WriteLine("🎨 Creating visualizations for BOTH embeddings...");
-                CreateVisualizationsBoth(embeddingKNN, embeddingHNSW, data, labels, pacmapKNN, pacmapHNSW, stopwatchKNN.Elapsed.TotalSeconds, stopwatchHNSW.Elapsed.TotalSeconds);
+                CreateVisualizationsBoth(embeddingKNN, embeddingHNSW, transformedKNN, transformedHNSW, data, labels,
+                    pacmapKNN, pacmapHNSW, stopwatchKNN.Elapsed.TotalSeconds, stopwatchHNSW.Elapsed.TotalSeconds);
 
                 // Open results folder
                 Console.WriteLine("📂 Opening Results folder...");
@@ -658,8 +694,8 @@ namespace PacMapDemo
                 paramInfo["execution_time"] = $"{executionTime:F2}s";
 
                 // Create title with hyperparameters - more concise layout to prevent clipping
-                var version = paramInfo["PACMAP Version"].ToString().Replace(" (Corrected Gradients)", "").Replace("-CLEAN-OUTPUT", "");
-                var knnMode = paramInfo["KNN_Mode"].ToString();
+                var version = paramInfo["PACMAP Version"].ToString()?.Replace(" (Corrected Gradients)", "").Replace("-CLEAN-OUTPUT", "") ?? "Unknown";
+                var knnMode = paramInfo["KNN_Mode"].ToString() ?? "Unknown";
                 var line1 = $"PACMAP v{version} | {knnMode} | k={paramInfo["n_neighbors"]} | {paramInfo["distance_metric"]}";
                 var line2 = $"mn={paramInfo["mn_ratio"]} fp={paramInfo["fp_ratio"]} lr={paramInfo["learning_rate"]} std={paramInfo["init_std_dev"]}";
 
@@ -682,9 +718,11 @@ namespace PacMapDemo
         }
 
         /// <summary>
-        /// Create visualizations for BOTH Direct KNN and HNSW embeddings
+        /// Create visualizations for BOTH Direct KNN and HNSW embeddings (fit and transform)
         /// </summary>
-        static void CreateVisualizationsBoth(float[,] embeddingKNN, float[,] embeddingHNSW, double[,] originalData, int[] labels,
+        static void CreateVisualizationsBoth(float[,] embeddingKNN, float[,] embeddingHNSW,
+                                         float[,] transformedKNN, float[,] transformedHNSW,
+                                         double[,] originalData, int[] labels,
                                          PacMapModel pacmapKNN, PacMapModel pacmapHNSW, double executionTimeKNN, double executionTimeHNSW)
         {
             try
@@ -747,7 +785,7 @@ namespace PacMapDemo
                 paramInfoKNN["execution_time"] = $"{executionTimeKNN:F2}s";
 
                 // Create Direct KNN title
-                var versionKNN = paramInfoKNN["PACMAP Version"].ToString().Replace(" (Corrected Gradients)", "").Replace("-CLEAN-OUTPUT", "");
+                var versionKNN = paramInfoKNN["PACMAP Version"].ToString()?.Replace(" (Corrected Gradients)", "").Replace("-CLEAN-OUTPUT", "") ?? "Unknown";
                 var line1KNN = $"PACMAP v{versionKNN} | Direct KNN | k={paramInfoKNN["n_neighbors"]} | {paramInfoKNN["distance_metric"]}";
                 var line2KNN = $"mn={paramInfoKNN["mn_ratio"]} fp={paramInfoKNN["fp_ratio"]} lr={paramInfoKNN["learning_rate"]} std={paramInfoKNN["init_std_dev"]}";
                 var line3KNN = $"phases={paramInfoKNN["phase_iters"]} | Time: {paramInfoKNN["execution_time"]}";
@@ -791,7 +829,7 @@ namespace PacMapDemo
                 paramInfoHNSW["execution_time"] = $"{executionTimeHNSW:F2}s";
 
                 // Create HNSW title
-                var versionHNSW = paramInfoHNSW["PACMAP Version"].ToString().Replace(" (Corrected Gradients)", "").Replace("-CLEAN-OUTPUT", "");
+                var versionHNSW = paramInfoHNSW["PACMAP Version"].ToString()?.Replace(" (Corrected Gradients)", "").Replace("-CLEAN-OUTPUT", "") ?? "Unknown";
                 var line1HNSW = $"PACMAP v{versionHNSW} | HNSW | k={paramInfoHNSW["n_neighbors"]} | {paramInfoHNSW["distance_metric"]}";
                 var line2HNSW = $"mn={paramInfoHNSW["mn_ratio"]} fp={paramInfoHNSW["fp_ratio"]} lr={paramInfoHNSW["learning_rate"]} std={paramInfoHNSW["init_std_dev"]}";
                 var line3HNSW = $"phases={paramInfoHNSW["phase_iters"]} | HNSW: M={paramInfoHNSW["hnsw_m"]}, ef={paramInfoHNSW["hnsw_ef_search"]} | Time: {paramInfoHNSW["execution_time"]}";
@@ -803,7 +841,45 @@ namespace PacMapDemo
                 Console.WriteLine($"   🚀 HNSW Parameters: M={modelInfoHNSW.HnswM}, ef={modelInfoHNSW.HnswEfSearch}");
 
                 Console.WriteLine();
-                Console.WriteLine("   🎉 BOTH visualizations created successfully!");
+                Console.WriteLine("   ================================================");
+                Console.WriteLine("   📊 Creating Transform Projection Comparisons...");
+                Console.WriteLine("   ================================================");
+
+                // Create projection comparison images for Direct KNN
+                Console.WriteLine("   📈 Creating Direct KNN (Fit vs Transform) projections...");
+
+                var fitPathKNN = Path.Combine(resultsDir, "mammoth_direct_knn_fit.png");
+                var titleFitKNN = $"Direct KNN - Fit Projection\n{line1KNN}\n{line2KNN}\n{line3KNN}";
+                Visualizer.PlotMammothPacMAP(embeddingKNN, originalData, titleFitKNN, fitPathKNN, paramInfoKNN);
+                Console.WriteLine($"   ✅ Created: {Path.GetFileName(fitPathKNN)}");
+
+                var transformPathKNN = Path.Combine(resultsDir, "mammoth_direct_knn_transform.png");
+                var titleTransformKNN = $"Direct KNN - Transform Projection (After Load)\n{line1KNN}\n{line2KNN}\n{line3KNN}";
+                Visualizer.PlotMammothPacMAP(transformedKNN, originalData, titleTransformKNN, transformPathKNN, paramInfoKNN);
+                Console.WriteLine($"   ✅ Created: {Path.GetFileName(transformPathKNN)}");
+
+                // Create projection comparison images for HNSW
+                Console.WriteLine("   📈 Creating HNSW (Fit vs Transform) projections...");
+
+                var fitPathHNSW = Path.Combine(resultsDir, "mammoth_hnsw_fit.png");
+                var titleFitHNSW = $"HNSW - Fit Projection\n{line1HNSW}\n{line2HNSW}\n{line3HNSW}";
+                Visualizer.PlotMammothPacMAP(embeddingHNSW, originalData, titleFitHNSW, fitPathHNSW, paramInfoHNSW);
+                Console.WriteLine($"   ✅ Created: {Path.GetFileName(fitPathHNSW)}");
+
+                var transformPathHNSW = Path.Combine(resultsDir, "mammoth_hnsw_transform.png");
+                var titleTransformHNSW = $"HNSW - Transform Projection (After Load)\n{line1HNSW}\n{line2HNSW}\n{line3HNSW}";
+                Visualizer.PlotMammothPacMAP(transformedHNSW, originalData, titleTransformHNSW, transformPathHNSW, paramInfoHNSW);
+                Console.WriteLine($"   ✅ Created: {Path.GetFileName(transformPathHNSW)}");
+
+                // Calculate MSE between fit and transform for both modes
+                double mseKNN = CalculateMSE(embeddingKNN, transformedKNN);
+                double mseHNSW = CalculateMSE(embeddingHNSW, transformedHNSW);
+                Console.WriteLine($"   📊 Transform Accuracy:");
+                Console.WriteLine($"      Direct KNN MSE (Fit vs Transform): {mseKNN:E4}");
+                Console.WriteLine($"      HNSW MSE (Fit vs Transform): {mseHNSW:E4}");
+
+                Console.WriteLine();
+                Console.WriteLine("   🎉 ALL visualizations created successfully!");
                 Console.WriteLine($"   ⏱️  Performance Summary:");
                 Console.WriteLine($"      Direct KNN:  {executionTimeKNN:F2}s (exact, slower)");
                 Console.WriteLine($"      HNSW:        {executionTimeHNSW:F2}s (approximate, faster)");

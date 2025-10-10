@@ -7,6 +7,7 @@
 #include <unordered_set>
 #include <memory>
 #include <iostream>
+#include <atomic>
 
 
 void sample_triplets(PacMapModel* model, float* data, pacmap_progress_callback_internal callback) {
@@ -37,7 +38,8 @@ void sample_triplets(PacMapModel* model, float* data, pacmap_progress_callback_i
                                                     model->n_features,
                                                     model->metric,
                                                     model->hnsw_m,
-                                                    model->hnsw_ef_construction);
+                                                    model->hnsw_ef_construction,
+                                                    callback);
 
     if (!model->original_space_index) {
         if (callback) callback("Error", 0, 100, 0.0f, "Failed to create HNSW index");
@@ -51,15 +53,15 @@ void sample_triplets(PacMapModel* model, float* data, pacmap_progress_callback_i
     std::vector<Triplet> neighbor_triplets, mn_triplets, fp_triplets;
 
     // Neighbor pairs using HNSW
-    sample_neighbors_pair(model, normalized_data, neighbor_triplets);
+    sample_neighbors_pair(model, normalized_data, neighbor_triplets, callback);
 
     // Mid-near pairs with improved sampling (ERROR11-FIX)
     int n_mn = static_cast<int>(model->n_neighbors * model->mn_ratio + 0.5); // ERROR11-FIX: Proper rounding
-    sample_MN_pair(model, normalized_data, mn_triplets, n_mn);
+    sample_MN_pair(model, normalized_data, mn_triplets, n_mn, callback);
 
     // Far pairs for uniform distribution
     int n_fp = static_cast<int>(model->n_neighbors * model->fp_ratio);
-    sample_FP_pair(model, normalized_data, fp_triplets, n_fp);
+    sample_FP_pair(model, normalized_data, fp_triplets, n_fp, callback);
 
     // Combine all triplets (review-optimized: single vector)
     model->triplets.clear();
@@ -122,15 +124,22 @@ void sample_triplets(PacMapModel* model, float* data, pacmap_progress_callback_i
 }
 
 void sample_neighbors_pair(PacMapModel* model, const std::vector<float>& normalized_data,
-                         std::vector<Triplet>& neighbor_triplets) {
+                         std::vector<Triplet>& neighbor_triplets, pacmap_progress_callback_internal callback) {
 
     neighbor_triplets.clear();
     neighbor_triplets.reserve(model->n_samples * model->n_neighbors);
+
+    if (callback) {
+        callback("Sampling Neighbor Pairs", 0, model->n_samples, 0.0f,
+                 model->force_exact_knn ? "Using exact KNN" : "Using HNSW approximate KNN");
+    }
 
     // PYTHON-style approach: Exactly like sklearn NearestNeighbors
     // Find k+1 neighbors (including self), then skip self when creating pairs
 
     if (model->force_exact_knn) {
+        int report_interval = std::max(1, model->n_samples / 10);
+        std::atomic<int> completed(0);
 
         #pragma omp parallel for if(model->n_samples > 1000)
         for (int i = 0; i < model->n_samples; ++i) {
@@ -155,9 +164,23 @@ void sample_neighbors_pair(PacMapModel* model, const std::vector<float>& normali
                     neighbor_triplets.emplace_back(i, neighbor_idx, NEIGHBOR);
                 }
             }
+
+            // Progress reporting
+            int count = ++completed;
+            if (callback && (count % report_interval == 0 || count == model->n_samples)) {
+                float percent = (float)count / model->n_samples * 100.0f;
+                callback("Sampling Neighbor Pairs", count, model->n_samples, percent, nullptr);
+            }
+        }
+
+        if (callback) {
+            callback("Sampling Neighbor Pairs", model->n_samples, model->n_samples, 100.0f,
+                     "Neighbor pairs sampled using exact KNN");
         }
     } else {
             // HNSW k-NN mode enabled - detailed output disabled for clean interface
+        int report_interval = std::max(1, model->n_samples / 10);
+        std::atomic<int> completed(0);
 
         #pragma omp parallel for if(model->n_samples > 1000)
         for (int i = 0; i < model->n_samples; ++i) {
@@ -182,15 +205,97 @@ void sample_neighbors_pair(PacMapModel* model, const std::vector<float>& normali
                     neighbor_triplets.emplace_back(i, neighbor_idx, NEIGHBOR);
                 }
             }
+
+            // Progress reporting
+            int count = ++completed;
+            if (callback && (count % report_interval == 0 || count == model->n_samples)) {
+                float percent = (float)count / model->n_samples * 100.0f;
+                callback("Sampling Neighbor Pairs", count, model->n_samples, percent, nullptr);
+            }
+        }
+
+        if (callback) {
+            callback("Sampling Neighbor Pairs", model->n_samples, model->n_samples, 100.0f,
+                     "Neighbor pairs sampled using HNSW");
+        }
+
+        // Validate HNSW recall quality
+        if (callback && model->n_samples >= 100) {
+            callback("Validating HNSW Quality", 0, 100, 0.0f, "Calculating recall vs exact KNN");
+
+            // Sample random points to validate HNSW recall
+            int validation_samples = std::min(100, model->n_samples / 10);
+            float total_recall = 0.0f;
+            std::mt19937 rng(42);
+            std::uniform_int_distribution<int> dist(0, model->n_samples - 1);
+
+            for (int s = 0; s < validation_samples; ++s) {
+                int sample_idx = dist(rng);
+
+                // Get exact KNN
+                std::vector<std::pair<float, int>> exact_knn;
+                distance_metrics::find_knn_exact(
+                    normalized_data.data() + sample_idx * model->n_features,
+                    normalized_data.data(),
+                    model->n_samples,
+                    model->n_features,
+                    model->metric,
+                    model->n_neighbors,
+                    exact_knn,
+                    sample_idx
+                );
+
+                // Get HNSW KNN
+                auto hnsw_results = model->original_space_index->searchKnn(
+                    normalized_data.data() + sample_idx * model->n_features,
+                    model->n_neighbors + 1);
+
+                std::vector<int> hnsw_indices;
+                while (!hnsw_results.empty()) {
+                    hnsw_indices.push_back(static_cast<int>(hnsw_results.top().second));
+                    hnsw_results.pop();
+                }
+
+                // Calculate recall
+                float recall = distance_metrics::calculate_recall(exact_knn, hnsw_indices.data(), model->n_neighbors);
+                total_recall += recall;
+
+                if ((s + 1) % 10 == 0 && callback) {
+                    float percent = (float)(s + 1) / validation_samples * 100.0f;
+                    callback("Validating HNSW Quality", s + 1, validation_samples, percent, nullptr);
+                }
+            }
+
+            model->hnsw_recall_percentage = (total_recall / validation_samples) * 100.0f;
+
+            if (callback) {
+                char msg[256];
+                snprintf(msg, sizeof(msg), "HNSW recall: %.1f%% (quality: %s)",
+                         model->hnsw_recall_percentage,
+                         model->hnsw_recall_percentage >= 95.0f ? "excellent" :
+                         model->hnsw_recall_percentage >= 90.0f ? "good" :
+                         model->hnsw_recall_percentage >= 80.0f ? "acceptable" : "poor");
+
+                if (model->hnsw_recall_percentage < 90.0f) {
+                    callback("WARNING", 0, 0, 0.0f, msg);
+                } else {
+                    callback("Validating HNSW Quality", validation_samples, validation_samples, 100.0f, msg);
+                }
+            }
         }
     }
 
    }
 
 void sample_MN_pair(PacMapModel* model, const std::vector<float>& normalized_data,
-                   std::vector<Triplet>& mn_triplets, int n_mn) {
+                   std::vector<Triplet>& mn_triplets, int n_mn, pacmap_progress_callback_internal callback) {
 
     mn_triplets.clear();
+
+    if (callback) {
+        callback("Sampling Mid-Near Pairs", 0, model->n_samples, 0.0f,
+                 "Finding mid-range neighbors for structure preservation");
+    }
 
     // ERROR11-FIX-DETERMINISTIC: Improved mid-near sampling with guaranteed pairs per point
     // Supports both exact KNN (current) and HNSW (future speed optimization)
@@ -288,12 +393,22 @@ void sample_MN_pair(PacMapModel* model, const std::vector<float>& normalized_dat
         }
     }
 
+    if (callback) {
+        callback("Sampling Mid-Near Pairs", model->n_samples, model->n_samples, 100.0f,
+                 ("Found " + std::to_string(pairs_found) + " mid-near pairs").c_str());
+    }
+
     }
 
 void sample_FP_pair(PacMapModel* model, const std::vector<float>& normalized_data,
-                   std::vector<Triplet>& fp_triplets, int n_fp) {
+                   std::vector<Triplet>& fp_triplets, int n_fp, pacmap_progress_callback_internal callback) {
 
     fp_triplets.clear();
+
+    if (callback) {
+        callback("Sampling Far Pairs", 0, model->n_samples, 0.0f,
+                 "Sampling random far pairs for global structure");
+    }
 
     // CRITICAL FIX: Switch to pure random sampling (matching Rust sampling.rs)
     // Sample random points excluding neighbors and self, no distance filtering
@@ -307,6 +422,9 @@ void sample_FP_pair(PacMapModel* model, const std::vector<float>& normalized_dat
             neighbor_sets[t.anchor].insert(t.neighbor);
         }
     }
+
+    std::atomic<int> completed(0);
+    int report_interval = std::max(1, model->n_samples / 10);
 
     #pragma omp parallel
     {
@@ -336,7 +454,19 @@ void sample_FP_pair(PacMapModel* model, const std::vector<float>& normalized_dat
                     sampled_indices.insert(j);
                 }
             }
+
+            // Progress reporting
+            int count = ++completed;
+            if (callback && (count % report_interval == 0 || count == model->n_samples)) {
+                float percent = (float)count / model->n_samples * 100.0f;
+                callback("Sampling Far Pairs", count, model->n_samples, percent, nullptr);
+            }
         }
+    }
+
+    if (callback) {
+        callback("Sampling Far Pairs", model->n_samples, model->n_samples, 100.0f,
+                 ("Found " + std::to_string(fp_triplets.size()) + " far pairs").c_str());
     }
 
     }
@@ -405,7 +535,11 @@ std::vector<float> compute_distance_percentiles(const std::vector<float>& data, 
 
 std::unique_ptr<hnswlib::HierarchicalNSW<float>> create_hnsw_index(
     const float* data, int n_samples, int n_features, PacMapMetric metric,
-    int M, int ef_construction) {
+    int M, int ef_construction, pacmap_progress_callback_internal callback) {
+
+    if (callback) {
+        callback("Building HNSW Index", 0, n_samples, 0.0f, "Initializing HNSW structure");
+    }
 
     // Create appropriate space based on metric
     hnswlib::SpaceInterface<float>* space;
@@ -423,9 +557,19 @@ std::unique_ptr<hnswlib::HierarchicalNSW<float>> create_hnsw_index(
 
     auto index = std::make_unique<hnswlib::HierarchicalNSW<float>>(space, n_samples, M, ef_construction);
 
-    // Add data points to index
+    // Add data points to index with progress reporting
+    int report_interval = std::max(1, n_samples / 20); // Report every 5%
     for (int i = 0; i < n_samples; ++i) {
         index->addPoint(data + i * n_features, i);
+
+        if (callback && (i % report_interval == 0 || i == n_samples - 1)) {
+            float percent = (float)(i + 1) / n_samples * 100.0f;
+            callback("Building HNSW Index", i + 1, n_samples, percent, nullptr);
+        }
+    }
+
+    if (callback) {
+        callback("Building HNSW Index", n_samples, n_samples, 100.0f, "HNSW index built successfully");
     }
 
     return index;
