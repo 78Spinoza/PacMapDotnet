@@ -318,7 +318,7 @@ namespace PacMapSharp
         #region Constants
 
         // Expected DLL version - must match C++ PACMAP_WRAPPER_VERSION_STRING
-        private const string EXPECTED_DLL_VERSION = "2.4.5";
+        private const string EXPECTED_DLL_VERSION = "2.4.9";
 
         #endregion
 
@@ -521,8 +521,8 @@ namespace PacMapSharp
         /// <param name="metric">Distance metric to use (default: Euclidean)</param>
         /// <param name="forceExactKnn">Force exact brute-force k-NN instead of HNSW approximation (default: false)</param>
         /// <param name="hnswM">HNSW graph degree parameter (default: 16)</param>
-        /// <param name="hnswEfConstruction">HNSW build quality parameter (default: 200)</param>
-        /// <param name="hnswEfSearch">HNSW query quality parameter (default: 200)</param>
+        /// <param name="hnswEfConstruction">HNSW build quality parameter (default: 150, lowered from 200 for faster builds)</param>
+        /// <param name="hnswEfSearch">HNSW query quality parameter (default: 100, lowered from 200 for 2x faster queries)</param>
         /// <param name="randomSeed">Random seed for reproducibility (default: -1 for non-deterministic)</param>
         /// <param name="autoHNSWParam">Auto-tune HNSW parameters based on data size (default: true)</param>
         /// <param name="learningRate">Learning rate for Adam optimizer (default: 1.0)</param>
@@ -540,8 +540,8 @@ namespace PacMapSharp
                             DistanceMetric metric = DistanceMetric.Euclidean,
                             bool forceExactKnn = false,
                             int hnswM = 16,
-                            int hnswEfConstruction = 200,
-                            int hnswEfSearch = 200,
+                            int hnswEfConstruction = 150,
+                            int hnswEfSearch = 100,
                             int randomSeed = -1,
                             bool autoHNSWParam = true,
                             float learningRate = 1.0f,
@@ -574,8 +574,8 @@ namespace PacMapSharp
         /// <param name="learningRate">Learning rate for Adam optimizer (default: 1.0)</param>
         /// <param name="useQuantization">Enable 16-bit quantization for memory reduction (default: false)</param>
         /// <param name="hnswM">HNSW graph degree parameter (default: 16)</param>
-        /// <param name="hnswEfConstruction">HNSW build quality parameter (default: 200)</param>
-        /// <param name="hnswEfSearch">HNSW query quality parameter (default: 200)</param>
+        /// <param name="hnswEfConstruction">HNSW build quality parameter (default: 150)</param>
+        /// <param name="hnswEfSearch">HNSW query quality parameter (default: 100)</param>
         /// <returns>Embedding coordinates [samples, embeddingDimension]</returns>
         /// <exception cref="ArgumentNullException">Thrown when data or progressCallback is null</exception>
         /// <exception cref="ArgumentException">Thrown when parameters are invalid</exception>
@@ -595,8 +595,8 @@ namespace PacMapSharp
                                        float learningRate = 1.0f,
                                        bool useQuantization = false,
                                        int hnswM = 16,
-                                       int hnswEfConstruction = 200,
-                                       int hnswEfSearch = 200)
+                                       int hnswEfConstruction = 150,
+                                       int hnswEfSearch = 100)
         {
             if (progressCallback == null)
                 throw new ArgumentNullException(nameof(progressCallback));
@@ -771,8 +771,8 @@ namespace PacMapSharp
                                    bool forceExactKnn,
                                    ProgressCallback? progressCallback,
                                    int hnswM = 16,
-                                   int hnswEfConstruction = 200,
-                                   int hnswEfSearch = 200,
+                                   int hnswEfConstruction = 150,
+                                   int hnswEfSearch = 100,
                                    int randomSeed = -1,
                                    bool autoHNSWParam = true,
                                    float learningRate = 1.0f,

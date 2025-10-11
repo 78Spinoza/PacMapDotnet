@@ -9,6 +9,9 @@
 #include <iostream>
 #include <atomic>
 
+// ERROR12 Priority 5: Maximum vector size to prevent OOM with high ratios
+#define MAX_VECTOR_SIZE (1ULL << 30)  // 1 billion elements max
+
 
 void sample_triplets(PacMapModel* model, float* data, pacmap_progress_callback_internal callback) {
 
@@ -57,15 +60,22 @@ void sample_triplets(PacMapModel* model, float* data, pacmap_progress_callback_i
 
     // Mid-near pairs with improved sampling (ERROR11-FIX)
     int n_mn = static_cast<int>(model->n_neighbors * model->mn_ratio + 0.5); // ERROR11-FIX: Proper rounding
+    // ERROR12 Priority 3: Cap triplet counts to prevent infeasible targets with arbitrary ratios
+    n_mn = std::min(n_mn, static_cast<int>(static_cast<size_t>(model->n_samples) * (model->n_samples - 1) / 2));
     sample_MN_pair(model, normalized_data, mn_triplets, n_mn, callback);
 
     // Far pairs for uniform distribution
     int n_fp = static_cast<int>(model->n_neighbors * model->fp_ratio);
+    // ERROR12 Priority 3: Cap triplet counts to prevent infeasible targets with arbitrary ratios
+    n_fp = std::min(n_fp, static_cast<int>(static_cast<size_t>(model->n_samples) * (model->n_samples - 1) / 2));
     sample_FP_pair(model, normalized_data, fp_triplets, n_fp, callback);
 
     // Combine all triplets (review-optimized: single vector)
     model->triplets.clear();
-    model->triplets.reserve(neighbor_triplets.size() + mn_triplets.size() + fp_triplets.size());
+    // ERROR12 Priority 5: Cap vector reserves to prevent OOM with high ratios
+    model->triplets.reserve(std::min(
+        neighbor_triplets.size() + mn_triplets.size() + fp_triplets.size(),
+        MAX_VECTOR_SIZE));
     model->triplets.insert(model->triplets.end(), neighbor_triplets.begin(), neighbor_triplets.end());
     model->triplets.insert(model->triplets.end(), mn_triplets.begin(), mn_triplets.end());
     model->triplets.insert(model->triplets.end(), fp_triplets.begin(), fp_triplets.end());
@@ -219,7 +229,11 @@ void sample_neighbors_pair(PacMapModel* model, const std::vector<float>& normali
                      "Neighbor pairs sampled using HNSW");
         }
 
-        // Validate HNSW recall quality
+#ifdef PACMAP_ENABLE_HNSW_VALIDATION
+        // HNSW quality validation (DISABLED BY DEFAULT - for development/debugging only)
+        // This validation runs exact KNN on validation samples which is O(n) per sample
+        // For large datasets (>100K points), this can be extremely slow
+        // Enable by defining PACMAP_ENABLE_HNSW_VALIDATION in CMakeLists.txt
         if (callback && model->n_samples >= 100) {
             callback("Validating HNSW Quality", 0, 100, 0.0f, "Calculating recall vs exact KNN");
 
@@ -283,6 +297,7 @@ void sample_neighbors_pair(PacMapModel* model, const std::vector<float>& normali
                 }
             }
         }
+#endif // PACMAP_ENABLE_HNSW_VALIDATION
     }
 
    }
@@ -435,8 +450,10 @@ void sample_FP_pair(PacMapModel* model, const std::vector<float>& normalized_dat
         for (int i = 0; i < model->n_samples; ++i) {
             std::unordered_set<int> sampled_indices;
             int found = 0;
+            int target = n_fp;
+            int early_exit_threshold = static_cast<int>(n_fp * 0.9);  // ERROR12 Priority 6: 90% early exit
 
-            while (found < n_fp) {
+            while (found < target) {
                 int j = dist(rng);
                 if (j != i &&
                     sampled_indices.find(j) == sampled_indices.end() &&
@@ -452,6 +469,11 @@ void sample_FP_pair(PacMapModel* model, const std::vector<float>& normalized_dat
                         }
                     }
                     sampled_indices.insert(j);
+
+                    // ERROR12 Priority 6: Early exit at 90% to avoid wasting time
+                    if (found >= early_exit_threshold) {
+                        break;
+                    }
                 }
             }
 
@@ -558,13 +580,35 @@ std::unique_ptr<hnswlib::HierarchicalNSW<float>> create_hnsw_index(
     auto index = std::make_unique<hnswlib::HierarchicalNSW<float>>(space, n_samples, M, ef_construction);
 
     // Add data points to index with progress reporting
+    // Use parallel insertion for large datasets (>5000 points) - HNSW is thread-safe
     int report_interval = std::max(1, n_samples / 20); // Report every 5%
-    for (int i = 0; i < n_samples; ++i) {
-        index->addPoint(data + i * n_features, i);
 
-        if (callback && (i % report_interval == 0 || i == n_samples - 1)) {
-            float percent = (float)(i + 1) / n_samples * 100.0f;
-            callback("Building HNSW Index", i + 1, n_samples, percent, nullptr);
+    if (n_samples > 5000) {
+        // Parallel addition for large datasets - much faster on multi-core CPUs
+        std::atomic<int> completed(0);
+
+#ifdef _OPENMP
+        #pragma omp parallel for schedule(dynamic, 100)
+#endif
+        for (int i = 0; i < n_samples; ++i) {
+            index->addPoint(data + i * n_features, i);
+
+            // Progress reporting with atomic counter
+            int count = ++completed;
+            if (callback && (count % report_interval == 0 || count == n_samples)) {
+                float percent = (float)count / n_samples * 100.0f;
+                callback("Building HNSW Index", count, n_samples, percent, nullptr);
+            }
+        }
+    } else {
+        // Sequential addition for smaller datasets to avoid OpenMP overhead
+        for (int i = 0; i < n_samples; ++i) {
+            index->addPoint(data + i * n_features, i);
+
+            if (callback && (i % report_interval == 0 || i == n_samples - 1)) {
+                float percent = (float)(i + 1) / n_samples * 100.0f;
+                callback("Building HNSW Index", i + 1, n_samples, percent, nullptr);
+            }
         }
     }
 

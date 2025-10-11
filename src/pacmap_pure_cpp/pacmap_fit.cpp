@@ -2,6 +2,7 @@
 #include "pacmap_triplet_sampling.h"
 #include "pacmap_optimization.h"
 #include "pacmap_simple_wrapper.h"
+#include "pacmap_distance.h"
 #include <iostream>
 #include <algorithm>
 #include <numeric>
@@ -10,6 +11,160 @@
 #include <chrono>
 
 namespace fit_utils {
+
+    // Auto-tune HNSW parameters using subsample (ERROR12 Priority 1)
+    // Tests different M/ef_construction combinations to find optimal balance of speed and recall
+    int autoTuneHNSWParams(PacMapModel* model, const float* data, int n_obs, int n_dim,
+                           pacmap_progress_callback_internal callback) {
+        // Cap subsample at 30,000 points for efficiency (ERROR12 recommendation)
+        int subsample_size = std::min(30000, n_obs / 10);
+        subsample_size = std::max(1000, subsample_size); // Minimum 1000 for reliability
+
+        if (callback) {
+            std::string msg = "Sampling " + std::to_string(subsample_size) + " points for HNSW tuning";
+            callback("HNSW Auto-Tuning", 0, 100, 0.0f, msg.c_str());
+        }
+
+        // Sample random points
+        std::vector<float> subsample(static_cast<size_t>(subsample_size) * static_cast<size_t>(n_dim));
+        std::mt19937 rng(model->random_seed >= 0 ? model->random_seed : 42);
+        std::uniform_int_distribution<int> dist(0, n_obs - 1);
+
+        for (int i = 0; i < subsample_size; i++) {
+            int idx = dist(rng);
+            std::memcpy(&subsample[static_cast<size_t>(i) * static_cast<size_t>(n_dim)],
+                       data + static_cast<size_t>(idx) * static_cast<size_t>(n_dim),
+                       n_dim * sizeof(float));
+        }
+
+        // Test candidates: {M, ef_construction} pairs optimized for speed & memory
+        std::vector<std::tuple<int, int>> candidates = {
+            {16, 100},  // Fastest, lowest memory
+            {16, 150},  // Balanced (recommended default)
+            {24, 150},  // Better recall, moderate memory
+            {32, 200}   // Best quality, higher memory
+        };
+
+        // For each candidate, use higher search ef to achieve 95%+ recall
+        // Search ef should typically be >= ef_construction for good recall
+        std::vector<std::tuple<int, int, int>> test_candidates = {
+            {16, 100, 200},  // M=16, ef_construction=100, ef_search=200
+            {16, 150, 300},  // M=16, ef_construction=150, ef_search=300
+            {24, 150, 300},  // M=24, ef_construction=150, ef_search=300
+            {32, 200, 400}   // M=32, ef_construction=200, ef_search=400
+        };
+
+        float best_recall = 0.0f;
+        int best_M = 16, best_ef = 150;
+        double best_time = 1e9;
+        bool tuning_success = false;
+
+        for (size_t i = 0; i < test_candidates.size(); i++) {
+            auto [M, ef_construction, ef_search] = test_candidates[i];
+
+            try {
+                auto start = std::chrono::steady_clock::now();
+
+                // Create HNSW index with candidate parameters
+                std::unique_ptr<hnswlib::L2Space> space = std::make_unique<hnswlib::L2Space>(n_dim);
+                std::unique_ptr<hnswlib::HierarchicalNSW<float>> index =
+                    std::make_unique<hnswlib::HierarchicalNSW<float>>(space.get(), subsample_size, M, ef_construction);
+
+                // Set search ef parameter for high recall testing
+                // Use higher search ef to achieve 95%+ recall
+                index->setEf(ef_search);
+
+                // Build index
+                for (int j = 0; j < subsample_size; j++) {
+                    index->addPoint(&subsample[static_cast<size_t>(j) * static_cast<size_t>(n_dim)], j);
+                }
+
+                auto build_time = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now() - start).count();
+
+                // Test recall on 100 random queries
+                float avg_recall = 0.0f;
+                auto query_start = std::chrono::steady_clock::now();
+
+                for (int q = 0; q < 100; q++) {
+                    int query_idx = q % subsample_size;
+
+                    // Exact KNN
+                    std::vector<std::pair<float, int>> exact_knn;
+                    distance_metrics::find_knn_exact(
+                        &subsample[static_cast<size_t>(query_idx) * static_cast<size_t>(n_dim)],
+                        subsample.data(),
+                        subsample_size, n_dim, model->metric,
+                        model->n_neighbors, exact_knn, query_idx
+                    );
+
+                    // HNSW KNN
+                    auto hnsw_res = index->searchKnn(&subsample[static_cast<size_t>(query_idx) * static_cast<size_t>(n_dim)], model->n_neighbors);
+                    std::vector<int> hnsw_indices;
+                    while (!hnsw_res.empty()) {
+                        hnsw_indices.push_back(static_cast<int>(hnsw_res.top().second));
+                        hnsw_res.pop();
+                    }
+
+                    // Calculate recall
+                    avg_recall += distance_metrics::calculate_recall(exact_knn, hnsw_indices.data(), model->n_neighbors);
+                }
+                avg_recall /= 100.0f;
+
+                auto query_time = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now() - query_start).count();
+
+                double total_time = static_cast<double>(build_time + query_time);
+
+                // Select best: require >95% recall, minimize time
+                if (avg_recall >= 0.95f && total_time < best_time) {
+                    best_recall = avg_recall;
+                    best_time = total_time;
+                    best_M = M;
+                    best_ef = ef_construction; // Store construction ef for final model
+                    tuning_success = true;
+                }
+
+                if (callback) {
+                    std::string msg = "M=" + std::to_string(M) + ", ef_c=" + std::to_string(ef_construction) +
+                                      ", ef_s=" + std::to_string(ef_search) + ", recall=" + std::to_string(static_cast<int>(avg_recall * 100)) + "%";
+                    callback("HNSW Tuning", static_cast<int>((i + 1) * 25), 100, static_cast<float>((i + 1) * 25), msg.c_str());
+                }
+
+            } catch (const std::exception& e) {
+                // Candidate failed, continue to next
+                if (callback) {
+                    std::string msg = "M=" + std::to_string(M) + ", ef_c=" + std::to_string(ef_construction) +
+                                      ", ef_s=" + std::to_string(ef_search) + " failed";
+                    callback("Warning", static_cast<int>((i + 1) * 25), 100, static_cast<float>((i + 1) * 25), msg.c_str());
+                }
+                continue;
+            }
+        }
+
+        // Use defaults if tuning failed
+        if (!tuning_success) {
+            if (callback) {
+                callback("Warning", 100, 100, 100.0f, "HNSW tuning failed, using defaults M=16, ef=150");
+            }
+            best_M = 16;
+            best_ef = 150;
+        }
+
+        // Apply tuned parameters
+        model->hnsw_m = best_M;
+        model->hnsw_ef_construction = best_ef;
+        model->hnsw_ef_search = std::max(best_ef * 2, 200); // Use higher search ef for production
+
+        if (callback) {
+            std::string msg = "Selected M=" + std::to_string(best_M) + ", ef_c=" + std::to_string(best_ef) +
+                              ", ef_s=" + std::to_string(model->hnsw_ef_search) +
+                              ", recall=" + std::to_string(static_cast<int>(best_recall * 100)) + "%";
+            callback("HNSW Auto-Tuning Complete", 100, 100, 100.0f, msg.c_str());
+        }
+
+        return PACMAP_SUCCESS;
+    }
 
     // Main PACMAP fitting function with proper PACMAP workflow (internal implementation)
     int internal_pacmap_fit_with_progress_v2(PacMapModel* model,
@@ -71,10 +226,21 @@ namespace fit_utils {
             model->use_quantization = (use_quantization != 0);
             model->force_exact_knn = (force_exact_knn != 0); // Convert int to bool
             model->hnsw_m = M > 0 ? M : 16;
-            model->hnsw_ef_construction = ef_construction > 0 ? ef_construction : 200;
-            model->hnsw_ef_search = ef_search > 0 ? ef_search : 200;
+            model->hnsw_ef_construction = ef_construction > 0 ? ef_construction : 150;  // ERROR12: Lowered from 200 for faster index building
+            model->hnsw_ef_search = ef_search > 0 ? ef_search : 100;  // ERROR12: Lowered from 200 for 2x faster queries
 
-            
+            // Auto-tune HNSW parameters if requested (ERROR12 Priority 1)
+            // Only run for HNSW mode (not force_exact_knn) and datasets >= 5000 points
+            if (autoHNSWParam && !force_exact_knn && n_obs >= 5000) {
+                int tune_result = autoTuneHNSWParams(model, data, n_obs, n_dim, progress_callback);
+                if (tune_result != PACMAP_SUCCESS) {
+                    // Tuning failed, but continue with defaults
+                    if (progress_callback) {
+                        progress_callback("Warning", 0, 1, 0.0f, "HNSW auto-tuning failed, using defaults M=16, ef=150");
+                    }
+                }
+            }
+
             if (progress_callback) {
                 progress_callback("Initializing PACMAP", 1, 10, 10.0f, "Setting up model parameters");
             }
@@ -128,7 +294,15 @@ namespace fit_utils {
 
             sample_triplets(model, normalized_data.data(), progress_callback);
 
-    
+            // ERROR12 Priority 12: Validate triplets before optimization
+            if (model->triplets.empty()) {
+                if (progress_callback) {
+                    progress_callback("Error", 0, 1, 0.0f, "No triplets generated for optimization - check your parameters");
+                }
+                return PACMAP_ERROR_INVALID_PARAMS;
+            }
+
+
             // Initialize Adam optimizer state (handled in optimization loop)
             size_t embedding_size = static_cast<size_t>(n_obs) * static_cast<size_t>(embedding_dim);
             // Adam state is now initialized in the optimization function
