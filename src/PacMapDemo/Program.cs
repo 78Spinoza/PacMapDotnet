@@ -17,6 +17,23 @@ namespace PacMapDemo
 {
     class Program
     {
+        /// <summary>
+        /// Gets the full path for the Results directory
+        /// </summary>
+        static string GetResultsPath()
+        {
+            var currentDir = Directory.GetCurrentDirectory();
+            return Path.GetFullPath(Path.Combine(currentDir, "Results"));
+        }
+
+        /// <summary>
+        /// Gets the full path for a subdirectory within Results
+        /// </summary>
+        static string GetResultsPath(string subDirectory)
+        {
+            return Path.GetFullPath(Path.Combine(GetResultsPath(), subDirectory));
+        }
+
         static void Main(string[] args)
         {
             Console.WriteLine("Simple PACMAP - Mammoth Embedding");
@@ -25,15 +42,27 @@ namespace PacMapDemo
 
             try
             {
-                // Clean up old images first
-                Console.WriteLine("Cleaning up old images from Results folder...");
-                CleanupOldImages();
+                // Clean up ALL old results first (images and subfolders)
+                Console.WriteLine("🧹 Cleaning up ALL previous results from Results folder...");
+                CleanupAllResults();
 
                 // Load mammoth data
                 Console.WriteLine("Loading mammoth dataset...");
                 var (data, labels) = LoadMammothData();
                 Console.WriteLine($"Loaded: {data.GetLength(0)} points, {data.GetLength(1)} dimensions");
 
+                // Convert double[,] to float[,]
+                int n = data.GetLength(0);
+                int d = data.GetLength(1);
+                var floatData = new float[n, d];
+                for (int i = 0; i < n; i++)
+                    for (int j = 0; j < d; j++)
+                        floatData[i, j] = (float)data[i, j];
+
+                // =============================================
+                // DISABLED: Basic validation experiments (Direct KNN + HNSW)
+                // =============================================
+                /*
                 // Create TWO embeddings: Direct KNN and HNSW for comparison
                 Console.WriteLine("TESTING ENHANCED MN_ratio (1.2) WITH ALL FIXES:");
                 Console.WriteLine("   - ENHANCED MN_ratio (1.2) - stronger global connectivity");
@@ -46,14 +75,6 @@ namespace PacMapDemo
                 Console.WriteLine("Testing with ENHANCED hyperparameters (~800 total iterations each):");
                 Console.WriteLine("  Enhanced: (200, 200, 400) = 800 total iterations (better convergence)");
                 Console.WriteLine();
-
-                // Convert double[,] to float[,]
-                int n = data.GetLength(0);
-                int d = data.GetLength(1);
-                var floatData = new float[n, d];
-                for (int i = 0; i < n; i++)
-                    for (int j = 0; j < d; j++)
-                        floatData[i, j] = (float)data[i, j];
 
                 // 1️⃣ FIRST: Direct KNN Embedding
                 Console.WriteLine("==========================================");
@@ -69,12 +90,8 @@ namespace PacMapDemo
                 );
 
                 var stopwatchKNN = Stopwatch.StartNew();
-                var embeddingKNN = pacmapKNN.FitWithProgress(
+                var embeddingKNN = pacmapKNN.Fit(
                     data: floatData,
-                    progressCallback: (phase, current, total, percent, message) =>
-                    {
-                        Console.Write($"\r   [{phase}] Progress: {current}/{total} ({percent:F1}%) {message}            ");
-                    },
                     embeddingDimension: 2,
                     nNeighbors: 10,
                     learningRate: 1.0f,
@@ -83,7 +100,11 @@ namespace PacMapDemo
                     numIters: (200, 200, 400),
                     metric: DistanceMetric.Euclidean,
                     forceExactKnn: true,  // Direct KNN
-                    randomSeed: 42
+                    randomSeed: 42,
+                    progressCallback: (phase, current, total, percent, message) =>
+                    {
+                        Console.Write($"\r{new string(' ', 80)}\r   [{phase}] Progress: {current}/{total} ({percent:F1}%) {message}");
+                    }
                 );
                 Console.WriteLine(); // New line after progress
                 stopwatchKNN.Stop();
@@ -119,12 +140,8 @@ namespace PacMapDemo
                 );
 
                 var stopwatchHNSW = Stopwatch.StartNew();
-                var embeddingHNSW = pacmapHNSW.FitWithProgress(
+                var embeddingHNSW = pacmapHNSW.Fit(
                     data: floatData,
-                    progressCallback: (phase, current, total, percent, message) =>
-                    {
-                        Console.Write($"\r   [{phase}] Progress: {current}/{total} ({percent:F1}%) {message}            ");
-                    },
                     embeddingDimension: 2,
                     nNeighbors: 10,
                     learningRate: 1.0f,
@@ -132,8 +149,12 @@ namespace PacMapDemo
                     fpRatio: 2.0f,
                     numIters: (200, 200, 400),
                     metric: DistanceMetric.Euclidean,
-                    forceExactKnn: false,  // HNSW
-                    randomSeed: 42
+                    forceExactKnn: false,  // HNSW with auto-discovery
+                    randomSeed: 42,
+                    progressCallback: (phase, current, total, percent, message) =>
+                    {
+                        Console.Write($"\r{new string(' ', 80)}\r   [{phase}] Progress: {current}/{total} ({percent:F1}%) {message}");
+                    }
                 );
                 Console.WriteLine(); // New line after progress
                 stopwatchHNSW.Stop();
@@ -170,6 +191,66 @@ namespace PacMapDemo
                 Console.WriteLine("🧪 Running Comprehensive Test Suite (Reproducibility & Persistence)");
                 Console.WriteLine("=========================================================");
                 RunTransformConsistencyTests();
+                */
+
+                // =============================================
+                // DISABLED: Hyperparameter discovery and experiments
+                // =============================================
+                /*
+                // Run hyperparameter experiments after comprehensive tests
+                Console.WriteLine();
+                Console.WriteLine("=========================================================");
+                Console.WriteLine("🔬 Running Hyperparameter Experiments");
+                Console.WriteLine("=========================================================");
+                Console.WriteLine("   Testing different PACMAP hyperparameters on mammoth dataset");
+                Console.WriteLine("   Using shared HNSW parameters discovered once for all experiments");
+                Console.WriteLine("   Images will have white backgrounds with black dots as requested");
+                Console.WriteLine();
+
+                // Auto-discover optimal HNSW parameters once (shared across all experiments)
+                Console.WriteLine("🔍 Auto-discovering optimal HNSW parameters for all experiments...");
+                var optimalHNSWParams = AutoDiscoverHNSWParameters(floatData);
+
+                Console.WriteLine($"✅ HNSW Parameters discovered: M={optimalHNSWParams.M}, ef_construction={optimalHNSWParams.EfConstruction}, ef_search={optimalHNSWParams.EfSearch}");
+                Console.WriteLine();
+
+                // 1️⃣ Neighbor Experiments
+                DemoNeighborExperiments(floatData, optimalHNSWParams);
+
+                // 2️⃣ Learning Rate Experiments
+                DemoLearningRateExperiments(floatData, optimalHNSWParams);
+                */
+
+                // =============================================
+                // ACTIVE: Use optimal HNSW parameters directly (skip slow discovery)
+                // =============================================
+                Console.WriteLine("🚀 Using proven optimal HNSW parameters (skip slow auto-discovery)...");
+                var optimalHNSWParams = (M: 32, EfConstruction: 400, EfSearch: 200);
+                Console.WriteLine($"✅ Using optimal HNSW parameters: M={optimalHNSWParams.M}, ef_construction={optimalHNSWParams.EfConstruction}, ef_search={optimalHNSWParams.EfSearch}");
+                Console.WriteLine();
+
+                // 3️⃣ Advanced Parameter Tuning (Hairy Mammoth Methodology)
+                DemoAdvancedParameterTuning(floatData, optimalHNSWParams);
+
+                // =============================================
+                // DISABLED: Additional expensive experiments
+                // =============================================
+                /*
+                // 4️⃣ Initialization Standard Deviation Experiments
+                DemoInitializationStdDevExperiments(floatData, optimalHNSWParams);
+
+                // 5️⃣ Extended Learning Rate Experiments
+                DemoExtendedLearningRateExperiments(floatData, optimalHNSWParams);
+
+                Console.WriteLine();
+                Console.WriteLine("🎉 ALL HYPERPARAMETER EXPERIMENTS COMPLETED!");
+                Console.WriteLine("📁 Check Results folder for all experiment visualizations:");
+                Console.WriteLine("   - neighbor_experiment_n*.png (different neighbor counts)");
+                Console.WriteLine("   - learning_rate_experiment_lr*.png (different learning rates)");
+                Console.WriteLine("   - advanced_tuning_*.png (advanced parameter combinations)");
+                Console.WriteLine("   - init_std_dev_experiment_*.png (different initialization std dev)");
+                Console.WriteLine("   - extended_lr_experiment_*.png (extended learning rate tests)");
+                */
             }
             catch (Exception ex)
             {
@@ -651,6 +732,99 @@ namespace PacMapDemo
             }
         }
 
+        // Clean up ALL results from Results folder (images and subfolders)
+        static void CleanupAllResults()
+        {
+            try
+            {
+                string resultsDir = GetResultsPath();
+
+                // If Results directory doesn't exist, create it and return
+                if (!Directory.Exists(resultsDir))
+                {
+                    Directory.CreateDirectory(resultsDir);
+                    Console.WriteLine($"   📁 Created Results directory");
+                    return;
+                }
+
+                Console.WriteLine($"   🗂️  Clearing all contents from: {resultsDir}");
+
+                int deletedFiles = 0;
+                int deletedFolders = 0;
+                int failedFiles = 0;
+                int failedFolders = 0;
+
+                // Delete ALL files in the Results directory (all extensions)
+                var allFiles = Directory.GetFiles(resultsDir, "*", SearchOption.AllDirectories);
+                foreach (var file in allFiles)
+                {
+                    try
+                    {
+                        File.SetAttributes(file, FileAttributes.Normal); // Remove read-only if set
+                        File.Delete(file);
+                        deletedFiles++;
+                    }
+                    catch (Exception ex)
+                    {
+                        failedFiles++;
+                        Console.WriteLine($"   ! Could not delete file {Path.GetFileName(file)}: {ex.Message}");
+                    }
+                }
+
+                // Delete ALL subdirectories
+                var subDirectories = Directory.GetDirectories(resultsDir, "*", SearchOption.AllDirectories);
+                // Process in reverse order to delete nested directories first
+                foreach (var directory in subDirectories.Reverse())
+                {
+                    try
+                    {
+                        // Delete directory only if empty (files should already be deleted)
+                        if (Directory.GetFiles(directory).Length == 0 && Directory.GetDirectories(directory).Length == 0)
+                        {
+                            Directory.Delete(directory);
+                            deletedFolders++;
+                        }
+                        else
+                        {
+                            // Force delete if still has contents
+                            Directory.Delete(directory, recursive: true);
+                            deletedFolders++;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        failedFolders++;
+                        Console.WriteLine($"   ! Could not delete folder {Path.GetFileName(directory)}: {ex.Message}");
+                    }
+                }
+
+                // Summary
+                Console.WriteLine($"   📊 Cleanup Summary:");
+                if (deletedFiles > 0)
+                    Console.WriteLine($"      ✅ Deleted {deletedFiles} files");
+                if (deletedFolders > 0)
+                    Console.WriteLine($"      ✅ Deleted {deletedFolders} subfolders");
+                if (failedFiles > 0)
+                    Console.WriteLine($"      ⚠️  Failed to delete {failedFiles} files");
+                if (failedFolders > 0)
+                    Console.WriteLine($"      ⚠️  Failed to delete {failedFolders} folders");
+
+                if (deletedFiles == 0 && deletedFolders == 0)
+                {
+                    Console.WriteLine($"      ℹ️  Results folder was already clean");
+                }
+                else
+                {
+                    Console.WriteLine($"      🎉 Results folder completely cleared!");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"   ❌ Critical cleanup error: {ex.Message}");
+                Console.WriteLine($"   ⚠️  Continuing with demo (some old files may remain)");
+            }
+        }
+
         // Create visualizations and print what's being created
         static void CreateVisualizations(float[,] embedding, double[,] originalData, int[] labels, PacMapModel pacmap, double executionTime)
         {
@@ -967,7 +1141,7 @@ namespace PacMapDemo
             plotModel.Legends.Add(new Legend { LegendPosition = LegendPosition.TopRight });
 
             // Export to PNG
-            var exporter = new PngExporter { Width = 800, Height = 600 };
+            var exporter = new PngExporter { Width = 800, Height = 600, Resolution = 300 };
             using var stream = File.Create(outputPath);
             exporter.Export(plotModel, stream);
         }
@@ -992,7 +1166,7 @@ namespace PacMapDemo
             plotModel.Annotations.Add(annotation);
 
             // Export to PNG
-            var exporter = new PngExporter { Width = 800, Height = 600 };
+            var exporter = new PngExporter { Width = 800, Height = 600, Resolution = 300 };
             using var stream = File.Create(outputPath);
             exporter.Export(plotModel, stream);
         }
@@ -1027,7 +1201,7 @@ namespace PacMapDemo
             plotModel.Legends.Add(new Legend { LegendPosition = LegendPosition.TopRight });
 
             // Export to PNG
-            var exporter = new PngExporter { Width = 800, Height = 600 };
+            var exporter = new PngExporter { Width = 800, Height = 600, Resolution = 300 };
             using var stream = File.Create(outputPath);
             exporter.Export(plotModel, stream);
         }
@@ -1088,7 +1262,7 @@ namespace PacMapDemo
             plotModel.Legends.Add(new Legend { LegendPosition = LegendPosition.TopRight });
 
             // Export to PNG
-            var exporter = new PngExporter { Width = 800, Height = 600 };
+            var exporter = new PngExporter { Width = 800, Height = 600, Resolution = 300 };
             using var stream = File.Create(outputPath);
             exporter.Export(plotModel, stream);
         }
@@ -1177,8 +1351,13 @@ namespace PacMapDemo
                 nNeighbors: nNeighbors,
                 metric: metric,
                 forceExactKnn: !useHnsw,
-                randomSeed: seed
+                randomSeed: seed,
+                progressCallback: (phase, current, total, percent, message) =>
+                {
+                    Console.Write($"\r{new string(' ', 80)}\r   [{phase}] Progress: {current}/{total} ({percent:F1}%) {message}");
+                }
             );
+            Console.WriteLine(); // New line after progress
             Console.WriteLine($"   ✅ Initial embedding created: {embedding1.GetLength(0)}x{embedding1.GetLength(1)}");
 
             // Step 2: Save model
@@ -1196,8 +1375,13 @@ namespace PacMapDemo
                 nNeighbors: nNeighbors,
                 metric: metric,
                 forceExactKnn: !useHnsw,
-                randomSeed: seed
+                randomSeed: seed,
+                progressCallback: (phase, current, total, percent, message) =>
+                {
+                    Console.Write($"\r{new string(' ', 80)}\r   [{phase}] Progress: {current}/{total} ({percent:F1}%) {message}");
+                }
             );
+            Console.WriteLine(); // New line after progress
             Console.WriteLine($"   ✅ Second embedding created: {embedding2.GetLength(0)}x{embedding2.GetLength(1)}");
 
             // Step 4: Load saved model
@@ -1230,9 +1414,37 @@ namespace PacMapDemo
             GenerateProjection(originalData, embedding1, "XZ", Path.Combine(outputDir, "original_3d_XZ_SideView.png"));
             GenerateProjection(originalData, embedding1, "YZ", Path.Combine(outputDir, "original_3d_YZ_FrontView.png"));
 
-            // Embedding visualizations
-            GenerateScatterPlot(embedding1, labels, "PACMAP Embedding 1", Path.Combine(outputDir, "embedding1.png"));
-            GenerateScatterPlot(embedding2, labels, "PACMAP Embedding 2", Path.Combine(outputDir, "embedding2.png"));
+            // Embedding visualizations with white background and parameter information
+            var modelInfo = model1.ModelInfo;
+            var paramInfo1 = new Dictionary<string, object>
+            {
+                ["test_type"] = "Reproducibility Test - Embedding 1",
+                ["n_neighbors"] = modelInfo.Neighbors,
+                ["distance_metric"] = modelInfo.Metric.ToString(),
+                ["mn_ratio"] = modelInfo.MN_ratio.ToString("F2"),
+                ["fp_ratio"] = modelInfo.FP_ratio.ToString("F2"),
+                ["learning_rate"] = model1.LearningRate.ToString("F3"),
+                ["init_std_dev"] = model1.InitializationStdDev.ToString("E0"),
+                ["phase_iters"] = $"({model1.NumIters.phase1}, {model1.NumIters.phase2}, {model1.NumIters.phase3})",
+                ["data_points"] = modelInfo.TrainingSamples,
+                ["original_dimensions"] = modelInfo.InputDimension,
+                ["random_seed"] = modelInfo.RandomSeed,
+                ["KNN_Mode"] = useHnsw ? "HNSW" : "Direct KNN",
+                ["hnsw_m"] = modelInfo.HnswM,
+                ["hnsw_ef_construction"] = modelInfo.HnswEfConstruction,
+                ["hnsw_ef_search"] = modelInfo.HnswEfSearch
+            };
+
+            var paramInfo2 = new Dictionary<string, object>(paramInfo1)
+            {
+                ["test_type"] = "Reproducibility Test - Embedding 2"
+            };
+
+            var title1 = $"PACMAP Reproducibility Test - Embedding 1\n{modelInfo.Metric} | k={modelInfo.Neighbors} | {(useHnsw ? "HNSW" : "Direct KNN")}\nmn={modelInfo.MN_ratio:F2} fp={modelInfo.FP_ratio:F2} lr={model1.LearningRate:F3}";
+            var title2 = $"PACMAP Reproducibility Test - Embedding 2\n{modelInfo.Metric} | k={modelInfo.Neighbors} | {(useHnsw ? "HNSW" : "Direct KNN")}\nmn={modelInfo.MN_ratio:F2} fp={modelInfo.FP_ratio:F2} lr={model1.LearningRate:F3}";
+
+            Visualizer.PlotSimplePacMAP(embedding1, title1, Path.Combine(outputDir, "embedding1.png"), paramInfo1);
+            Visualizer.PlotSimplePacMAP(embedding2, title2, Path.Combine(outputDir, "embedding2.png"), paramInfo2);
 
             // Consistency plots
             GenerateConsistencyPlot(embedding1, embedding2, labels, "Embedding Consistency (X)", Path.Combine(outputDir, "consistency_x.png"));
@@ -1256,6 +1468,1093 @@ namespace PacMapDemo
                 Console.WriteLine("   ⚠️  WARNING: Results are not perfectly reproducible!");
                 Console.WriteLine("   This may indicate non-deterministic behavior in the implementation.");
             }
+        }
+
+        // ====================== HYPERPARAMETER EXPERIMENTS ======================
+
+        /// <summary>
+        /// Auto-discovers optimal HNSW parameters for the mammoth dataset (shared across experiments)
+        /// </summary>
+        static (int M, int EfConstruction, int EfSearch) AutoDiscoverHNSWParameters(float[,] floatData)
+        {
+            var autoModel = new PacMapModel(
+                mnRatio: 1.2f,
+                fpRatio: 2.0f,
+                learningRate: 1.0f,
+                initializationStdDev: 1e-4f,
+                numIters: (200, 200, 400)
+            );
+
+            var autoStopwatch = Stopwatch.StartNew();
+            var autoEmbedding = autoModel.Fit(
+                data: floatData,
+                embeddingDimension: 2,
+                nNeighbors: 10,
+                learningRate: 1.0f,
+                mnRatio: 1.2f,
+                fpRatio: 2.0f,
+                numIters: (200, 200, 400),
+                metric: DistanceMetric.Euclidean,
+                forceExactKnn: false,  // HNSW with auto-discovery
+                randomSeed: 42,
+                autoHNSWParam: true,
+                progressCallback: (phase, current, total, percent, message) =>
+                {
+                    Console.Write($"\r{new string(' ', 80)}\r   [Auto-Discovery] {phase}: {current}/{total} ({percent:F1}%) {message}");
+                }
+            );
+            autoStopwatch.Stop();
+            Console.WriteLine(); // New line after progress
+
+            // Get discovered HNSW parameters
+            var modelInfo = autoModel.ModelInfo;
+            return (modelInfo.HnswM, modelInfo.HnswEfConstruction, modelInfo.HnswEfSearch);
+        }
+
+        /// <summary>
+        /// DemoNeighborExperiments - Tests different neighbor counts (5-50) on mammoth dataset
+        /// Uses shared HNSW parameters discovered once for optimal performance
+        /// </summary>
+        static void DemoNeighborExperiments(float[,] floatData, (int M, int EfConstruction, int EfSearch) hnswParams)
+        {
+            Console.WriteLine();
+            Console.WriteLine("=========================================================");
+            Console.WriteLine("🔬 DemoNeighborExperiments: Testing Neighbor Counts (5-50)");
+            Console.WriteLine("=========================================================");
+            Console.WriteLine("   Testing different n_neighbors values with shared HNSW parameters");
+            Console.WriteLine($"   Using HNSW: M={hnswParams.M}, ef_construction={hnswParams.EfConstruction}, ef_search={hnswParams.EfSearch}");
+            Console.WriteLine();
+
+            // Load mammoth data
+            var (data, labels) = LoadMammothData();
+
+            // Test neighbor counts: 5, 10, 15, 20, 30, 40, 50
+            var neighborTests = new[] { 5, 10, 15, 20, 30, 40, 50 };
+            var results = new List<(int nNeighbors, float[,] embedding, double time, double quality)>();
+
+            // Testing all neighbor counts with shared HNSW parameters
+            Console.WriteLine("🚀 Testing neighbor counts with shared HNSW parameters...");
+            Console.WriteLine($"   Using HNSW: M={hnswParams.M}, ef_construction={hnswParams.EfConstruction}, ef_search={hnswParams.EfSearch}");
+            Console.WriteLine();
+
+            foreach (var nNeighbors in neighborTests)
+            {
+                Console.WriteLine($"📊 Testing n_neighbors = {nNeighbors}...");
+
+                var model = new PacMapModel(
+                    mnRatio: 1.2f,
+                    fpRatio: 2.0f,
+                    learningRate: 1.0f,
+                    initializationStdDev: 1e-4f,
+                    numIters: (200, 200, 400)
+                );
+
+                var stopwatch = Stopwatch.StartNew();
+                var embedding = model.Fit(
+                    data: floatData,
+                    embeddingDimension: 2,
+                    nNeighbors: nNeighbors,
+                    learningRate: 1.0f,
+                    mnRatio: 1.2f,
+                    fpRatio: 2.0f,
+                    numIters: (200, 200, 400),
+                    metric: DistanceMetric.Euclidean,
+                    forceExactKnn: false,  // HNSW
+                    hnswM: hnswParams.M,
+                    hnswEfConstruction: hnswParams.EfConstruction,
+                    hnswEfSearch: hnswParams.EfSearch,
+                    autoHNSWParam: false,
+                    randomSeed: 42,
+                    progressCallback: (phase, current, total, percent, message) =>
+                    {
+                        Console.Write($"\r{new string(' ', 80)}\r   [n={nNeighbors}] {phase}: {current}/{total} ({percent:F1}%) {message}");
+                    }
+                );
+                stopwatch.Stop();
+                Console.WriteLine(); // New line after progress
+
+                double quality = CalculateEmbeddingQuality(embedding, labels);
+                results.Add((nNeighbors, embedding, stopwatch.Elapsed.TotalSeconds, quality));
+
+                Console.WriteLine($"   ✅ n={nNeighbors}: quality={quality:F4}, time={stopwatch.Elapsed.TotalSeconds:F2}s");
+
+                // Create visualization for this neighbor count
+                var paramInfo = new Dictionary<string, object>
+                {
+                    ["experiment_type"] = "Neighbor_Experiments",
+                    ["n_neighbors"] = nNeighbors,
+                    ["mn_ratio"] = "1.2",
+                    ["fp_ratio"] = "2.0",
+                    ["learning_rate"] = "1.0",
+                    ["hnsw_m"] = hnswParams.M,
+                    ["hnsw_ef_construction"] = hnswParams.EfConstruction,
+                    ["hnsw_ef_search"] = hnswParams.EfSearch,
+                    ["embedding_quality"] = quality.ToString("F4"),
+                    ["execution_time"] = $"{stopwatch.Elapsed.TotalSeconds:F2}s"
+                };
+
+                // Create organized folder structure for GIF creation
+                var experimentDir = Path.Combine("Results", "neighbor_experiments");
+                Directory.CreateDirectory(experimentDir);
+
+                // Sequential numbering for GIF creation
+                var imageNumber = (nNeighbors - 5) / 5 + 1; // Maps 5,10,15,20,30,40,50 to 1,2,3,4,6,8,10
+                if (nNeighbors == 30) imageNumber = 6;
+                else if (nNeighbors == 40) imageNumber = 8;
+                else if (nNeighbors == 50) imageNumber = 10;
+
+                var outputPath = Path.Combine(experimentDir, $"{imageNumber:D4}.png");
+
+                var title = $"Neighbor Experiment: n={nNeighbors}\nHNSW: M={hnswParams.M}, ef={hnswParams.EfSearch}\nQuality: {quality:F4}, Time: {stopwatch.Elapsed.TotalSeconds:F2}s";
+                Visualizer.PlotMammothPacMAP(embedding, data, title, outputPath, paramInfo);
+                Console.WriteLine($"   📈 Saved: {Path.GetFileName(outputPath)}");
+                Console.WriteLine();
+            }
+
+            // Summary
+            Console.WriteLine("📊 NEIGHBOR EXPERIMENTS SUMMARY");
+            Console.WriteLine(new string('=', 50));
+            var bestResult = results.OrderBy(r => r.quality).First();
+            Console.WriteLine($"🏆 Best neighbor count: n={bestResult.nNeighbors} (quality: {bestResult.quality:F4})");
+            Console.WriteLine($"⏱️  Execution times ranged from {results.Min(r => r.time):F2}s to {results.Max(r => r.time):F2}s");
+            Console.WriteLine("📁 All results saved to Results/neighbor_experiments/0001.png, 0002.png, etc. (ready for GIF creation)");
+        }
+
+        /// <summary>
+        /// DemoLearningRateExperiments - Learning rate optimization (0.5-1.0) on mammoth dataset
+        /// Uses shared HNSW parameters discovered once for optimal performance
+        /// </summary>
+        static void DemoLearningRateExperiments(float[,] floatData, (int M, int EfConstruction, int EfSearch) hnswParams)
+        {
+            Console.WriteLine();
+            Console.WriteLine("=========================================================");
+            Console.WriteLine("🎓 DemoLearningRateExperiments: Learning Rate (0.5-1.0)");
+            Console.WriteLine("=========================================================");
+            Console.WriteLine("   Testing different learning_rate values with shared HNSW parameters");
+            Console.WriteLine($"   Using HNSW: M={hnswParams.M}, ef_construction={hnswParams.EfConstruction}, ef_search={hnswParams.EfSearch}");
+            Console.WriteLine();
+
+            // Load mammoth data
+            var (data, labels) = LoadMammothData();
+
+            // Test learning rates: 0.5, 0.6, 0.7, 0.8, 0.9, 1.0
+            var learningRateTests = new[] { 0.5f, 0.6f, 0.7f, 0.8f, 0.9f, 1.0f };
+            var results = new List<(float learningRate, float[,] embedding, double time, double quality)>();
+
+            // Testing all learning rates with shared HNSW parameters
+            Console.WriteLine("🚀 Testing learning rates with shared HNSW parameters...");
+            Console.WriteLine($"   Using HNSW: M={hnswParams.M}, ef_construction={hnswParams.EfConstruction}, ef_search={hnswParams.EfSearch}");
+            Console.WriteLine();
+
+            foreach (var learningRate in learningRateTests)
+            {
+                Console.WriteLine($"📊 Testing learning_rate = {learningRate:F1}...");
+
+                var model = new PacMapModel(
+                    mnRatio: 1.2f,
+                    fpRatio: 2.0f,
+                    learningRate: learningRate,
+                    initializationStdDev: 1e-4f,
+                    numIters: (200, 200, 400)
+                );
+
+                var stopwatch = Stopwatch.StartNew();
+                var embedding = model.Fit(
+                    data: floatData,
+                    embeddingDimension: 2,
+                    nNeighbors: 10,
+                    learningRate: learningRate,
+                    mnRatio: 1.2f,
+                    fpRatio: 2.0f,
+                    numIters: (200, 200, 400),
+                    metric: DistanceMetric.Euclidean,
+                    forceExactKnn: false,  // HNSW
+                    hnswM: hnswParams.M,
+                    hnswEfConstruction: hnswParams.EfConstruction,
+                    hnswEfSearch: hnswParams.EfSearch,
+                    autoHNSWParam: false,
+                    randomSeed: 42,
+                    progressCallback: (phase, current, total, percent, message) =>
+                    {
+                        Console.Write($"\r{new string(' ', 80)}\r   [lr={learningRate:F1}] {phase}: {current}/{total} ({percent:F1}%) {message}");
+                    }
+                );
+                stopwatch.Stop();
+                Console.WriteLine(); // New line after progress
+
+                double quality = CalculateEmbeddingQuality(embedding, labels);
+                results.Add((learningRate, embedding, stopwatch.Elapsed.TotalSeconds, quality));
+
+                Console.WriteLine($"   ✅ lr={learningRate:F1}: quality={quality:F4}, time={stopwatch.Elapsed.TotalSeconds:F2}s");
+
+                // Create visualization for this learning rate
+                var paramInfo = new Dictionary<string, object>
+                {
+                    ["experiment_type"] = "Learning_Rate_Experiments",
+                    ["learning_rate"] = learningRate.ToString("F1"),
+                    ["n_neighbors"] = "10",
+                    ["mn_ratio"] = "1.2",
+                    ["fp_ratio"] = "2.0",
+                    ["hnsw_m"] = hnswParams.M,
+                    ["hnsw_ef_construction"] = hnswParams.EfConstruction,
+                    ["hnsw_ef_search"] = hnswParams.EfSearch,
+                    ["embedding_quality"] = quality.ToString("F4"),
+                    ["execution_time"] = $"{stopwatch.Elapsed.TotalSeconds:F2}s"
+                };
+
+                // Create organized folder structure for GIF creation
+                var experimentDir = Path.Combine("Results", "learning_rate_experiments");
+                Directory.CreateDirectory(experimentDir);
+
+                // Sequential numbering for GIF creation (maps 0.5-1.0 to 0001-0006)
+                var imageNumber = (int)((learningRate - 0.5f) / 0.1f) + 1;
+                var outputPath = Path.Combine(experimentDir, $"{imageNumber:D4}.png");
+
+                var title = $"Learning Rate Experiment: lr={learningRate:F1}\nHNSW: M={hnswParams.M}, ef={hnswParams.EfSearch}\nQuality: {quality:F4}, Time: {stopwatch.Elapsed.TotalSeconds:F2}s";
+                Visualizer.PlotMammothPacMAP(embedding, data, title, outputPath, paramInfo);
+                Console.WriteLine($"   📈 Saved: {Path.GetFileName(outputPath)}");
+                Console.WriteLine();
+            }
+
+            // Summary
+            Console.WriteLine("📊 LEARNING RATE EXPERIMENTS SUMMARY");
+            Console.WriteLine(new string('=', 50));
+            var bestResult = results.OrderBy(r => r.quality).First();
+            Console.WriteLine($"🏆 Best learning rate: {bestResult.learningRate:F1} (quality: {bestResult.quality:F4})");
+            Console.WriteLine($"⏱️  Execution times ranged from {results.Min(r => r.time):F2}s to {results.Max(r => r.time):F2}s");
+            Console.WriteLine("📁 All results saved to Results/learning_rate_experiments/0001.png, 0002.png, etc. (ready for GIF creation)");
+        }
+
+        /// <summary>
+        /// DemoAdvancedParameterTuning - REAL Hairy Mammoth experiments from Program_Complex.cs
+        /// Systematic testing of PACMAP hyperparameters using the mammoth_a.csv dataset
+        /// Tests midNearRatio, farPairRatio, and neighbors variations exactly as in Program_Complex.cs
+        /// Each experiment type creates images in separate folders: hairy_midnear_knn, hairy_farpair_knn, hairy_neighbor_knn
+        /// </summary>
+        static void DemoAdvancedParameterTuning(float[,] floatData, (int M, int EfConstruction, int EfSearch) hnswParams)
+        {
+            Console.WriteLine();
+            Console.WriteLine("=========================================================");
+            Console.WriteLine("🦣 DemoAdvancedParameterTuning: REAL Hairy Mammoth Experiments");
+            Console.WriteLine("=========================================================");
+            Console.WriteLine("   Systematic PACMAP hyperparameter testing on 1M point mammoth dataset");
+            Console.WriteLine("   Based on methodology from Program_Complex.cs");
+            Console.WriteLine("   Tests: midNearRatio, farPairRatio, and neighbors variations");
+            Console.WriteLine("   Each experiment type in separate folder");
+            Console.WriteLine();
+
+            // Load the ACTUAL hairy mammoth dataset (1M points)
+            Console.WriteLine("🦣 Loading hairy mammoth dataset (1M points)...");
+            var hairyMammothPath = "Data/mammoth_a.csv";
+            var hairyMammothFull = DataLoaders.LoadMammothData(hairyMammothPath);
+            Console.WriteLine($"🦣 Loaded FULL hairy mammoth: {hairyMammothFull.GetLength(0):N0} samples, {hairyMammothFull.GetLength(1)} features");
+            Console.WriteLine($"   Data ranges: X=[{hairyMammothFull[0,0]:F3}, {hairyMammothFull[hairyMammothFull.GetLength(0)-1,0]:F3}], Y=[{hairyMammothFull[0,1]:F3}, {hairyMammothFull[hairyMammothFull.GetLength(0)-1,1]:F3}], Z=[{hairyMammothFull[0,2]:F3}, {hairyMammothFull[hairyMammothFull.GetLength(0)-1,2]:F3}]");
+
+            // Use FULL 1M dataset for experiments
+            Console.WriteLine("🚀 Using FULL 1M dataset for HNSW and Exact KNN experiments...");
+            Console.WriteLine($"   Full dataset: {hairyMammothFull.GetLength(0):N0} points for experiments");
+            Console.WriteLine();
+
+            // Convert to float for PACMAP
+            int nSamples = hairyMammothFull.GetLength(0);
+            int nFeatures = hairyMammothFull.GetLength(1);
+            var sampleData = new float[nSamples, nFeatures];
+            for (int i = 0; i < nSamples; i++)
+                for (int j = 0; j < nFeatures; j++)
+                    sampleData[i, j] = (float)hairyMammothFull[i, j];
+
+            // Performance tracking for 1M samples
+            var hnswMidNearPerformanceTimes = new List<double>();
+            var hnswFarPairPerformanceTimes = new List<double>();
+            var hnswNeighborsPerformanceTimes = new List<double>();
+            var exactMidNearPerformanceTimes = new List<double>();
+            var exactFarPairPerformanceTimes = new List<double>();
+            var exactNeighborsPerformanceTimes = new List<double>();
+
+            // Experiment parameters
+            double[] midNearRatioValues = { 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0 };
+            double[] farPairRatioValues = { 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0 };
+            int[] neighborValues = { 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 42, 44, 46, 48, 50, 52, 54, 56, 58, 60, 62, 64, 66, 68, 70, 72, 74, 76, 78, 80 };
+            int fixedNeighbors = 10;
+            int fileIndex = 1;
+
+            // ========================================================================
+            // PART 1: HNSW EXPERIMENTS (Full 1M Dataset)
+            // ========================================================================
+            Console.WriteLine();
+            Console.WriteLine("🚀 PART 1: HNSW EXPERIMENTS (1M Points - Fast Approximate)");
+            Console.WriteLine("====================================================================");
+
+            // Step 1: HNSW Parameter Discovery (One-time auto-discovery)
+            Console.WriteLine("🔍 STEP 1: HNSW Parameter Discovery");
+            Console.WriteLine("====================================");
+            Console.WriteLine("Running auto-discovery to find optimal HNSW parameters...");
+
+            var discoveryModel = new PacMapModel(
+                mnRatio: 1.0f,
+                fpRatio: 2.0f,
+                learningRate: 1.0f,
+                initializationStdDev: 1e-4f,
+                numIters: (200, 200, 400)
+            );
+
+            var discoveryStopwatch = Stopwatch.StartNew();
+            var discoveryEmbedding = discoveryModel.Fit(
+                data: sampleData,
+                embeddingDimension: 2,
+                nNeighbors: fixedNeighbors,
+                learningRate: 1.0f,
+                mnRatio: 1.0f,
+                fpRatio: 2.0f,
+                numIters: (200, 200, 400),
+                metric: DistanceMetric.Euclidean,
+                forceExactKnn: false,  // HNSW
+                randomSeed: 42,
+                autoHNSWParam: true,   // Auto-discover optimal HNSW parameters
+                progressCallback: (phase, current, total, percent, message) =>
+                {
+                    Console.Write($"\r{new string(' ', 80)}\r   [{phase}] Progress: {current}/{total} ({percent:F1}%) {message}");
+                }
+            );
+            Console.WriteLine(); // New line after progress
+            discoveryStopwatch.Stop();
+            Console.WriteLine($"   ✅ HNSW Discovery completed in {discoveryStopwatch.Elapsed.TotalSeconds:F2}s");
+
+            // Get discovered HNSW parameters for reuse
+            var discoveredParams = discoveryModel.ModelInfo;
+            Console.WriteLine($"   📊 Optimal HNSW parameters discovered:");
+            Console.WriteLine($"      M={discoveredParams.HnswM}, ef_construction={discoveredParams.HnswEfConstruction}, ef_search={discoveredParams.HnswEfSearch}");
+            Console.WriteLine();
+
+            // Step 2: HNSW Experiments with Fixed Parameters (Same structure as Exact KNN)
+            Console.WriteLine("🚀 STEP 2: HNSW EXPERIMENTS WITH FIXED PARAMETERS");
+            Console.WriteLine("==================================================");
+            Console.WriteLine($"Using discovered HNSW parameters for all experiments: M={discoveredParams.HnswM}, ef_c={discoveredParams.HnswEfConstruction}, ef_s={discoveredParams.HnswEfSearch}");
+            Console.WriteLine();
+
+            string hnswDir = GetResultsPath("hairy_hnsw");
+            Directory.CreateDirectory(hnswDir);
+
+            // HNSW EXPERIMENT 1: Mid-Near Ratio Variations (same as Exact KNN)
+            Console.WriteLine("📊 HNSW EXPERIMENT 1: Mid-Near Ratio Variations");
+            Console.WriteLine("===============================================");
+            string hnswMidnearDir = GetResultsPath("hairy_hnsw_midnear");
+            Directory.CreateDirectory(hnswMidnearDir);
+            int hnswFileIndex = 1;
+
+            foreach (double midNearRatio in midNearRatioValues)
+            {
+                Console.WriteLine($"🧪 HNSW Testing midNearRatio={midNearRatio:F1}...");
+
+                var model = new PacMapModel(
+                    mnRatio: 1.0f,
+                    fpRatio: 2.0f,
+                    learningRate: 1.0f,
+                    initializationStdDev: 1e-4f,
+                    numIters: (200, 200, 400)
+                );
+
+                try
+                {
+                    var stopwatch = Stopwatch.StartNew();
+                    var embedding = model.Fit(
+                        data: sampleData,
+                        embeddingDimension: 2,
+                        nNeighbors: fixedNeighbors,
+                        learningRate: 1.0f,
+                        mnRatio: (float)midNearRatio,
+                        fpRatio: 2.0f,
+                        numIters: (200, 200, 400),
+                        metric: DistanceMetric.Euclidean,
+                        forceExactKnn: false,  // HNSW
+                        randomSeed: 42,
+                        autoHNSWParam: false,  // Use discovered parameters
+                        hnswM: discoveredParams.HnswM,
+                        hnswEfConstruction: discoveredParams.HnswEfConstruction,
+                        hnswEfSearch: discoveredParams.HnswEfSearch,
+                        progressCallback: (phase, current, total, percent, message) =>
+                        {
+                            Console.Write($"\r{new string(' ', 80)}\r   [{phase}] Progress: {current}/{total} ({percent:F1}%) {message}");
+                        }
+                    );
+                    Console.WriteLine(); // New line after progress
+                    stopwatch.Stop();
+                    var executionTime = stopwatch.Elapsed.TotalSeconds;
+                    Console.WriteLine($"   ✅ HNSW Completed in {executionTime:F2}s");
+                    hnswMidNearPerformanceTimes.Add(executionTime);
+
+                    // Force garbage collection to clean up resources between experiments
+                    GC.Collect();
+                    GC.WaitForPendingFinalizers();
+                    GC.Collect();
+
+                    // Create visualization
+                    var plotPath = Path.Combine(hnswMidnearDir, $"{hnswFileIndex:D4}.png");
+                    var title = $"PACMAP Hairy Mammoth (HNSW) - midNearRatio={midNearRatio:F1}\nNeighbors={fixedNeighbors}, N={sampleData.GetLength(0):N0}, Time={executionTime:F2}s\nHNSW (M={discoveredParams.HnswM}, ef_c={discoveredParams.HnswEfConstruction}, ef_s={discoveredParams.HnswEfSearch})";
+                    Visualizer.PlotSimplePacMAP(embedding, title, plotPath, null);
+                    Console.WriteLine($"   📁 Saved: {hnswFileIndex:D4}.png");
+                    hnswFileIndex++;
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"   ❌ ERROR in HNSW experiment midNearRatio={midNearRatio:F1}: {ex.Message}");
+                    Console.WriteLine($"   Stack trace: {ex.StackTrace}");
+                    Console.WriteLine($"   Continuing to next experiment...");
+                    continue;
+                }
+            }
+
+            // HNSW EXPERIMENT 2: Far-Pair Ratio Variations
+            Console.WriteLine();
+            Console.WriteLine("📊 HNSW EXPERIMENT 2: Far-Pair Ratio Variations");
+            Console.WriteLine("==============================================");
+            string hnswFarpairDir = GetResultsPath("hairy_hnsw_farpair");
+            Directory.CreateDirectory(hnswFarpairDir);
+
+            foreach (double farPairRatio in farPairRatioValues)
+            {
+                Console.WriteLine($"🧪 HNSW Testing farPairRatio={farPairRatio:F1}...");
+
+                try
+                {
+                    var model = new PacMapModel(
+                        mnRatio: 1.0f,
+                        fpRatio: 2.0f,
+                        learningRate: 1.0f,
+                        initializationStdDev: 1e-4f,
+                        numIters: (200, 200, 400)
+                    );
+
+                    var stopwatch = Stopwatch.StartNew();
+                    var embedding = model.Fit(
+                        data: sampleData,
+                        embeddingDimension: 2,
+                        nNeighbors: fixedNeighbors,
+                        learningRate: 1.0f,
+                        mnRatio: 1.0f,
+                        fpRatio: (float)farPairRatio,
+                        numIters: (200, 200, 400),
+                        metric: DistanceMetric.Euclidean,
+                        forceExactKnn: false,  // HNSW
+                        randomSeed: 42,
+                        autoHNSWParam: false,  // Use discovered parameters
+                        hnswM: discoveredParams.HnswM,
+                        hnswEfConstruction: discoveredParams.HnswEfConstruction,
+                        hnswEfSearch: discoveredParams.HnswEfSearch,
+                        progressCallback: (phase, current, total, percent, message) =>
+                        {
+                            Console.Write($"\r{new string(' ', 80)}\r   [{phase}] Progress: {current}/{total} ({percent:F1}%) {message}");
+                        }
+                    );
+                    Console.WriteLine(); // New line after progress
+                    stopwatch.Stop();
+                    var executionTime = stopwatch.Elapsed.TotalSeconds;
+                    Console.WriteLine($"   ✅ HNSW Completed in {executionTime:F2}s");
+                    hnswFarPairPerformanceTimes.Add(executionTime);
+
+                    // Force garbage collection to clean up resources between experiments
+                    GC.Collect();
+                    GC.WaitForPendingFinalizers();
+                    GC.Collect();
+
+                    // Create visualization
+                    var plotPath = Path.Combine(hnswFarpairDir, $"{hnswFileIndex:D4}.png");
+                    var title = $"PACMAP Hairy Mammoth (HNSW) - farPairRatio={farPairRatio:F1}\nNeighbors={fixedNeighbors}, N={sampleData.GetLength(0):N0}, Time={executionTime:F2}s\nHNSW (M={discoveredParams.HnswM}, ef_c={discoveredParams.HnswEfConstruction}, ef_s={discoveredParams.HnswEfSearch})";
+                    Visualizer.PlotSimplePacMAP(embedding, title, plotPath, null);
+                    Console.WriteLine($"   📁 Saved: {hnswFileIndex:D4}.png");
+                    hnswFileIndex++;
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"   ❌ ERROR in HNSW experiment farPairRatio={farPairRatio:F1}: {ex.Message}");
+                    Console.WriteLine($"   Stack trace: {ex.StackTrace}");
+                    Console.WriteLine($"   Continuing to next experiment...");
+                    continue;
+                }
+            }
+
+            // HNSW EXPERIMENT 3: Neighbors Variations
+            Console.WriteLine();
+            Console.WriteLine("📊 HNSW EXPERIMENT 3: Neighbors Variations");
+            Console.WriteLine("===========================================");
+            string hnswNeighborsDir = GetResultsPath("hairy_hnsw_neighbors");
+            Directory.CreateDirectory(hnswNeighborsDir);
+
+            foreach (int neighbors in neighborValues)
+            {
+                Console.WriteLine($"🧪 HNSW Testing neighbors={neighbors}...");
+
+                try
+                {
+                    var model = new PacMapModel(
+                    mnRatio: 1.0f,
+                    fpRatio: 2.0f,
+                    learningRate: 1.0f,
+                    initializationStdDev: 1e-4f,
+                    numIters: (200, 200, 400)
+                );
+
+                var stopwatch = Stopwatch.StartNew();
+                var embedding = model.Fit(
+                    data: sampleData,
+                    embeddingDimension: 2,
+                    nNeighbors: neighbors,
+                    learningRate: 1.0f,
+                    mnRatio: 1.0f,
+                    fpRatio: 2.0f,
+                    numIters: (200, 200, 400),
+                    metric: DistanceMetric.Euclidean,
+                    forceExactKnn: false,  // HNSW
+                    randomSeed: 42,
+                    autoHNSWParam: false,  // Use discovered parameters
+                    hnswM: discoveredParams.HnswM,
+                    hnswEfConstruction: discoveredParams.HnswEfConstruction,
+                    hnswEfSearch: discoveredParams.HnswEfSearch,
+                    progressCallback: (phase, current, total, percent, message) =>
+                    {
+                        Console.Write($"\r{new string(' ', 80)}\r   [{phase}] Progress: {current}/{total} ({percent:F1}%) {message}");
+                    }
+                );
+                Console.WriteLine(); // New line after progress
+                stopwatch.Stop();
+                var executionTime = stopwatch.Elapsed.TotalSeconds;
+                Console.WriteLine($"   ✅ HNSW Completed in {executionTime:F2}s");
+                hnswNeighborsPerformanceTimes.Add(executionTime);
+
+                // Force garbage collection to clean up resources between experiments
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                GC.Collect();
+
+                // Create visualization
+                var plotPath = Path.Combine(hnswNeighborsDir, $"{hnswFileIndex:D4}.png");
+                var title = $"PACMAP Hairy Mammoth (HNSW) - neighbors={neighbors}\nN={sampleData.GetLength(0):N0}, Time={executionTime:F2}s\nHNSW (M={discoveredParams.HnswM}, ef_c={discoveredParams.HnswEfConstruction}, ef_s={discoveredParams.HnswEfSearch})";
+                Visualizer.PlotSimplePacMAP(embedding, title, plotPath, null);
+                Console.WriteLine($"   📁 Saved: {hnswFileIndex:D4}.png");
+                hnswFileIndex++;
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"   ❌ ERROR in HNSW experiment neighbors={neighbors}: {ex.Message}");
+                    Console.WriteLine($"   Stack trace: {ex.StackTrace}");
+                    Console.WriteLine($"   Continuing to next experiment...");
+                    continue;
+                }
+            }
+
+            Console.WriteLine();
+            Console.WriteLine("📊 HNSW PERFORMANCE SUMMARY");
+            Console.WriteLine("==========================");
+
+            if (hnswMidNearPerformanceTimes.Count > 0)
+            {
+                double avgMidNearTime = hnswMidNearPerformanceTimes.Average();
+                Console.WriteLine($"📈 Mid-Near Ratio: {avgMidNearTime:F2}s avg | {hnswMidNearPerformanceTimes.Count} experiments");
+            }
+
+            if (hnswFarPairPerformanceTimes.Count > 0)
+            {
+                double avgFarPairTime = hnswFarPairPerformanceTimes.Average();
+                Console.WriteLine($"📈 Far-Pair Ratio: {avgFarPairTime:F2}s avg | {hnswFarPairPerformanceTimes.Count} experiments");
+            }
+
+            if (hnswNeighborsPerformanceTimes.Count > 0)
+            {
+                double avgNeighborsTime = hnswNeighborsPerformanceTimes.Average();
+                Console.WriteLine($"📈 Neighbors Var: {avgNeighborsTime:F2}s avg | {hnswNeighborsPerformanceTimes.Count} experiments");
+            }
+
+            // Overall HNSW Summary
+            var allHnswTimes = new List<double>();
+            allHnswTimes.AddRange(hnswMidNearPerformanceTimes);
+            allHnswTimes.AddRange(hnswFarPairPerformanceTimes);
+            allHnswTimes.AddRange(hnswNeighborsPerformanceTimes);
+            if (allHnswTimes.Count > 0)
+            {
+                double overallHnswAvgTime = allHnswTimes.Average();
+                Console.WriteLine($"📈 Overall HNSW: {overallHnswAvgTime:F2}s avg | {allHnswTimes.Count} total experiments");
+            }
+
+            Console.WriteLine($"   Discovered HNSW Parameters: M={discoveredParams.HnswM}, ef_c={discoveredParams.HnswEfConstruction}, ef_s={discoveredParams.HnswEfSearch}");
+
+            // Store for final comparison
+            var hnswPerformanceTimes = allHnswTimes;
+            var hnswModelInfo = discoveredParams;
+            double hnswTime = allHnswTimes.Count > 0 ? allHnswTimes.Average() : 0.0;
+            Console.WriteLine($"🚀 HNSW (1M points): {hnswTime:F2}s");
+            Console.WriteLine($"   Algorithm: HNSW with auto-discovery");
+            Console.WriteLine($"   Accuracy: Approximate (fast)");
+            Console.WriteLine();
+            // ========================================================================
+            // PART 2: EXACT KNN EXPERIMENTS (Subsampled for Performance)
+            // ========================================================================
+            Console.WriteLine("🎯 PART 2: EXACT KNN EXPERIMENTS (40K Subsampled - Precise)");
+            Console.WriteLine("====================================================================");
+
+            // Subsample 40K points for Exact KNN experiments (1M would take too long)
+            Console.WriteLine("🔄 Subsampling 40K points for Exact KNN experiments...");
+            var random = new Random(42); // Same seed for reproducibility
+            int subsampleSize = 40000;
+            var subsampleIndices = new int[subsampleSize];
+            for (int i = 0; i < subsampleSize; i++)
+            {
+                subsampleIndices[i] = random.Next(nSamples);
+            }
+
+            // Create subsampled data for Exact KNN
+            var subsampleData = new float[subsampleSize, nFeatures];
+            for (int i = 0; i < subsampleSize; i++)
+            {
+                int idx = subsampleIndices[i];
+                for (int j = 0; j < nFeatures; j++)
+                {
+                    subsampleData[i, j] = sampleData[idx, j];
+                }
+            }
+            Console.WriteLine($"   ✅ Subsampled {subsampleSize:N0} points from {nSamples:N0} total for Exact KNN");
+            Console.WriteLine();
+
+            // Exact KNN Mid-Near Ratio Experiments
+            Console.WriteLine("📊 EXACT KNN EXPERIMENT 1: Mid-Near Ratio Variations");
+            Console.WriteLine("===============================================");
+            string exactBaseDir = GetResultsPath("");  // Base directory for all Exact KNN results
+            string exactMidnearDir = GetResultsPath("hairy_exact_midnear_knn");
+            Directory.CreateDirectory(exactMidnearDir);
+            fileIndex = 1;
+
+            foreach (double midNearRatio in midNearRatioValues)
+            {
+                Console.WriteLine($"🧪 Exact KNN Testing midNearRatio={midNearRatio:F1}...");
+
+                var model = new PacMapModel(
+                    mnRatio: (float)midNearRatio,
+                    fpRatio: 2.0f,
+                    learningRate: 1.0f,
+                    initializationStdDev: 1e-4f,
+                    numIters: (200, 200, 400)
+                );
+
+                var stopwatch = Stopwatch.StartNew();
+                var embedding = model.Fit(
+                    data: subsampleData,
+                    embeddingDimension: 2,
+                    nNeighbors: fixedNeighbors,
+                    learningRate: 1.0f,
+                    mnRatio: (float)midNearRatio,
+                    fpRatio: 2.0f,
+                    numIters: (200, 200, 400),
+                    metric: DistanceMetric.Euclidean,
+                    forceExactKnn: true,  // Exact KNN
+                    randomSeed: 42,
+                    progressCallback: (phase, current, total, percent, message) =>
+                    {
+                        Console.Write($"\r{new string(' ', 80)}\r   [{phase}] Progress: {current}/{total} ({percent:F1}%) {message}");
+                    }
+                );
+                Console.WriteLine(); // New line after progress
+                stopwatch.Stop();
+                var executionTime = stopwatch.Elapsed.TotalSeconds;
+                Console.WriteLine($"   ✅ Exact KNN Completed in {executionTime:F2}s");
+                exactMidNearPerformanceTimes.Add(executionTime);
+
+                // Create visualization
+                var plotPath = Path.Combine(exactMidnearDir, $"{fileIndex:D4}.png");
+                var title = $"PACMAP Hairy Mammoth (Exact KNN) - midNearRatio={midNearRatio:F1}\nNeighbors={fixedNeighbors}, N={subsampleSize:N0}, Time={executionTime:F2}s\nExact KNN";
+                Visualizer.PlotSimplePacMAP(embedding, title, plotPath, null);
+                Console.WriteLine($"   📁 Saved: {fileIndex:D4}.png");
+                fileIndex++;
+            }
+            // Exact KNN Far-Pair Ratio Experiments
+            Console.WriteLine("📊 EXACT KNN EXPERIMENT 2: Far-Pair Ratio Variations");
+            Console.WriteLine("==============================================");
+            string exactFarpairDir = GetResultsPath("hairy_exact_farpair_knn");
+            Directory.CreateDirectory(exactFarpairDir);
+
+            foreach (double farPairRatio in farPairRatioValues)
+            {
+                Console.WriteLine($"🧪 Exact KNN Testing farPairRatio={farPairRatio:F1}...");
+
+                var model = new PacMapModel(
+                    mnRatio: 1.0f,
+                    fpRatio: (float)farPairRatio,
+                    learningRate: 1.0f,
+                    initializationStdDev: 1e-4f,
+                    numIters: (200, 200, 400)
+                );
+
+                var stopwatch = Stopwatch.StartNew();
+                var embedding = model.Fit(
+                    data: subsampleData,
+                    embeddingDimension: 2,
+                    nNeighbors: fixedNeighbors,
+                    learningRate: 1.0f,
+                    mnRatio: 1.0f,
+                    fpRatio: (float)farPairRatio,
+                    numIters: (200, 200, 400),
+                    metric: DistanceMetric.Euclidean,
+                    forceExactKnn: true,  // Exact KNN
+                    randomSeed: 42,
+                    progressCallback: (phase, current, total, percent, message) =>
+                    {
+                        Console.Write($"\r{new string(' ', 80)}\r   [{phase}] Progress: {current}/{total} ({percent:F1}%) {message}");
+                    }
+                );
+                Console.WriteLine(); // New line after progress
+                stopwatch.Stop();
+                var executionTime = stopwatch.Elapsed.TotalSeconds;
+                Console.WriteLine($"   ✅ Exact KNN Completed in {executionTime:F2}s");
+                exactFarPairPerformanceTimes.Add(executionTime);
+
+                // Create visualization
+                var plotPath = Path.Combine(exactFarpairDir, $"{fileIndex:D4}.png");
+                var title = $"PACMAP Hairy Mammoth (Exact KNN) - farPairRatio={farPairRatio:F1}\nNeighbors={fixedNeighbors}, N={subsampleSize:N0}, Time={executionTime:F2}s\nExact KNN";
+                Visualizer.PlotSimplePacMAP(embedding, title, plotPath, null);
+                Console.WriteLine($"   📁 Saved: {fileIndex:D4}.png");
+                fileIndex++;
+            }
+            Console.WriteLine();
+
+            // Exact KNN Neighbors Experiments
+            Console.WriteLine("📊 EXACT KNN EXPERIMENT 3: Neighbors Variations");
+            Console.WriteLine("============================================");
+            string exactNeighborsDir = GetResultsPath("hairy_exact_neighbors_knn");
+            Directory.CreateDirectory(exactNeighborsDir);
+            int neighborFileIndex = 1;
+
+            foreach (int neighbors in neighborValues)
+            {
+                Console.WriteLine($"🧪 Exact KNN Testing neighbors={neighbors}...");
+
+                var model = new PacMapModel(
+                    mnRatio: 1.0f,
+                    fpRatio: 2.0f,
+                    learningRate: 1.0f,
+                    initializationStdDev: 1e-4f,
+                    numIters: (200, 200, 400)
+                );
+
+                var stopwatch = Stopwatch.StartNew();
+                var embedding = model.Fit(
+                    data: subsampleData,
+                    embeddingDimension: 2,
+                    nNeighbors: neighbors,
+                    learningRate: 1.0f,
+                    mnRatio: 1.0f,
+                    fpRatio: 2.0f,
+                    numIters: (200, 200, 400),
+                    metric: DistanceMetric.Euclidean,
+                    forceExactKnn: true,  // Exact KNN
+                    randomSeed: 42,
+                    progressCallback: (phase, current, total, percent, message) =>
+                    {
+                        Console.Write($"\r{new string(' ', 80)}\r   [{phase}] Progress: {current}/{total} ({percent:F1}%) {message}");
+                    }
+                );
+                Console.WriteLine(); // New line after progress
+                stopwatch.Stop();
+                var executionTime = stopwatch.Elapsed.TotalSeconds;
+                Console.WriteLine($"   ✅ Exact KNN Completed in {executionTime:F2}s");
+                exactNeighborsPerformanceTimes.Add(executionTime);
+
+                // Create visualization
+                var plotPath = Path.Combine(exactNeighborsDir, $"{neighborFileIndex:D4}.png");
+                var title = $"PACMAP Hairy Mammoth (Exact KNN) - neighbors={neighbors}\nN={subsampleSize:N0}, Time={executionTime:F2}s\nExact KNN";
+                Visualizer.PlotSimplePacMAP(embedding, title, plotPath, null);
+                Console.WriteLine($"   📁 Saved: {neighborFileIndex:D4}.png");
+                neighborFileIndex++;
+            }
+            Console.WriteLine();
+
+            // COMPREHENSIVE PERFORMANCE SUMMARY
+            Console.WriteLine();
+            Console.WriteLine("📊 COMPREHENSIVE PERFORMANCE SUMMARY");
+            Console.WriteLine("=====================================");
+            Console.WriteLine($"   HNSW: 1M points (full dataset) | Exact KNN: {subsampleSize:N0} points (subsampled)");
+
+            // HNSW Performance Summary (Multiple experiments)
+            Console.WriteLine($"🚀 HNSW (Multiple Experiments):");
+            if (hnswPerformanceTimes.Count > 0)
+            {
+                double hnswAvgTime = hnswPerformanceTimes.Average();
+                double hnswMinTime = hnswPerformanceTimes.Min();
+                double hnswMaxTime = hnswPerformanceTimes.Max();
+                Console.WriteLine($"   Average: {hnswAvgTime:F2}s | Min: {hnswMinTime:F2}s | Max: {hnswMaxTime:F2}s");
+                Console.WriteLine($"   Discovered Parameters: M={hnswModelInfo.HnswM}, ef_c={hnswModelInfo.HnswEfConstruction}, ef_s={hnswModelInfo.HnswEfSearch}");
+                Console.WriteLine($"   Performance: ~{(1.0 / hnswAvgTime):F1} runs/sec | 1M points in {hnswAvgTime:F2}s");
+                Console.WriteLine($"   Experiments: {hnswPerformanceTimes.Count} different parameter configurations");
+            }
+
+            // Exact KNN Performance Summary
+            Console.WriteLine();
+            Console.WriteLine($"🎯 Exact KNN Performance:");
+
+            if (exactMidNearPerformanceTimes.Count > 0)
+            {
+                double avgMidNearTime = exactMidNearPerformanceTimes.Average();
+                Console.WriteLine($"   Mid-Near Ratio: {avgMidNearTime:F2}s avg | {exactMidNearPerformanceTimes.Count} experiments");
+            }
+
+            if (exactFarPairPerformanceTimes.Count > 0)
+            {
+                double avgFarPairTime = exactFarPairPerformanceTimes.Average();
+                Console.WriteLine($"   Far-Pair Ratio: {avgFarPairTime:F2}s avg | {exactFarPairPerformanceTimes.Count} experiments");
+            }
+
+            if (exactNeighborsPerformanceTimes.Count > 0)
+            {
+                double avgNeighborsTime = exactNeighborsPerformanceTimes.Average();
+                Console.WriteLine($"   Neighbors Var: {avgNeighborsTime:F2}s avg | {exactNeighborsPerformanceTimes.Count} experiments");
+            }
+
+            // Overall Exact KNN Summary
+            var allExactTimes = new List<double>();
+            allExactTimes.AddRange(exactMidNearPerformanceTimes);
+            allExactTimes.AddRange(exactFarPairPerformanceTimes);
+            allExactTimes.AddRange(exactNeighborsPerformanceTimes);
+            if (allExactTimes.Count > 0)
+            {
+                double overallExactAvgTime = allExactTimes.Average();
+                double overallExactMinTime = allExactTimes.Min();
+                double overallExactMaxTime = allExactTimes.Max();
+                Console.WriteLine($"   Overall Exact KNN: {overallExactAvgTime:F2}s avg | Min: {overallExactMinTime:F2}s | Max: {overallExactMaxTime:F2}s");
+                Console.WriteLine($"   Performance: ~{(1.0 / overallExactAvgTime):F1} runs/sec | 1M points in {overallExactAvgTime:F2}s");
+            }
+
+            // Algorithm Comparison
+            Console.WriteLine();
+            Console.WriteLine($"⚡ ALGORITHM COMPARISON:");
+            if (hnswPerformanceTimes.Count > 0 && allExactTimes.Count > 0)
+            {
+                double hnswAvg = hnswPerformanceTimes.Average();
+                double exactAvg = allExactTimes.Average();
+                double speedup = exactAvg / hnswAvg;
+                Console.WriteLine($"   HNSW is {speedup:F1}x faster than Exact KNN");
+                Console.WriteLine($"   HNSW: {hnswAvg:F2}s | Exact KNN: {exactAvg:F2}s | Speedup: {speedup:F1}x");
+            }
+
+            Console.WriteLine();
+            Console.WriteLine($"📁 Results Summary:");
+            Console.WriteLine($"   HNSW Results: {hnswDir}");
+            Console.WriteLine($"   Exact KNN Results: {exactBaseDir}");
+            Console.WriteLine($"   Dataset: Hairy Mammoth (HNSW: 1M, Exact KNN: {subsampleSize:N0}) | Seed: 42 (deterministic)");
+            Console.WriteLine($"   Images: 1200x1200 resolution, black dots on white background");
+            Console.WriteLine("✅ All experiments completed successfully!");
+        }
+
+        /// <summary>
+        /// DemoInitializationStdDevExperiments - Tests different initialization standard deviations
+        /// Tests initialization_std_dev values: 1e-4, 1e-3, 1e-2, 1e-1
+        /// Uses shared HNSW parameters discovered once for optimal performance
+        /// </summary>
+        static void DemoInitializationStdDevExperiments(float[,] floatData, (int M, int EfConstruction, int EfSearch) hnswParams)
+        {
+            Console.WriteLine();
+            Console.WriteLine("=========================================================");
+            Console.WriteLine("🎲 DemoInitializationStdDevExperiments: Testing Init Std Dev");
+            Console.WriteLine("=========================================================");
+            Console.WriteLine("   Testing different initialization_std_dev values with shared HNSW parameters");
+            Console.WriteLine($"   Using HNSW: M={hnswParams.M}, ef_construction={hnswParams.EfConstruction}, ef_search={hnswParams.EfSearch}");
+            Console.WriteLine();
+
+            // Load mammoth data
+            var (data, labels) = LoadMammothData();
+
+            // Test initialization standard deviations: 1e-4, 1e-3, 1e-2, 1e-1
+            var initStdDevTests = new[] { 1e-4f, 1e-3f, 1e-2f, 1e-1f };
+            var results = new List<(float initStdDev, float[,] embedding, double time, double quality)>();
+
+            // Testing all initialization std devs with shared HNSW parameters
+            Console.WriteLine("🚀 Testing initialization std devs with shared HNSW parameters...");
+            Console.WriteLine($"   Using HNSW: M={hnswParams.M}, ef_construction={hnswParams.EfConstruction}, ef_search={hnswParams.EfSearch}");
+            Console.WriteLine();
+
+            foreach (var initStdDev in initStdDevTests)
+            {
+                Console.WriteLine($"📊 Testing initialization_std_dev = {initStdDev:E1}...");
+
+                var model = new PacMapModel(
+                    mnRatio: 1.2f,
+                    fpRatio: 2.0f,
+                    learningRate: 1.0f,
+                    initializationStdDev: initStdDev,
+                    numIters: (200, 200, 400)
+                );
+
+                var stopwatch = Stopwatch.StartNew();
+                var embedding = model.Fit(
+                    data: floatData,
+                    embeddingDimension: 2,
+                    nNeighbors: 10,
+                    learningRate: 1.0f,
+                    mnRatio: 1.2f,
+                    fpRatio: 2.0f,
+                    numIters: (200, 200, 400),
+                    metric: DistanceMetric.Euclidean,
+                    forceExactKnn: false,  // HNSW
+                    hnswM: hnswParams.M,
+                    hnswEfConstruction: hnswParams.EfConstruction,
+                    hnswEfSearch: hnswParams.EfSearch,
+                    autoHNSWParam: false,
+                    randomSeed: 42
+                );
+                stopwatch.Stop();
+                Console.WriteLine(); // New line after progress
+
+                double quality = CalculateEmbeddingQuality(embedding, labels);
+                results.Add((initStdDev, embedding, stopwatch.Elapsed.TotalSeconds, quality));
+
+                Console.WriteLine($"   ✅ init_std={initStdDev:E1}: quality={quality:F4}, time={stopwatch.Elapsed.TotalSeconds:F2}s");
+
+                // Create visualization for this initialization std dev
+                var paramInfo = new Dictionary<string, object>
+                {
+                    ["experiment_type"] = "Initialization_Std_Dev_Experiments",
+                    ["initialization_std_dev"] = initStdDev.ToString("E1"),
+                    ["n_neighbors"] = "10",
+                    ["mn_ratio"] = "1.2",
+                    ["fp_ratio"] = "2.0",
+                    ["learning_rate"] = "1.0",
+                    ["hnsw_m"] = hnswParams.M,
+                    ["hnsw_ef_construction"] = hnswParams.EfConstruction,
+                    ["hnsw_ef_search"] = hnswParams.EfSearch,
+                    ["embedding_quality"] = quality.ToString("F4"),
+                    ["execution_time"] = $"{stopwatch.Elapsed.TotalSeconds:F2}s"
+                };
+
+                // Create organized folder structure for GIF creation
+                var experimentDir = Path.Combine("Results", "init_std_dev_experiments");
+                Directory.CreateDirectory(experimentDir);
+
+                // Sequential numbering for GIF creation (maps 1e-4, 1e-3, 1e-2, 1e-1 to 0001-0004)
+                var imageNumber = initStdDev switch
+                {
+                    1e-4f => 1,
+                    1e-3f => 2,
+                    1e-2f => 3,
+                    1e-1f => 4,
+                    _ => 1
+                };
+                var outputPath = Path.Combine(experimentDir, $"{imageNumber:D4}.png");
+
+                var title = $"Init Std Dev Experiment: {initStdDev:E1}\nHNSW: M={hnswParams.M}, ef={hnswParams.EfSearch}\nQuality: {quality:F4}, Time: {stopwatch.Elapsed.TotalSeconds:F2}s";
+                Visualizer.PlotMammothPacMAP(embedding, data, title, outputPath, paramInfo);
+                Console.WriteLine($"   📈 Saved: {Path.GetFileName(outputPath)}");
+                Console.WriteLine();
+            }
+
+            // Summary
+            Console.WriteLine("📊 INITIALIZATION STD DEV EXPERIMENTS SUMMARY");
+            Console.WriteLine(new string('=', 60));
+            var bestResult = results.OrderBy(r => r.quality).First();
+            Console.WriteLine($"🏆 Best initialization std dev: {bestResult.initStdDev:E1} (quality: {bestResult.quality:F4})");
+            Console.WriteLine($"⏱️  Execution times ranged from {results.Min(r => r.time):F2}s to {results.Max(r => r.time):F2}s");
+            Console.WriteLine("📁 All results saved to Results/init_std_dev_experiments/0001.png, 0002.png, etc. (ready for GIF creation)");
+        }
+
+        /// <summary>
+        /// DemoExtendedLearningRateExperiments - Extended learning rate tests
+        /// Tests learning_rate values: 1.0, 0.9, 0.8, 0.7, 0.6, 0.5
+        /// Uses shared HNSW parameters discovered once for optimal performance
+        /// </summary>
+        static void DemoExtendedLearningRateExperiments(float[,] floatData, (int M, int EfConstruction, int EfSearch) hnswParams)
+        {
+            Console.WriteLine();
+            Console.WriteLine("=========================================================");
+            Console.WriteLine("🎓 DemoExtendedLearningRateExperiments: Extended LR Tests");
+            Console.WriteLine("=========================================================");
+            Console.WriteLine("   Testing extended learning_rate values with shared HNSW parameters");
+            Console.WriteLine($"   Using HNSW: M={hnswParams.M}, ef_construction={hnswParams.EfConstruction}, ef_search={hnswParams.EfSearch}");
+            Console.WriteLine();
+
+            // Load mammoth data
+            var (data, labels) = LoadMammothData();
+
+            // Test learning rates: 1.0, 0.9, 0.8, 0.7, 0.6, 0.5
+            var learningRateTests = new[] { 1.0f, 0.9f, 0.8f, 0.7f, 0.6f, 0.5f };
+            var results = new List<(float learningRate, float[,] embedding, double time, double quality)>();
+
+            // Testing extended learning rates with shared HNSW parameters
+            Console.WriteLine($"   Using HNSW: M={hnswParams.M}, ef_construction={hnswParams.EfConstruction}, ef_search={hnswParams.EfSearch}");
+            Console.WriteLine();
+
+            foreach (var learningRate in learningRateTests)
+            {
+                Console.WriteLine($"📊 Testing learning_rate = {learningRate:F1}...");
+
+                var model = new PacMapModel(
+                    mnRatio: 1.2f,
+                    fpRatio: 2.0f,
+                    learningRate: learningRate,
+                    initializationStdDev: 1e-4f,
+                    numIters: (200, 200, 400)
+                );
+
+                var stopwatch = Stopwatch.StartNew();
+                var embedding = model.Fit(
+                    data: floatData,
+                    embeddingDimension: 2,
+                    nNeighbors: 10,
+                    learningRate: learningRate,
+                    mnRatio: 1.2f,
+                    fpRatio: 2.0f,
+                    numIters: (200, 200, 400),
+                    metric: DistanceMetric.Euclidean,
+                    forceExactKnn: false,  // HNSW
+                    hnswM: hnswParams.M,
+                    hnswEfConstruction: hnswParams.EfConstruction,
+                    hnswEfSearch: hnswParams.EfSearch,
+                    autoHNSWParam: false,
+                    randomSeed: 42,
+                    progressCallback: (phase, current, total, percent, message) =>
+                    {
+                        Console.Write($"\r{new string(' ', 80)}\r   [lr={learningRate:F1}] {phase}: {current}/{total} ({percent:F1}%) {message}");
+                    }
+                );
+                stopwatch.Stop();
+                Console.WriteLine(); // New line after progress
+
+                double quality = CalculateEmbeddingQuality(embedding, labels);
+                results.Add((learningRate, embedding, stopwatch.Elapsed.TotalSeconds, quality));
+
+                Console.WriteLine($"   ✅ lr={learningRate:F1}: quality={quality:F4}, time={stopwatch.Elapsed.TotalSeconds:F2}s");
+
+                // Create visualization for this learning rate
+                var paramInfo = new Dictionary<string, object>
+                {
+                    ["experiment_type"] = "Extended_Learning_Rate_Experiments",
+                    ["learning_rate"] = learningRate.ToString("F1"),
+                    ["n_neighbors"] = "10",
+                    ["mn_ratio"] = "1.2",
+                    ["fp_ratio"] = "2.0",
+                    ["initialization_std_dev"] = "1e-4",
+                    ["hnsw_m"] = hnswParams.M,
+                    ["hnsw_ef_construction"] = hnswParams.EfConstruction,
+                    ["hnsw_ef_search"] = hnswParams.EfSearch,
+                    ["embedding_quality"] = quality.ToString("F4"),
+                    ["execution_time"] = $"{stopwatch.Elapsed.TotalSeconds:F2}s"
+                };
+
+                // Create organized folder structure for GIF creation
+                var experimentDir = Path.Combine("Results", "extended_lr_experiments");
+                Directory.CreateDirectory(experimentDir);
+
+                // Sequential numbering for GIF creation (maps 1.0,0.9,0.8,0.7,0.6,0.5 to 0001-0006)
+                var imageNumber = (int)((1.0f - learningRate) / 0.1f) + 1;
+                var outputPath = Path.Combine(experimentDir, $"{imageNumber:D4}.png");
+
+                var title = $"Extended LR Experiment: lr={learningRate:F1}\nHNSW: M={hnswParams.M}, ef={hnswParams.EfSearch}\nQuality: {quality:F4}, Time: {stopwatch.Elapsed.TotalSeconds:F2}s";
+                Visualizer.PlotMammothPacMAP(embedding, data, title, outputPath, paramInfo);
+                Console.WriteLine($"   📈 Saved: {Path.GetFileName(outputPath)}");
+                Console.WriteLine();
+            }
+
+            // Summary
+            Console.WriteLine("📊 EXTENDED LEARNING RATE EXPERIMENTS SUMMARY");
+            Console.WriteLine(new string('=', 60));
+            var bestResult = results.OrderBy(r => r.quality).First();
+            Console.WriteLine($"🏆 Best learning rate: {bestResult.learningRate:F1} (quality: {bestResult.quality:F4})");
+            Console.WriteLine($"⏱️  Execution times ranged from {results.Min(r => r.time):F2}s to {results.Max(r => r.time):F2}s");
+            Console.WriteLine("📁 All results saved to Results/extended_lr_experiments/0001.png, 0002.png, etc. (ready for GIF creation)");
         }
     }
 }

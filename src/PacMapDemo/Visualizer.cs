@@ -236,9 +236,9 @@ namespace PacMapDemo
                 }
 
                 Console.WriteLine($"SUCCESS: Multiple view mammoth plots saved:");
-                Console.WriteLine($"  XY (Top): {xyPath}");
-                Console.WriteLine($"  XZ (Side): {xzPath}");
-                Console.WriteLine($"  YZ (Front): {yzPath}");
+                Console.WriteLine($"  XY (Top): {Path.GetFullPath(xyPath)}");
+                Console.WriteLine($"  XZ (Side): {Path.GetFullPath(xzPath)}");
+                Console.WriteLine($"  YZ (Front): {Path.GetFullPath(yzPath)}");
             }
             catch (Exception ex)
             {
@@ -262,7 +262,7 @@ namespace PacMapDemo
         {
             try
             {
-                Console.WriteLine($"Creating PacMAP embedding plot: {title}");
+                Console.WriteLine($"   Creating PacMAP embedding plot: {title}");
 
                 int numPoints = originalData.GetLength(0);
                 var parts = AssignMammothParts(originalData);
@@ -360,7 +360,7 @@ namespace PacMapDemo
                     exporter.Export(plotModel, stream);
                 }
 
-                Console.WriteLine($"SUCCESS: PacMAP plot saved to: {outputPath}");
+                Console.WriteLine($"SUCCESS: PacMAP plot saved to: {Path.GetFullPath(outputPath)}");
             }
             catch (Exception ex)
             {
@@ -396,7 +396,7 @@ namespace PacMapDemo
                     }
                 }
 
-                Console.WriteLine($"SUCCESS: Embedding saved as CSV: {outputPath} ({numPoints} points)");
+                Console.WriteLine($"SUCCESS: Embedding saved as CSV: {Path.GetFullPath(outputPath)} ({numPoints} points)");
             }
             catch (Exception ex)
             {
@@ -493,9 +493,9 @@ namespace PacMapDemo
   
   
         /// <summary>
-        /// Plot simple PACMAP embedding
+        /// Plot simple PACMAP embedding with black dots for parameter experiments
         /// </summary>
-        public static void PlotSimplePacMAP(float[,] embedding, string title, string outputPath, Dictionary<string, object> paramInfo)
+        public static void PlotSimplePacMAP(float[,] embedding, string title, string outputPath, Dictionary<string, object>? paramInfo)
         {
             var plotModel = new PlotModel { Title = title, Background = OxyColors.White };
 
@@ -503,8 +503,9 @@ namespace PacMapDemo
             {
                 Title = "PACMAP Embedding",
                 MarkerType = MarkerType.Circle,
-                MarkerSize = 2,
-                MarkerFill = OxyColors.Blue
+                MarkerSize = 1,
+                MarkerFill = OxyColors.Black,
+                MarkerStroke = OxyColors.Black
             };
 
             for (int i = 0; i < embedding.GetLength(0); i++)
@@ -516,8 +517,8 @@ namespace PacMapDemo
             plotModel.Axes.Add(new LinearAxis {
                 Position = AxisPosition.Bottom,
                 Title = "X",
-                Minimum = -25,
-                Maximum = 40,
+                Minimum = -35,
+                Maximum = 35,
                 MajorStep = 10,
                 MinorStep = 5,
                 AxislineColor = OxyColors.Black,
@@ -527,8 +528,8 @@ namespace PacMapDemo
             plotModel.Axes.Add(new LinearAxis {
                 Position = AxisPosition.Left,
                 Title = "Y",
-                Minimum = -30,
-                Maximum = 30,
+                Minimum = -35,
+                Maximum = 35,
                 MajorStep = 10,
                 MinorStep = 5,
                 AxislineColor = OxyColors.Black,
@@ -541,13 +542,28 @@ namespace PacMapDemo
             plotModel.Background = OxyColors.White;
 
             // Export to PNG
-            var exporter = new PngExporter { Width = 800, Height = 600 };
+            var exporter = new PngExporter { Width = 1200, Height = 1200, Resolution = 300 };
             using (var stream = File.Create(outputPath))
             {
                 exporter.Export(plotModel, stream);
             }
 
-            Console.WriteLine($"   📊 Simple plot saved: {outputPath}");
+            Console.WriteLine($"   📊 Simple plot saved: {Path.GetFullPath(outputPath)}");
+        }
+
+        /// <summary>
+        /// Create detailed parameter information string for image annotation
+        /// </summary>
+        public static string CreateParameterInfo(Dictionary<string, object> paramInfo)
+        {
+            if (paramInfo == null) return "";
+
+            var info = new System.Text.StringBuilder();
+            foreach (var kvp in paramInfo)
+            {
+                info.AppendLine($"{kvp.Key}: {kvp.Value}");
+            }
+            return info.ToString();
         }
 
         private static OxyColor GetPartColor(string part)

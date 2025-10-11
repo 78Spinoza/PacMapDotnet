@@ -2,6 +2,7 @@
 #include "pacmap_simple_wrapper.h"
 #include "pacmap_distance.h"
 #include "pacmap_triplet_sampling.h"
+#include "pacmap_utils.h"
 #include <iostream>
 #include <algorithm>
 #include <numeric>
@@ -242,6 +243,7 @@ namespace transform_utils {
             return PACMAP_SUCCESS;
         }
         catch (const std::exception& e) {
+            send_error_to_callback(("Transform error: " + std::string(e.what())).c_str());
             return PACMAP_ERROR_MEMORY;
         }
     }

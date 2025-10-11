@@ -1,5 +1,6 @@
 #include "pacmap_model.h"
 #include "pacmap_progress_utils.h"
+#include "pacmap_utils.h"
 
 namespace model_utils {
 
@@ -8,9 +9,14 @@ namespace model_utils {
             PacMapModel* model = new PacMapModel();
             return model;
         }
-        catch (const std::bad_alloc&) {
-            return nullptr;
-        }
+        catch (const std::bad_alloc& e) {
+        send_error_to_callback(("Model creation failed: " + std::string(e.what())).c_str());
+        return nullptr;
+    }
+    catch (const std::exception& e) {
+        send_error_to_callback(("Model creation failed: " + std::string(e.what())).c_str());
+        return nullptr;
+    }
     }
 
     void destroy_model(PacMapModel* model) {

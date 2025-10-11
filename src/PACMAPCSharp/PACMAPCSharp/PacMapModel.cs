@@ -318,7 +318,7 @@ namespace PacMapSharp
         #region Constants
 
         // Expected DLL version - must match C++ PACMAP_WRAPPER_VERSION_STRING
-        private const string EXPECTED_DLL_VERSION = "2.4.3";
+        private const string EXPECTED_DLL_VERSION = "2.4.5";
 
         #endregion
 
@@ -349,7 +349,7 @@ namespace PacMapSharp
         private float _adamBeta1 = 0.9f;
         private float _adamBeta2 = 0.999f;
         private float _initializationStdDev = 0.1f;  // Standard deviation for embedding initialization
-        private (int phase1, int phase2, int phase3) _numIters = (100, 100, 250);
+        private (int phase1, int phase2, int phase3) _numIters = (150, 100, 250);
 
         #endregion
 
@@ -510,7 +510,7 @@ namespace PacMapSharp
         #region Public Methods
 
         /// <summary>
-        /// Fits the PACMAP model to training data with full customization
+        /// Fits the PACMAP model to training data with full customization and optional progress reporting
         /// </summary>
         /// <param name="data">Training data as 2D array [samples, features]</param>
         /// <param name="embeddingDimension">Target embedding dimension (1-50, default: 2)</param>
@@ -527,6 +527,7 @@ namespace PacMapSharp
         /// <param name="autoHNSWParam">Auto-tune HNSW parameters based on data size (default: true)</param>
         /// <param name="learningRate">Learning rate for Adam optimizer (default: 1.0)</param>
         /// <param name="useQuantization">Enable 16-bit quantization for memory reduction (default: false)</param>
+        /// <param name="progressCallback">Optional callback function to report training progress (default: null)</param>
         /// <returns>Embedding coordinates [samples, embeddingDimension]</returns>
         /// <exception cref="ArgumentNullException">Thrown when data is null</exception>
         /// <exception cref="ArgumentException">Thrown when parameters are invalid</exception>
@@ -544,19 +545,20 @@ namespace PacMapSharp
                             int randomSeed = -1,
                             bool autoHNSWParam = true,
                             float learningRate = 1.0f,
-                            bool useQuantization = false)
+                            bool useQuantization = false,
+                            ProgressCallback? progressCallback = null)
         {
             // Handle default value for numIters
             var actualNumIters = numIters.Equals(default((int, int, int))) ? (100, 100, 250) : numIters;
 
             return FitInternal(data, embeddingDimension, nNeighbors, mnRatio, fpRatio,
                              actualNumIters, metric, forceExactKnn,
-                             progressCallback: null, hnswM, hnswEfConstruction, hnswEfSearch,
+                             progressCallback, hnswM, hnswEfConstruction, hnswEfSearch,
                              randomSeed, autoHNSWParam, learningRate, useQuantization);
         }
 
         /// <summary>
-        /// Fits the PACMAP model to training data with progress reporting
+        /// Fits the PACMAP model to training data with progress reporting (legacy compatibility)
         /// </summary>
         /// <param name="data">Training data as 2D array [samples, features]</param>
         /// <param name="progressCallback">Callback function to report training progress</param>
@@ -571,9 +573,14 @@ namespace PacMapSharp
         /// <param name="autoHNSWParam">Auto-tune HNSW parameters based on data size (default: true)</param>
         /// <param name="learningRate">Learning rate for Adam optimizer (default: 1.0)</param>
         /// <param name="useQuantization">Enable 16-bit quantization for memory reduction (default: false)</param>
+        /// <param name="hnswM">HNSW graph degree parameter (default: 16)</param>
+        /// <param name="hnswEfConstruction">HNSW build quality parameter (default: 200)</param>
+        /// <param name="hnswEfSearch">HNSW query quality parameter (default: 200)</param>
         /// <returns>Embedding coordinates [samples, embeddingDimension]</returns>
         /// <exception cref="ArgumentNullException">Thrown when data or progressCallback is null</exception>
         /// <exception cref="ArgumentException">Thrown when parameters are invalid</exception>
+        /// <remarks>This method is provided for backward compatibility. Consider using the unified Fit method instead.</remarks>
+        [Obsolete("Use the unified Fit method with optional progressCallback parameter instead.")]
         public float[,] FitWithProgress(float[,] data,
                                        ProgressCallback progressCallback,
                                        int embeddingDimension = 2,
@@ -586,18 +593,17 @@ namespace PacMapSharp
                                        int randomSeed = -1,
                                        bool autoHNSWParam = true,
                                        float learningRate = 1.0f,
-                                       bool useQuantization = false)
+                                       bool useQuantization = false,
+                                       int hnswM = 16,
+                                       int hnswEfConstruction = 200,
+                                       int hnswEfSearch = 200)
         {
             if (progressCallback == null)
                 throw new ArgumentNullException(nameof(progressCallback));
 
-            // Handle default value for numIters
-            var actualNumIters = numIters.Equals(default((int, int, int))) ? (100, 100, 250) : numIters;
-
-            return FitInternal(data, embeddingDimension, nNeighbors, mnRatio, fpRatio,
-                             actualNumIters, metric, forceExactKnn,
-                             progressCallback, hnswM: 16, hnswEfConstruction: 200, hnswEfSearch: 200,
-                             randomSeed, autoHNSWParam, learningRate, useQuantization);
+            return Fit(data, embeddingDimension, nNeighbors, mnRatio, fpRatio,
+                      numIters, metric, forceExactKnn, hnswM, hnswEfConstruction, hnswEfSearch,
+                      randomSeed, autoHNSWParam, learningRate, useQuantization, progressCallback);
         }
 
         /// <summary>

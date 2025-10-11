@@ -791,7 +791,7 @@ namespace persistence_utils {
                     model->embedding_space.get()
                 );
 
-                send_warning_to_callback("Embedding space HNSW index loaded successfully - AI inference ready");
+                log_debug("[LOAD] Embedding space HNSW index loaded successfully - AI inference ready.");
                 log_debug("[LOAD] Embedding space HNSW index successfully loaded.");
             }
             catch (const std::exception& e) {

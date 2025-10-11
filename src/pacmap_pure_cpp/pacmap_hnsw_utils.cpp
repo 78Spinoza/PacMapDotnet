@@ -1,6 +1,7 @@
 #include "pacmap_hnsw_utils.h"
 #include "pacmap_progress_utils.h"
 #include "pacmap_crc32.h"
+#include "pacmap_utils.h"
 #include "lz4.h"
 
 // Endian-safe serialization utilities (inline for HNSW)
@@ -215,8 +216,7 @@ namespace hnsw_utils {
 
     // LZ4-COMPRESSED HNSW STREAM SERIALIZATION (following UWOt pattern)
     void save_hnsw_to_stream_compressed(std::ostream& output, hnswlib::HierarchicalNSW<float>* hnsw_index) {
-        std::cout << "[STREAM] HNSW Save: Starting LZ4-compressed approach..." << std::endl;
-
+        
         if (!hnsw_index) {
             throw std::runtime_error("HNSW index is null");
         }
@@ -230,8 +230,7 @@ namespace hnsw_utils {
             std::string hnsw_data = hnsw_data_stream.str();
             uint32_t uncompressed_size = static_cast<uint32_t>(hnsw_data.size());
 
-            std::cout << "[STREAM] HNSW Save: Uncompressed size: " << uncompressed_size << " bytes" << std::endl;
-
+            
             // Compress with LZ4
             int max_compressed_size = LZ4_compressBound(static_cast<int>(uncompressed_size));
             std::vector<char> compressed_data(max_compressed_size);
@@ -245,9 +244,7 @@ namespace hnsw_utils {
             }
 
             uint32_t final_compressed_size = static_cast<uint32_t>(compressed_size);
-            std::cout << "[STREAM] HNSW Save: Compressed to " << final_compressed_size << " bytes "
-                      << "(ratio: " << (100.0 * final_compressed_size / uncompressed_size) << "%)" << std::endl;
-
+            
             // Write headers to output stream using endian-safe functions
             endian_utils::write_value(output, uncompressed_size);
             endian_utils::write_value(output, final_compressed_size);
@@ -263,10 +260,10 @@ namespace hnsw_utils {
             // Flush the stream to ensure data is written
             output.flush();
 
-            std::cout << "[STREAM] HNSW Save: ✅ LZ4 compression completed successfully" << std::endl;
-
+            
         } catch (const std::exception& e) {
-            std::cout << "[STREAM] HNSW Save: Exception: " << e.what() << std::endl;
+            std::string error_msg = std::string("HNSW Save: ") + e.what();
+            send_error_to_callback(error_msg.c_str());
             throw;
         }
     }
@@ -274,8 +271,6 @@ namespace hnsw_utils {
     void load_hnsw_from_stream_compressed(std::istream& input, hnswlib::HierarchicalNSW<float>* hnsw_index,
         hnswlib::SpaceInterface<float>* space) {
         try {
-            std::cout << "[STREAM] HNSW Load: Starting LZ4-decompression approach..." << std::endl;
-
             // Check stream state first
             if (!input.good()) {
                 throw std::runtime_error("Input stream is in bad state before reading");
@@ -283,7 +278,6 @@ namespace hnsw_utils {
 
             // Check current stream position
             std::streampos current_pos = input.tellg();
-            std::cout << "[STREAM] HNSW Load: Current stream position: " << current_pos << std::endl;
 
             // Read compression headers using endian-safe functions (must match save format)
             uint32_t uncompressed_size, compressed_size;
@@ -292,12 +286,9 @@ namespace hnsw_utils {
                 throw std::runtime_error("Failed to read HNSW compression headers - stream error or EOF");
             }
 
-            std::cout << "[STREAM] HNSW Load: Read headers - uncompressed: " << uncompressed_size
-                      << ", compressed: " << compressed_size << std::endl;
-
+            
             // Validate sizes - zero is allowed for empty HNSW data
             if (uncompressed_size == 0 && compressed_size == 0) {
-                std::cout << "[STREAM] HNSW Load: Zero size detected - empty HNSW index" << std::endl;
                 return; // Successfully loaded empty HNSW
             }
 
@@ -330,9 +321,7 @@ namespace hnsw_utils {
                 throw std::runtime_error("LZ4 decompression failed for HNSW data");
             }
 
-            std::cout << "[STREAM] HNSW Load: ✅ LZ4 decompression successful - "
-                      << decompressed_result << " bytes" << std::endl;
-
+            
             // Create stringstream from decompressed data for loading
             std::stringstream data_stream;
             data_stream.write(decompressed_data.data(), uncompressed_size);
@@ -340,10 +329,9 @@ namespace hnsw_utils {
             // Load HNSW from decompressed data stream
             hnsw_index->loadIndex(data_stream, space);
 
-            std::cout << "[STREAM] HNSW Load: ✅ loadIndex() completed successfully" << std::endl;
-
         } catch (const std::exception& e) {
-            std::cout << "[STREAM] HNSW Load: Exception: " << e.what() << std::endl;
+            std::string error_msg = std::string("HNSW Load: ") + e.what();
+            send_error_to_callback(error_msg.c_str());
             throw;
         }
     }
