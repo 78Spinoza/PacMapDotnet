@@ -348,7 +348,7 @@ namespace PacMapSharp
         private float _learningRate = 1.0f;  // Updated default for Adam optimizer
         private float _adamBeta1 = 0.9f;
         private float _adamBeta2 = 0.999f;
-        private float _initializationStdDev = 0.1f;  // Standard deviation for embedding initialization
+        private float _initializationStdDev = 1e-4f;  // Standard deviation for embedding initialization
         private (int phase1, int phase2, int phase3) _numIters = (150, 100, 250);
 
         #endregion
@@ -456,7 +456,7 @@ namespace PacMapSharp
         /// <param name="initializationStdDev">Standard deviation for embedding initialization (default: 0.1)</param>
         /// <param name="numIters">Number of iterations for each optimization phase (default: (100, 100, 250))</param>
         public PacMapModel(float mnRatio = 0.5f, float fpRatio = 2.0f, float learningRate = 1.0f,
-                            float adamBeta1 = 0.9f, float adamBeta2 = 0.999f, float initializationStdDev = 0.1f,
+                            float adamBeta1 = 0.9f, float adamBeta2 = 0.999f, float initializationStdDev = 1e-4f,
                             (int, int, int) numIters = default((int, int, int)))
         {
             // CRITICAL: Verify DLL version before any native calls to prevent binary mismatches

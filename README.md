@@ -51,7 +51,7 @@ This C++/C# version bridges these gaps, making PaCMAP **production-ready** for A
 **Dimensionality Reduction (DR)** is a technique used to reduce the number of variables or features in high-dimensional data while preserving as much critical information as possible. It transforms data from a high-dimensional space (e.g., thousands of features) into a lower-dimensional space (e.g., 2D or 3D) for easier **analysis**, **visualization**, and **processing**. Ideally, DR discovers linear and non-linear dependencies and unnecessary dimensions, reducing the data to a more informative dimensionality. DR is used to understand the underlying structure of the data.
 
 ![T-rex Render](docs/Other/T-rex_render.png)
-*Another complex 3D structure showcasing the challenges of dimensionality reduction*
+*Complex 3D structure showcasing the challenges of dimensionality reduction to 2D and difficulty of  UMAP initialization giving different result  
 ![T-rex Animation](docs/Other/t-rex-random.gif)
 
 ### Why DR is Crucial for Data Filtering and AI

@@ -1677,7 +1677,7 @@ namespace PacMapDemo
                     fpRatio: 2.0f,
                     learningRate: 1.0f,
                     initializationStdDev: 1e-4f,
-                    numIters: (200, 200, 400)
+                    numIters: (100, 100, 250)
                 );
 
                 var stopwatch = Stopwatch.StartNew();
@@ -1688,7 +1688,7 @@ namespace PacMapDemo
                     learningRate: 1.0f,
                     mnRatio: 1.2f,
                     fpRatio: 2.0f,
-                    numIters: (200, 200, 400),
+                    numIters: (100, 100, 250),
                     metric: DistanceMetric.Euclidean,
                     forceExactKnn: false,  // HNSW
                     hnswM: hnswParams.M,
@@ -1786,7 +1786,7 @@ namespace PacMapDemo
                     fpRatio: 2.0f,
                     learningRate: learningRate,
                     initializationStdDev: 1e-4f,
-                    numIters: (200, 200, 400)
+                    numIters: (100, 100, 250)
                 );
 
                 var stopwatch = Stopwatch.StartNew();
@@ -1797,7 +1797,7 @@ namespace PacMapDemo
                     learningRate: learningRate,
                     mnRatio: 1.2f,
                     fpRatio: 2.0f,
-                    numIters: (200, 200, 400),
+                    numIters: (100, 100, 250),
                     metric: DistanceMetric.Euclidean,
                     forceExactKnn: false,  // HNSW
                     hnswM: hnswParams.M,
@@ -1891,14 +1891,14 @@ namespace PacMapDemo
 
             float[,] sampleData; // Will be set based on subsampling decision
 
-            // Use 100K subsample for parameter experiments (faster for GIF generation)
-            int maxSamplesForTesting = 100000;
+            // Use 50K subsample for parameter experiments (faster for GIF generation)
+            int maxSamplesForTesting = 50000;
             if (hairyMammothFull.GetLength(0) > maxSamplesForTesting) {
-                Console.WriteLine("🚀 Using 100K subsample for parameter testing (faster GIF generation)...");
+                Console.WriteLine("🚀 Using 50K subsample for parameter testing (faster GIF generation)...");
                 sampleData = CreateFloatSubset(hairyMammothFull, maxSamplesForTesting);
                 Console.WriteLine($"   Subsample: {maxSamplesForTesting:N0} points from {hairyMammothFull.GetLength(0):N0} total");
             } else {
-                Console.WriteLine("🚀 Using full dataset for experiments (≤ 100K points)...");
+                Console.WriteLine("🚀 Using full dataset for experiments (≤ 50K points)...");
                 // Convert to float for PACMAP
                 int nSamples = hairyMammothFull.GetLength(0);
                 int nFeatures = hairyMammothFull.GetLength(1);
@@ -1945,12 +1945,12 @@ namespace PacMapDemo
                 fpRatio: 2.0f,
                 learningRate: 1.0f,
                 initializationStdDev: 1e-4f,
-                numIters: (200, 200, 400)
+                numIters: (100, 100, 250)
             );
 
             var discoveryStopwatch = Stopwatch.StartNew();
             var discoveryEmbedding = discoveryModel.Fit(
-                data: float1MHairy,  // Use FULL 1M hairy mammoth dataset
+                data: sampleData,  // Use 100K subsample for fast discovery
                 embeddingDimension: 2,
                 nNeighbors: 45,  // Hairy mammoth default
                 learningRate: 1.0f,  // Default learning rate
@@ -2025,7 +2025,7 @@ namespace PacMapDemo
                     fpRatio: 2.0f,
                     learningRate: 1.0f,
                     initializationStdDev: 1e-4f,
-                    numIters: (200, 200, 400)
+                    numIters: (100, 100, 250)
                 );
 
                 try
@@ -2038,7 +2038,7 @@ namespace PacMapDemo
                         learningRate: 1.0f,
                         mnRatio: (float)midNearRatio,
                         fpRatio: 2.0f,
-                        numIters: (200, 200, 400),
+                        numIters: (100, 100, 250),
                         metric: DistanceMetric.Euclidean,
                         forceExactKnn: false,  // HNSW
                         randomSeed: 42,
@@ -2101,7 +2101,7 @@ namespace PacMapDemo
                         fpRatio: 2.0f,
                         learningRate: 1.0f,
                         initializationStdDev: 1e-4f,
-                        numIters: (200, 200, 400)
+                        numIters: (100, 100, 250)
                     );
 
                     var stopwatch = Stopwatch.StartNew();
@@ -2112,7 +2112,7 @@ namespace PacMapDemo
                         learningRate: 1.0f,
                         mnRatio: 1.0f,
                         fpRatio: (float)farPairRatio,
-                        numIters: (200, 200, 400),
+                        numIters: (100, 100, 250),
                         metric: DistanceMetric.Euclidean,
                         forceExactKnn: false,  // HNSW
                         randomSeed: 42,
@@ -2175,7 +2175,7 @@ namespace PacMapDemo
                     fpRatio: 2.0f,
                     learningRate: 1.0f,
                     initializationStdDev: 1e-4f,
-                    numIters: (200, 200, 400)
+                    numIters: (100, 100, 250)
                 );
 
                 var stopwatch = Stopwatch.StartNew();
@@ -2186,7 +2186,7 @@ namespace PacMapDemo
                     learningRate: 1.0f,
                     mnRatio: 1.0f,
                     fpRatio: 2.0f,
-                    numIters: (200, 200, 400),
+                    numIters: (100, 100, 250),
                     metric: DistanceMetric.Euclidean,
                     forceExactKnn: false,  // HNSW
                     randomSeed: 42,
@@ -2320,7 +2320,7 @@ namespace PacMapDemo
                     fpRatio: 2.0f,
                     learningRate: 1.0f,
                     initializationStdDev: 1e-4f,
-                    numIters: (200, 200, 400)
+                    numIters: (100, 100, 250)
                 );
 
                 var stopwatch = Stopwatch.StartNew();
@@ -2331,7 +2331,7 @@ namespace PacMapDemo
                     learningRate: 1.0f,
                     mnRatio: (float)midNearRatio,
                     fpRatio: 2.0f,
-                    numIters: (200, 200, 400),
+                    numIters: (100, 100, 250),
                     metric: DistanceMetric.Euclidean,
                     forceExactKnn: true,  // Exact KNN
                     randomSeed: 42,
@@ -2373,7 +2373,7 @@ namespace PacMapDemo
                     fpRatio: (float)farPairRatio,
                     learningRate: 1.0f,
                     initializationStdDev: 1e-4f,
-                    numIters: (200, 200, 400)
+                    numIters: (100, 100, 250)
                 );
 
                 var stopwatch = Stopwatch.StartNew();
@@ -2384,7 +2384,7 @@ namespace PacMapDemo
                     learningRate: 1.0f,
                     mnRatio: 1.0f,
                     fpRatio: (float)farPairRatio,
-                    numIters: (200, 200, 400),
+                    numIters: (100, 100, 250),
                     metric: DistanceMetric.Euclidean,
                     forceExactKnn: true,  // Exact KNN
                     randomSeed: 42,
@@ -2429,7 +2429,7 @@ namespace PacMapDemo
                     fpRatio: 2.0f,
                     learningRate: 1.0f,
                     initializationStdDev: 1e-4f,
-                    numIters: (200, 200, 400)
+                    numIters: (100, 100, 250)
                 );
 
                 var stopwatch = Stopwatch.StartNew();
@@ -2440,7 +2440,7 @@ namespace PacMapDemo
                     learningRate: 1.0f,
                     mnRatio: 1.0f,
                     fpRatio: 2.0f,
-                    numIters: (200, 200, 400),
+                    numIters: (100, 100, 250),
                     metric: DistanceMetric.Euclidean,
                     forceExactKnn: true,  // Exact KNN
                     randomSeed: 42,
@@ -2581,7 +2581,7 @@ namespace PacMapDemo
                     fpRatio: 2.0f,
                     learningRate: 1.0f,
                     initializationStdDev: initStdDev,
-                    numIters: (200, 200, 400)
+                    numIters: (100, 100, 250)
                 );
 
                 var stopwatch = Stopwatch.StartNew();
@@ -2592,7 +2592,7 @@ namespace PacMapDemo
                     learningRate: 1.0f,
                     mnRatio: 1.2f,
                     fpRatio: 2.0f,
-                    numIters: (200, 200, 400),
+                    numIters: (100, 100, 250),
                     metric: DistanceMetric.Euclidean,
                     forceExactKnn: false,  // HNSW
                     hnswM: hnswParams.M,
@@ -2690,7 +2690,7 @@ namespace PacMapDemo
                     fpRatio: 2.0f,
                     learningRate: learningRate,
                     initializationStdDev: 1e-4f,
-                    numIters: (200, 200, 400)
+                    numIters: (100, 100, 250)
                 );
 
                 var stopwatch = Stopwatch.StartNew();
@@ -2701,7 +2701,7 @@ namespace PacMapDemo
                     learningRate: learningRate,
                     mnRatio: 1.2f,
                     fpRatio: 2.0f,
-                    numIters: (200, 200, 400),
+                    numIters: (100, 100, 250),
                     metric: DistanceMetric.Euclidean,
                     forceExactKnn: false,  // HNSW
                     hnswM: hnswParams.M,
