@@ -15,6 +15,20 @@ This is a **high-performance** implementation of **PaCMAP** (Pairwise Controlled
 **⚠️ Testing Phase Notice**: We are currently in testing phase. Only Euclidean distance is fully verified and working. Additional distance metrics and advanced features are under development.
 
 
+---
+
+**My perspective on this is:**
+
+**PaCMAP** (introduced in 2021) represents a methodological advancement over **UMAP** (2018). One of the enduring challenges in machine learning is **hyperparameter tuning**, as model performance often depends critically on parameter configurations that are non-trivial to determine. While experts with a deep understanding of both the mathematical foundations and data characteristics can address this effectively, the process remains complex, time-consuming, and prone to error.
+
+In the context of **dimensionality reduction (DR)**, this issue creates a **classic chicken-and-egg problem**: DR is typically used to explore and structure data, yet the quality of the DR itself depends on carefully chosen hyperparameters. This interdependence can lead to **systematic biases** and **overconfidence** in the resulting low-dimensional embeddings.
+
+**“There can be only one!”** (a nod to the *Highlander* movie). Although PaCMAP does involve hyperparameters, they are **not highly sensitive**, and the effective tuning space is **reduced to a single key parameter**: the number of neighbors. This property substantially simplifies model configuration and enhances robustness across diverse datasets.
+
+Furthermore, most DR methods preceding PaCMAP relied on **PCA-based initialization**. Because PCA is inherently **linear** and fails to capture **non-linear** structures effectively, this introduces significant limitations. PaCMAP, in contrast, employs **random initialization**, removing the dependency on PCA and mitigating potential **initialization bias** in the embedding process.
+
+---
+
 
 ## Project Motivation
 
@@ -30,13 +44,14 @@ Current PaCMAP implementations are mostly Python-based scientific tools lacking:
 - **Support for arbitrary embedding dimensions** and multiple metrics
 - **Linux/Windows binaries for easy testing and cloud deployment**
 
-This C++/C# version bridges these gaps, making PaCMAP **production-ready** for AI pipelines. See also my previous UMAP (invented 2018) implementation that is the scientific predecessor of the improved PaCMAP.
+This C++/C# version bridges these gaps, making PaCMAP **production-ready** for AI pipelines. See also my previous [UMAP (invented 2018) implementation](https://github.com/78Spinoza/UMAP) that is the scientific predecessor of the improved PaCMAP.
 
 ## What is Dimensionality Reduction (DR)?
 
 **Dimensionality Reduction (DR)** is a technique used to reduce the number of variables or features in high-dimensional data while preserving as much critical information as possible. It transforms data from a high-dimensional space (e.g., thousands of features) into a lower-dimensional space (e.g., 2D or 3D) for easier **analysis**, **visualization**, and **processing**. Ideally, DR discovers linear and non-linear dependencies and unnecessary dimensions, reducing the data to a more informative dimensionality. DR is used to understand the underlying structure of the data.
 
-
+![T-rex Render](docs/Other/T-rex_render.png)
+*Another complex 3D structure showcasing the challenges of dimensionality reduction*
 ![T-rex Animation](docs/Other/t-rex-random.gif)
 
 ### Why DR is Crucial for Data Filtering and AI
@@ -89,6 +104,21 @@ The difference becomes stark when comparing methods on the well-understood MNIST
 
 Notice how t-SNE creates misleading cluster size variations that don't reflect the actual balanced nature of MNIST digit classes. **This is why PaCMAP was revolutionary** - it preserves both local neighborhoods AND global structure without these artifacts.
 
+
+Even UMAP, a later version, is very **sensitive** to hyperparameters as you can see below:
+
+
+![HairyMamuth](docs/Other/mammoth_render2.png)
+*Original 3D mammoth*
+
+![Animation Examples](docs/Other/anim_nearest_neighbours.gif)
+*Hyperparameter exploration through animation - nearest neighbors variation*
+
+![Animation Examples](docs/Other/anim_min_dist_param.gif)
+*Hyperparameter exploration through animation - minimum distance variation*
+
+
+
 ### **Key Quantitative Results from the PaCMAP Paper**
 > - **🌐 Superior Global Structure Preservation**: **PaCMAP performs comparably to TriMap**, excelling at maintaining inter-cluster distances and global relationships, unlike the "near-sighted" t-SNE and UMAP.
 > - **🔍 Excellent Local Structure Preservation**: **PaCMAP matches the performance of UMAP and t-SNE**, ensuring tight neighborhood structures are preserved for detailed local analysis.
@@ -117,8 +147,7 @@ Projecting complex 3D structures like a mammoth into 2D space while preserving *
 ![Mammoth Original vs Enhanced](docs/Other/mamutOriginal.PNG)
 *The original 3D mammoth point cloud - a complex biological structure with intricate anatomical features*
 
-![T-rex Render](docs/Other/T-rex_render.png)
-*Another complex 3D structure showcasing the challenges of dimensionality reduction*
+
 
 ## Cognitive Parallel: How Our Brain Works
 
@@ -180,11 +209,7 @@ This production implementation includes advanced features not found in typical r
 - ✅ **Comprehensive Test Suite**: Validation ensuring production quality
 - ✅ **GIF Generation**: Animated parameter exploration for visual understanding
 
-![Animation Examples](docs/Other/anim_nearest_neighbours.gif)
-*Parameter exploration through animation - nearest neighbors variation*
 
-![Animation Examples](docs/Other/anim_min_dist_param.gif)
-*Parameter exploration through animation - minimum distance variation*
 
 *GIF animations referenced above were adapted from the excellent UMAP examples repository: https://github.com/MNoichl/UMAP-examples-mammoth-/tree/master*
 
