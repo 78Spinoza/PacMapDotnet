@@ -12,7 +12,7 @@
 
 This is a **high-performance** implementation of **PaCMAP** (Pairwise Controlled Manifold Approximation and Projection) in native C++ with C#/.NET bindings, designed for **production use cases**. It includes features like model save/load, faster approximate fitting using **HNSW (Hierarchical Navigable Small World)** for efficient nearest neighbor search, advanced quantization, and optimizations for **large datasets**.
 
-**⚠️ Testing Phase Notice**: We are currently in testing phase. Only Euclidean distance is fully verified and working. Additional distance metrics and advanced features are under development.
+**⚠️ Testing Phase Notice**: We are currently in testing phase. Only Euclidean distance is partly working. Validation on the new implementation is on going.  Additional distance metrics and advanced features are under development.
 
 
 ---
