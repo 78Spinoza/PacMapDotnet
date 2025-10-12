@@ -99,7 +99,7 @@ namespace PacMapDemo
                     randomSeed: 42,      // Fixed seed for reproducibility
                     progressCallback: (phase, current, total, percent, message) =>
                     {
-                        UnifiedProgressCallback(phase, current, total, percent, message);
+                        UnifiedProgressCallback(phase, current, total, percent, message ?? "");
                     }
                 );
                 Console.WriteLine(); // New line after progress
@@ -1407,7 +1407,7 @@ namespace PacMapDemo
                 randomSeed: seed,
                 progressCallback: (phase, current, total, percent, message) =>
                 {
-                    UnifiedProgressCallback(phase, current, total, percent, message);
+                    UnifiedProgressCallback(phase, current, total, percent, message ?? "");
                 }
             );
             Console.WriteLine(); // New line after progress
@@ -1431,7 +1431,7 @@ namespace PacMapDemo
                 randomSeed: seed,
                 progressCallback: (phase, current, total, percent, message) =>
                 {
-                    UnifiedProgressCallback(phase, current, total, percent, message);
+                    UnifiedProgressCallback(phase, current, total, percent, message ?? "");
                 }
             );
             Console.WriteLine(); // New line after progress
@@ -1523,6 +1523,90 @@ namespace PacMapDemo
             }
         }
 
+        // ====================== FLAGSHIP 1M HAIRY MAMMOTH ======================
+
+        /// <summary>
+        /// Creates the flagship 1M hairy mammoth image with default parameters
+        /// This is a standalone function that can be enabled/disabled independently
+        /// </summary>
+        static void CreateFlagship1MHairyMammoth(double[,] hairyMammothFull)
+        {
+            Console.WriteLine();
+            Console.WriteLine("🎯 CREATING FLAGSHIP 1M HAIRY MAMMOTH IMAGE");
+            Console.WriteLine("==========================================");
+            Console.WriteLine("   Full 1M dataset with default parameters (100, 100, 250)");
+            Console.WriteLine("   Neighbors: 45, Auto-tuning: ENABLED");
+            Console.WriteLine();
+
+            // Convert full 1M dataset to float
+            int n1M = hairyMammothFull.GetLength(0);
+            int d1M = hairyMammothFull.GetLength(1);
+            var float1MHairy = new float[n1M, d1M];
+            for (int i = 0; i < n1M; i++)
+                for (int j = 0; j < d1M; j++)
+                    float1MHairy[i, j] = (float)hairyMammothFull[i, j];
+
+            // Create PACMAP model for 1M hairy mammoth
+            var pacmap1MHairy = new PacMapModel();
+            var stopwatch1MHairy = Stopwatch.StartNew();
+            var embedding1MHairy = pacmap1MHairy.Fit(
+                data: float1MHairy,
+                embeddingDimension: 2,
+                nNeighbors: 45,  // Hairy mammoth default
+                mnRatio: 0.5f,
+                fpRatio: 2.0f,
+                learningRate: 1.0f,
+                numIters: (100, 100, 250),
+                forceExactKnn: false,
+                autoHNSWParam: true,
+                randomSeed: 42,
+                progressCallback: (phase, current, total, percent, message) =>
+                {
+                    UnifiedProgressCallback(phase, current, total, percent, message ?? "", "1M FLAGSHIP");
+                }
+            );
+            Console.WriteLine();
+            stopwatch1MHairy.Stop();
+
+            Console.WriteLine($"✅ FLAGSHIP 1M Hairy Mammoth created: {embedding1MHairy.GetLength(0):N0} x {embedding1MHairy.GetLength(1)}");
+            Console.WriteLine($"⏱️  Execution time: {stopwatch1MHairy.Elapsed.TotalSeconds:F2} seconds");
+
+            // Save the flagship 1M hairy mammoth image
+            Console.WriteLine("💾 Saving FLAGSHIP 1M hairy mammoth image...");
+            string flagshipImagePath = Path.Combine(GetResultsPath(), "mammoth_1M_flagship_hnsw.png");
+
+            // Get ACTUAL parameter values from the fitted model
+            var flagshipModelInfo = pacmap1MHairy.ModelInfo;
+            var flagshipParamInfo = new Dictionary<string, object>
+            {
+                ["Dataset"] = $"Hairy Mammoth 1M ({float1MHairy.GetLength(0):N0} points)",
+                ["Method"] = "PACMAP-HNSW",
+                ["Neighbors"] = flagshipModelInfo.Neighbors.ToString(),
+                ["MN Ratio"] = flagshipModelInfo.MN_ratio.ToString("F1"),
+                ["FP Ratio"] = flagshipModelInfo.FP_ratio.ToString("F1"),
+                ["Learning Rate"] = pacmap1MHairy.LearningRate.ToString("F1"),
+                ["Iterations"] = $"({pacmap1MHairy.NumIters.phase1}, {pacmap1MHairy.NumIters.phase2}, {pacmap1MHairy.NumIters.phase3})",
+                ["HNSW M"] = flagshipModelInfo.HnswM.ToString(),
+                ["HNSW ef_construction"] = flagshipModelInfo.HnswEfConstruction.ToString(),
+                ["HNSW ef_search"] = flagshipModelInfo.HnswEfSearch.ToString(),
+                ["Random Seed"] = flagshipModelInfo.RandomSeed.ToString(),
+                ["Execution Time"] = $"{stopwatch1MHairy.Elapsed.TotalSeconds:F2}s"
+            };
+            Visualizer.PlotSimplePacMAP(embedding1MHairy, "Hairy Mammoth (1M) - FLAGSHIP PACMAP-HNSW", flagshipImagePath, flagshipParamInfo);
+            Console.WriteLine($"   ✅ FLAGSHIP saved: {flagshipImagePath}");
+
+            // Save the flagship 1M hairy mammoth model
+            Console.WriteLine("💾 Saving FLAGSHIP 1M hairy mammoth model...");
+            string flagshipModelPath = Path.Combine(GetResultsPath(), "pacmap_1M_flagship_hnsw.pmm");
+            pacmap1MHairy.Save(flagshipModelPath);
+            Console.WriteLine($"   ✅ FLAGSHIP model saved: {flagshipModelPath}");
+
+            Console.WriteLine();
+            Console.WriteLine("🎉 FLAGSHIP 1M HAIRY MAMMOTH COMPLETE!");
+            Console.WriteLine("   📁 Check Results folder for mammoth_1M_flagship_hnsw.png");
+            Console.WriteLine();
+        }
+
         // ====================== HYPERPARAMETER EXPERIMENTS ======================
 
         /// <summary>
@@ -1547,7 +1631,7 @@ namespace PacMapDemo
                 autoHNSWParam: true,
                 progressCallback: (phase, current, total, percent, message) =>
                 {
-                    UnifiedProgressCallback(phase, current, total, percent, message, "Auto-Discovery");
+                    UnifiedProgressCallback(phase, current, total, percent, message ?? "", "Auto-Discovery");
                 }
             );
             autoStopwatch.Stop();
@@ -1575,8 +1659,8 @@ namespace PacMapDemo
             // Load mammoth data
             var (data, labels) = LoadMammothData();
 
-            // Test neighbor counts: 5, 10, 15, 20, 30, 40, 50
-            var neighborTests = new[] { 5, 10, 15, 20, 30, 40, 50 };
+            // Test neighbor counts: 7, 17, 27, 37, 47, 57, 67, 77, 87, 97, 107, 117, 127, 137
+            var neighborTests = Enumerable.Range(0, 14).Select(i => 5 + i * 5).ToArray(); // 7, 17, 27, ..., 137
             var results = new List<(int nNeighbors, float[,] embedding, double time, double quality)>();
 
             // Testing all neighbor counts with shared HNSW parameters
@@ -1614,7 +1698,7 @@ namespace PacMapDemo
                     randomSeed: 42,
                     progressCallback: (phase, current, total, percent, message) =>
                     {
-                        UnifiedProgressCallback(phase, current, total, percent, message, $"n={nNeighbors}");
+                        UnifiedProgressCallback(phase, current, total, percent, message ?? "", $"n={nNeighbors}");
                     }
                 );
                 stopwatch.Stop();
@@ -1723,7 +1807,7 @@ namespace PacMapDemo
                     randomSeed: 42,
                     progressCallback: (phase, current, total, percent, message) =>
                     {
-                        UnifiedProgressCallback(phase, current, total, percent, message, $"lr={learningRate:F1}");
+                        UnifiedProgressCallback(phase, current, total, percent, message ?? "", $"lr={learningRate:F1}");
                     }
                 );
                 stopwatch.Stop();
@@ -1798,82 +1882,12 @@ namespace PacMapDemo
             Console.WriteLine($"   Data ranges: X=[{hairyMammothFull[0,0]:F3}, {hairyMammothFull[hairyMammothFull.GetLength(0)-1,0]:F3}], Y=[{hairyMammothFull[0,1]:F3}, {hairyMammothFull[hairyMammothFull.GetLength(0)-1,1]:F3}], Z=[{hairyMammothFull[0,2]:F3}, {hairyMammothFull[hairyMammothFull.GetLength(0)-1,2]:F3}]");
 
             // =============================================
-            // CREATE ONE 1M HAIRY MAMMOTH IMAGE WITH DEFAULT PARAMETERS
+            // FLAGSHIP 1M HAIRY MAMMOTH (DISABLED for GIF generation focus)
             // =============================================
-            Console.WriteLine();
-            Console.WriteLine("🎯 CREATING FLAGSHIP 1M HAIRY MAMMOTH IMAGE");
-            Console.WriteLine("==========================================");
-            Console.WriteLine("   Full 1M dataset with default parameters (100, 100, 250)");
-            Console.WriteLine("   Neighbors: 10, Auto-tuning: ENABLED");
-            Console.WriteLine();
-
-            // Convert full 1M dataset to float
-            int n1M = hairyMammothFull.GetLength(0);
-            int d1M = hairyMammothFull.GetLength(1);
-            var float1MHairy = new float[n1M, d1M];
-            for (int i = 0; i < n1M; i++)
-                for (int j = 0; j < d1M; j++)
-                    float1MHairy[i, j] = (float)hairyMammothFull[i, j];
-
-            // Create PACMAP model for 1M hairy mammoth
-            var pacmap1MHairy = new PacMapModel();
-            var stopwatch1MHairy = Stopwatch.StartNew();
-            var embedding1MHairy = pacmap1MHairy.Fit(
-                data: float1MHairy,
-                embeddingDimension: 2,
-                nNeighbors: 10,
-                mnRatio: 0.5f,
-                fpRatio: 2.0f,
-                learningRate: 1.0f,
-                numIters: (100, 100, 250),
-                forceExactKnn: false,
-                autoHNSWParam: true,
-                randomSeed: 42,
-                progressCallback: (phase, current, total, percent, message) =>
-                {
-                    UnifiedProgressCallback(phase, current, total, percent, message, "1M FLAGSHIP");
-                }
-            );
-            Console.WriteLine();
-            stopwatch1MHairy.Stop();
-
-            Console.WriteLine($"✅ FLAGSHIP 1M Hairy Mammoth created: {embedding1MHairy.GetLength(0):N0} x {embedding1MHairy.GetLength(1)}");
-            Console.WriteLine($"⏱️  Execution time: {stopwatch1MHairy.Elapsed.TotalSeconds:F2} seconds");
-
-            // Save the flagship 1M hairy mammoth image
-            Console.WriteLine("💾 Saving FLAGSHIP 1M hairy mammoth image...");
-            string flagshipImagePath = Path.Combine(GetResultsPath(), "mammoth_1M_flagship_hnsw.png");
-
-            // Get ACTUAL parameter values from the fitted model
-            var flagshipModelInfo = pacmap1MHairy.ModelInfo;
-            var flagshipParamInfo = new Dictionary<string, object>
-            {
-                ["Dataset"] = $"Hairy Mammoth 1M ({float1MHairy.GetLength(0):N0} points)",
-                ["Method"] = "PACMAP-HNSW",
-                ["Neighbors"] = flagshipModelInfo.Neighbors.ToString(),
-                ["MN Ratio"] = flagshipModelInfo.MN_ratio.ToString("F1"),
-                ["FP Ratio"] = flagshipModelInfo.FP_ratio.ToString("F1"),
-                ["Learning Rate"] = pacmap1MHairy.LearningRate.ToString("F1"),
-                ["Iterations"] = $"({pacmap1MHairy.NumIters.phase1}, {pacmap1MHairy.NumIters.phase2}, {pacmap1MHairy.NumIters.phase3})",  // Actual iterations from model
-                ["HNSW M"] = flagshipModelInfo.HnswM.ToString(),
-                ["HNSW ef_construction"] = flagshipModelInfo.HnswEfConstruction.ToString(),
-                ["HNSW ef_search"] = flagshipModelInfo.HnswEfSearch.ToString(),
-                ["Random Seed"] = flagshipModelInfo.RandomSeed.ToString(),
-                ["Execution Time"] = $"{stopwatch1MHairy.Elapsed.TotalSeconds:F2}s"
-            };
-            Visualizer.PlotSimplePacMAP(embedding1MHairy, "Hairy Mammoth (1M) - FLAGSHIP PACMAP-HNSW", flagshipImagePath, flagshipParamInfo);
-            Console.WriteLine($"   ✅ FLAGSHIP saved: {flagshipImagePath}");
-
-            // Save the flagship 1M hairy mammoth model
-            Console.WriteLine("💾 Saving FLAGSHIP 1M hairy mammoth model...");
-            string flagshipModelPath = Path.Combine(GetResultsPath(), "pacmap_1M_flagship_hnsw.pmm");
-            pacmap1MHairy.Save(flagshipModelPath);
-            Console.WriteLine($"   ✅ FLAGSHIP model saved: {flagshipModelPath}");
-
-            Console.WriteLine();
-            Console.WriteLine("🎉 FLAGSHIP 1M HAIRY MAMMOTH COMPLETE!");
-            Console.WriteLine("   📁 Check Results folder for mammoth_1M_flagship_hnsw.png");
-            Console.WriteLine();
+            /*
+            Console.WriteLine("🎯 Creating flagship 1M hairy mammoth image...");
+            CreateFlagship1MHairyMammoth(hairyMammothFull);
+            */
 
             float[,] sampleData; // Will be set based on subsampling decision
 
@@ -1910,8 +1924,8 @@ namespace PacMapDemo
             // Experiment parameters
             double[] midNearRatioValues = { 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0 };
             double[] farPairRatioValues = { 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0 };
-            int[] neighborValues = { 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 42, 44, 46, 48, 50, 52, 54, 56, 58, 60, 62, 64, 66, 68, 70, 72, 74, 76, 78, 80 };
-            int fixedNeighbors = 10;
+            int[] neighborValues = { 5, 10, 15, 20, 25, 28, 30, 40, 42, 44, 46, 48, 50, 56, 58, 60, 62, 70, 80, 90, 100, 110, 120, 130 };
+            int fixedNeighbors = 45;  // Hairy mammoth default
             int fileIndex = 1;
 
             // ========================================================================
@@ -1936,9 +1950,9 @@ namespace PacMapDemo
 
             var discoveryStopwatch = Stopwatch.StartNew();
             var discoveryEmbedding = discoveryModel.Fit(
-                data: floatData,  // Use FULL 1M dataset
+                data: float1MHairy,  // Use FULL 1M hairy mammoth dataset
                 embeddingDimension: 2,
-                nNeighbors: 10,  // Default neighbors
+                nNeighbors: 45,  // Hairy mammoth default
                 learningRate: 1.0f,  // Default learning rate
                 mnRatio: 0.5f,  // Default MN ratio
                 fpRatio: 2.0f,  // Default FP ratio
@@ -1949,7 +1963,7 @@ namespace PacMapDemo
                 autoHNSWParam: true,  // Enable auto-tuning for 1M dataset
                 progressCallback: (phase, current, total, percent, message) =>
                 {
-                    UnifiedProgressCallback(phase, current, total, percent, message);
+                    UnifiedProgressCallback(phase, current, total, percent, message ?? "");
                 }
             );
             Console.WriteLine(); // New line after progress
@@ -2034,7 +2048,7 @@ namespace PacMapDemo
                         hnswEfSearch: discoveredParams.HnswEfSearch,
                         progressCallback: (phase, current, total, percent, message) =>
                         {
-                            UnifiedProgressCallback(phase, current, total, percent, message);
+                            UnifiedProgressCallback(phase, current, total, percent, message ?? "");
                         }
                     );
                     Console.WriteLine(); // New line after progress
@@ -2108,7 +2122,7 @@ namespace PacMapDemo
                         hnswEfSearch: discoveredParams.HnswEfSearch,
                         progressCallback: (phase, current, total, percent, message) =>
                         {
-                            UnifiedProgressCallback(phase, current, total, percent, message);
+                            UnifiedProgressCallback(phase, current, total, percent, message ?? "");
                         }
                     );
                     Console.WriteLine(); // New line after progress
@@ -2182,7 +2196,7 @@ namespace PacMapDemo
                     hnswEfSearch: discoveredParams.HnswEfSearch,
                     progressCallback: (phase, current, total, percent, message) =>
                     {
-                        UnifiedProgressCallback(phase, current, total, percent, message);
+                        UnifiedProgressCallback(phase, current, total, percent, message ?? "");
                     }
                 );
                 Console.WriteLine(); // New line after progress
@@ -2323,7 +2337,7 @@ namespace PacMapDemo
                     randomSeed: 42,
                     progressCallback: (phase, current, total, percent, message) =>
                     {
-                        UnifiedProgressCallback(phase, current, total, percent, message);
+                        UnifiedProgressCallback(phase, current, total, percent, message ?? "");
                     }
                 );
                 Console.WriteLine(); // New line after progress
@@ -2376,7 +2390,7 @@ namespace PacMapDemo
                     randomSeed: 42,
                     progressCallback: (phase, current, total, percent, message) =>
                     {
-                        UnifiedProgressCallback(phase, current, total, percent, message);
+                        UnifiedProgressCallback(phase, current, total, percent, message ?? "");
                     }
                 );
                 Console.WriteLine(); // New line after progress
@@ -2432,7 +2446,7 @@ namespace PacMapDemo
                     randomSeed: 42,
                     progressCallback: (phase, current, total, percent, message) =>
                     {
-                        UnifiedProgressCallback(phase, current, total, percent, message);
+                        UnifiedProgressCallback(phase, current, total, percent, message ?? "");
                     }
                 );
                 Console.WriteLine(); // New line after progress
@@ -2697,7 +2711,7 @@ namespace PacMapDemo
                     randomSeed: 42,
                     progressCallback: (phase, current, total, percent, message) =>
                     {
-                        UnifiedProgressCallback(phase, current, total, percent, message, $"lr={learningRate:F1}");
+                        UnifiedProgressCallback(phase, current, total, percent, message ?? "", $"lr={learningRate:F1}");
                     }
                 );
                 stopwatch.Stop();
