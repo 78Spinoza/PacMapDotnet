@@ -6,6 +6,7 @@
 #include <string>
 #include <cstdint>
 #include <chrono>
+#include <numeric>
 #include "hnswlib.h"
 
 #include "pacmap_simple_wrapper.h"
@@ -160,8 +161,8 @@ struct PacMapModel {
     std::vector<uint8_t> pq_codes;
     std::vector<float> pq_centroids;
 
-    // NumPy-compatible RNG for identical random sequences
-    std::unique_ptr<NumpyRandom> numpy_rng;
+    // Standard RNG for random operations
+    std::mt19937 rng;
 
     // Error handling (review addition)
     int last_error_code = 0;
@@ -177,8 +178,10 @@ struct PacMapModel {
 
     // Constructor
     PacMapModel() {
-        // Initialize NumPy-compatible RNG
-        numpy_rng = std::make_unique<NumpyRandom>(random_seed >= 0 ? random_seed : 0);
+        // Initialize standard RNG with seed if provided
+        if (random_seed >= 0) {
+            rng.seed(random_seed);
+        }
     }
 
     // Destructor

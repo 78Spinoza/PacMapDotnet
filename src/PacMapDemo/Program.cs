@@ -550,7 +550,7 @@ Time: {execTime} | Original dims: {paramInfo["original_dimensions"]}";
             DemoNeighborExperiments(data, labels, optimalHNSWParams);
             DemoLearningRateExperiments(data, labels, optimalHNSWParams);
             DemoInitializationStdDevExperiments(data, labels, optimalHNSWParams);
-            DemoExtendedLearningRateExperiments(data, labels, optimalHNSWParams);
+           // DemoExtendedLearningRateExperiments(data, labels, optimalHNSWParams);
         }
 
         /// <summary>

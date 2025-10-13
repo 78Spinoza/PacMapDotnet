@@ -40,12 +40,46 @@ std::tuple<float, float, float> get_weights(int current_iter, int total_iters) {
         w_n = 3.0f;   // ← FIX: Python uses 3.0, NOT 1.0!
     } else {
         // Phase 3: Local structure (40-100%)
-        float phase3_progress = (progress - 0.4f) / 0.6f;
-        w_mn = 3.0f * (1.0f - phase3_progress);
+        // FIX13: w_MN must be ZERO immediately in Phase 3 (not gradual decay)
+        // Python reference (pacmap.py line 350): w_MN = 0.0 (instant zero)
+        // Previous bug: Used gradual decay w_mn = 3.0f * (1.0f - phase3_progress) → wrong force balance
+        w_mn = 0.0f;  // ← Match Python exactly!
         w_n = 1.0f;   // ← Finally matches Python in Phase 3
     }
 
     return {w_n, w_mn, w_f};
+}
+
+// 🔬 PHASE 4: ENHANCED PHASE TRANSITION DEBUGGING
+std::tuple<float, float, float, const char*> get_weights_with_phase_info(int current_iter, int total_iters) {
+    // Enhanced version that returns phase information for debugging
+    float w_n, w_mn, w_f = 1.0f;
+    const char* phase_name = "";
+
+    float progress = static_cast<float>(current_iter) / total_iters;
+
+    if (progress < 0.1f) {
+        // Phase 1: Global structure (0-10%)
+        float phase1_progress = progress / 0.1f;
+        w_mn = 1000.0f * (1.0f - phase1_progress) + 3.0f * phase1_progress;
+        w_n = 2.0f;
+        phase_name = "Phase 1: Global Structure";
+    } else if (progress < 0.4f) {
+        // Phase 2: Balance phase (10-40%)
+        w_mn = 3.0f;
+        w_n = 3.0f;
+        phase_name = "Phase 2: Balance";
+    } else {
+        // Phase 3: Local structure (40-100%)
+        // FIX13: w_MN must be ZERO immediately in Phase 3 (not gradual decay)
+        // Python reference (pacmap.py line 350): w_MN = 0.0 (instant zero)
+        // Previous bug: Used gradual decay w_mn = 3.0f * (1.0f - phase3_progress) → wrong force balance
+        w_mn = 0.0f;  // ← Match Python exactly!
+        w_n = 1.0f;
+        phase_name = "Phase 3: Local Structure";
+    }
+
+    return {w_n, w_mn, w_f, phase_name};
 }
 
 void compute_gradients(const std::vector<double>& embedding, const std::vector<Triplet>& triplets,
@@ -53,6 +87,54 @@ void compute_gradients(const std::vector<double>& embedding, const std::vector<T
                        pacmap_progress_callback_internal callback) {
 
     gradients.assign(embedding.size(), 0.0);
+
+    // 🔬 PHASE 4: Phase transition detection and tracking
+    static int last_phase = -1;  // Track phase changes
+    static int phase_transition_count = 0;
+    float progress = 0.0f;  // Will be set if we can compute it
+    const char* current_phase_name = "Unknown";
+
+    // Try to determine current phase from weights (heuristic)
+    if (w_n > 1.5f && w_n < 2.5f && w_mn > 3.0f) {
+        current_phase_name = "Phase 1: Global Structure";
+        if (last_phase != 1) {
+            phase_transition_count++;
+            last_phase = 1;
+            if (callback) {
+                char transition_msg[512];
+                snprintf(transition_msg, sizeof(transition_msg),
+                        "🔄 PHASE TRANSITION v2.8.10: Entered %s (w_n=%.2f, w_mn=%.2f, w_f=%.2f) - Transition #%d",
+                        current_phase_name, w_n, w_mn, w_f, phase_transition_count);
+                callback("Phase Transition", 0, 0, 0.0f, transition_msg);
+            }
+        }
+    } else if (std::abs(w_n - 3.0f) < 0.1f && std::abs(w_mn - 3.0f) < 0.1f) {
+        current_phase_name = "Phase 2: Balance";
+        if (last_phase != 2) {
+            phase_transition_count++;
+            last_phase = 2;
+            if (callback) {
+                char transition_msg[512];
+                snprintf(transition_msg, sizeof(transition_msg),
+                        "🔄 PHASE TRANSITION v2.8.10: Entered %s (w_n=%.2f, w_mn=%.2f, w_f=%.2f) - Transition #%d",
+                        current_phase_name, w_n, w_mn, w_f, phase_transition_count);
+                callback("Phase Transition", 0, 0, 0.0f, transition_msg);
+            }
+        }
+    } else if (std::abs(w_n - 1.0f) < 0.1f && w_mn <= 3.0f) {
+        current_phase_name = "Phase 3: Local Structure";
+        if (last_phase != 3) {
+            phase_transition_count++;
+            last_phase = 3;
+            if (callback) {
+                char transition_msg[512];
+                snprintf(transition_msg, sizeof(transition_msg),
+                        "🔄 PHASE TRANSITION v2.8.10: Entered %s (w_n=%.2f, w_mn=%.2f, w_f=%.2f) - Transition #%d",
+                        current_phase_name, w_n, w_mn, w_f, phase_transition_count);
+                callback("Phase Transition", 0, 0, 0.0f, transition_msg);
+            }
+        }
+    }
 
     // PHASE 2 FIX: CRITICAL - Match Python sequential processing order exactly!
     // Python reference processes ALL triplets by type sequentially:
@@ -78,18 +160,16 @@ void compute_gradients(const std::vector<double>& embedding, const std::vector<T
         size_t idx_a = static_cast<size_t>(t.anchor) * n_components;
         size_t idx_n = static_cast<size_t>(t.neighbor) * n_components;
 
-        // Compute true Euclidean distance using pure double precision
-        double d_ij_squared = 0.0;
+        // FIX13: CRITICAL - Match Python distance calculation EXACTLY!
+        // Python (pacmap.py line 271-274): d_ij = 1.0, then d_ij += y_ij[d]**2
+        // Result: d_ij = 1.0 + sum(diff²)  ← NOT sqrt(sum(diff²))!
+        // This is the SQUARED distance plus 1.0, NOT Euclidean distance!
+        double d_ij = 1.0;
         for (int d = 0; d < n_components; ++d) {
             double diff = embedding[idx_a + d] - embedding[idx_n + d];
-            d_ij_squared += diff * diff;
+            d_ij += diff * diff;  // Add squared difference (NO sqrt!)
         }
-        double d_ij = std::sqrt(std::max(d_ij_squared, 1e-15));
-
-        if (d_ij < 1e-15) {
-            skipped_zero_distance++;
-            continue;  // Skip near-zero distances
-        }
+        // Note: d_ij starts at 1.0, so it's always >= 1.0 (no need to check for zero)
 
         // FIX v2.8.7: CRITICAL - Match Python gradient formula EXACTLY!
         // Python (pacmap.py line 276): w1 = w_neighbors * (20. / (10. + d_ij) ** 2)
@@ -131,18 +211,16 @@ void compute_gradients(const std::vector<double>& embedding, const std::vector<T
         size_t idx_a = static_cast<size_t>(t.anchor) * n_components;
         size_t idx_n = static_cast<size_t>(t.neighbor) * n_components;
 
-        // Compute true Euclidean distance using pure double precision
-        double d_ij_squared = 0.0;
+        // FIX13: CRITICAL - Match Python distance calculation EXACTLY!
+        // Python (pacmap.py line 271-274): d_ij = 1.0, then d_ij += y_ij[d]**2
+        // Result: d_ij = 1.0 + sum(diff²)  ← NOT sqrt(sum(diff²))!
+        // This is the SQUARED distance plus 1.0, NOT Euclidean distance!
+        double d_ij = 1.0;
         for (int d = 0; d < n_components; ++d) {
             double diff = embedding[idx_a + d] - embedding[idx_n + d];
-            d_ij_squared += diff * diff;
+            d_ij += diff * diff;  // Add squared difference (NO sqrt!)
         }
-        double d_ij = std::sqrt(std::max(d_ij_squared, 1e-15));
-
-        if (d_ij < 1e-15) {
-            skipped_zero_distance++;
-            continue;  // Skip near-zero distances
-        }
+        // Note: d_ij starts at 1.0, so it's always >= 1.0 (no need to check for zero)
 
         // FIX v2.8.7: CRITICAL - Match Python gradient formula EXACTLY!
         // Python (pacmap.py line 289): w = w_MN * 20000. / (10000. + d_ij) ** 2
@@ -183,28 +261,27 @@ void compute_gradients(const std::vector<double>& embedding, const std::vector<T
         size_t idx_a = static_cast<size_t>(t.anchor) * n_components;
         size_t idx_n = static_cast<size_t>(t.neighbor) * n_components;
 
-        // Compute true Euclidean distance using pure double precision
-        double d_ij_squared = 0.0;
+        // FIX13: CRITICAL - Match Python distance calculation EXACTLY!
+        // Python (pacmap.py line 271-274): d_ij = 1.0, then d_ij += y_ij[d]**2
+        // Result: d_ij = 1.0 + sum(diff²)  ← NOT sqrt(sum(diff²))!
+        // This is the SQUARED distance plus 1.0, NOT Euclidean distance!
+        double d_ij = 1.0;
         for (int d = 0; d < n_components; ++d) {
             double diff = embedding[idx_a + d] - embedding[idx_n + d];
-            d_ij_squared += diff * diff;
+            d_ij += diff * diff;  // Add squared difference (NO sqrt!)
         }
-        double d_ij = std::sqrt(std::max(d_ij_squared, 1e-15));
+        // Note: d_ij starts at 1.0, so it's always >= 1.0 (no need to check for zero)
 
-        if (d_ij < 1e-15) {
-            skipped_zero_distance++;
-            continue;  // Skip near-zero distances
-        }
-
-        // FIX v2.8.7: CRITICAL - Match Python gradient formula EXACTLY!
-        // Python (pacmap.py line 302): w1 = w_FP * 2. / (1. + d_ij) ** 2
-        // Then (line 304): grad[i, d] -= w1 * y_ij[d]  ← RAW difference, NOT normalized!
-        //                  grad[j, d] += w1 * y_ij[d]
+        // 🚨 REVERTING CRITICAL ERROR v2.8.10: FAR PAIRS MUST BE REPULSIVE!
+        // Python Analysis: NEIGHBOR/MID_NEAR are attractive, FURTHER are repulsive
+        // Python (pacmap.py): grad[i, d] += w * diff[d], grad[j, d] -= w * diff[d]
+        // NEIGHBOR:    w = 20/(10+d)^2, grad[i] +=, grad[j] -= (attractive)
+        // MID_NEAR:   w = 20000/(10000+d)^2, grad[i] +=, grad[j] -= (attractive)
+        // FARTHER:    w = 2/(1+d)^2, grad[i] -=, grad[j] += (repulsive!)
         //
-        // PREVIOUS BUG: Missing factor of 2 (used 1.0 instead of 2.0)
-        //               AND divided by d_ij (incorrect normalization)
-        // Note: Negative sign because we SUBTRACT for repulsion (line 304: grad[i] -= ...)
-        double grad_magnitude = -static_cast<double>(w_f) * 2.0 / std::pow(1.0 + d_ij, 2.0);  // ✅ Factor of 2!
+        // CURRENT FIX: grad_magnitude is now NEGATIVE (repulsive) which is CORRECT!
+        // Python treats FURTHER as REPULSIVE to maintain separation, not attractive!
+        double grad_magnitude = -static_cast<double>(w_f) * 2.0 / std::pow(1.0 + d_ij, 2.0);  // ✅ NEGATIVE - repulsive force!
 
         // Numerical safety: Skip if non-finite (prevents NaN propagation)
         if (!std::isfinite(grad_magnitude)) {
@@ -228,15 +305,69 @@ void compute_gradients(const std::vector<double>& embedding, const std::vector<T
         processed_further++;
     }
 
-    // ERROR13 FIX: Report triplet processing statistics via callback every iteration for debugging
+    // 🔍 ENHANCED DEBUGGING: Comprehensive triplet processing statistics
     static int triplet_debug_counter = 0;
     if (triplet_debug_counter++ % 5 == 0 && callback) {  // Report every 5th iteration
-        char debug_msg[256];
+        char debug_msg[512];
         snprintf(debug_msg, sizeof(debug_msg),
-                "DOUBLE PRECISION TRIPLET PROCESSING: N=%d, MN=%d, F=%d | Skipped: zero=%d, nan=%d, other=%d",
+                "🔬 TRIPLET DEBUG v2.8.10: N=%d, MN=%d, F=%d | Skipped: zero=%d, nan=%d, other=%d",
                 processed_neighbors, processed_midnear, processed_further,
                 skipped_zero_distance, skipped_nan, skipped_triplets);
-        callback("Gradient Computation", 0, 0, 0.0f, debug_msg);
+        callback("Triplet Processing", 0, 0, 0.0f, debug_msg);
+    }
+
+    // 📊 ENHANCED: Triplet distance distribution analysis (every 10 iterations)
+    static int distance_analysis_counter = 0;
+    if (distance_analysis_counter++ % 10 == 0 && callback) {
+        // Analyze distance distributions by type to validate triplet quality
+        std::vector<double> neighbor_distances, mn_distances, fp_distances;
+
+        for (const auto& t : triplets) {
+            double d_ij_squared = 0.0;
+            size_t idx_a = static_cast<size_t>(t.anchor) * n_components;
+            size_t idx_n = static_cast<size_t>(t.neighbor) * n_components;
+
+            for (int d = 0; d < n_components; ++d) {
+                double diff = embedding[idx_a + d] - embedding[idx_n + d];
+                d_ij_squared += diff * diff;
+            }
+            double d_ij = std::sqrt(std::max(d_ij_squared, 1e-15));
+
+            switch (t.type) {
+                case NEIGHBOR: neighbor_distances.push_back(d_ij); break;
+                case MID_NEAR: mn_distances.push_back(d_ij); break;
+                case FURTHER: fp_distances.push_back(d_ij); break;
+            }
+        }
+
+        if (!neighbor_distances.empty() && !mn_distances.empty() && !fp_distances.empty()) {
+            auto analyze_distances = [](const std::vector<double>& dists, const char* type) {
+                if (dists.empty()) return std::make_pair(0.0, 0.0);
+                auto[min_it, max_it] = std::minmax_element(dists.begin(), dists.end());
+                double mean = std::accumulate(dists.begin(), dists.end(), 0.0) / dists.size();
+                double range = static_cast<double>(*max_it) - static_cast<double>(*min_it);
+                return std::make_pair(mean, range);
+            };
+
+            auto [neighbor_mean, neighbor_range] = analyze_distances(neighbor_distances, "NEIGHBOR");
+            auto [mn_mean, mn_range] = analyze_distances(mn_distances, "MID_NEAR");
+            auto [fp_mean, fp_range] = analyze_distances(fp_distances, "FARTHER");
+
+            char distance_msg[512];
+            snprintf(distance_msg, sizeof(distance_msg),
+                    "📊 DISTANCE ANALYSIS: NEIGHBOR (μ=%.3f, range=%.3f) | MN (μ=%.3f, range=%.3f) | FP (μ=%.3f, range=%.3f)",
+                    neighbor_mean, neighbor_range, mn_mean, mn_range, fp_mean, fp_range);
+            callback("Distance Analysis", 0, 0, 0.0f, distance_msg);
+
+            // Validate distance ordering: NEIGHBOR < MN < FARTHER should hold for proper structure
+            if (neighbor_mean >= mn_mean || mn_mean >= fp_mean) {
+                char warning_msg[512];
+                snprintf(warning_msg, sizeof(warning_msg),
+                        "⚠️ DISTANCE ORDER WARNING: Expected NEIGHBOR < MN < FARTHER, got N=%.3f ≥ MN=%.3f ≥ FP=%.3f",
+                        neighbor_mean, mn_mean, fp_mean);
+                callback("WARNING", 0, 0, 0.0f, warning_msg);
+            }
+        }
     }
 
     // ERROR13 FIX: COMMENTED OUT gradient clipping - may interfere with natural force balance
@@ -264,9 +395,14 @@ void compute_gradients(const std::vector<double>& embedding, const std::vector<T
     //
     // (normalization code removed - Python doesn't normalize)
 
-    // DEBUG: Detailed gradient analysis for troubleshooting oval embedding - double precision
+    // 🔬 PHASE 2: ENHANCED DEBUGGING - Detailed gradient analysis by triplet type
     double grad_min = gradients[0], grad_max = gradients[0], grad_abssum = 0.0;
     int grad_nan = 0, grad_inf = 0;
+
+    // Per-type gradient accumulation for detailed analysis
+    double neighbor_grad_sum = 0.0, mn_grad_sum = 0.0, fp_grad_sum = 0.0;
+    int neighbor_grad_count = 0, mn_grad_count = 0, fp_grad_count = 0;
+
     for (size_t i = 0; i < gradients.size(); ++i) {
         grad_min = std::min(grad_min, gradients[i]);
         grad_max = std::max(grad_max, gradients[i]);
@@ -276,7 +412,53 @@ void compute_gradients(const std::vector<double>& embedding, const std::vector<T
     }
     double grad_absmean = grad_abssum / gradients.size();
 
-    // ERROR13 FIX: Enhanced gradient statistics with force balance analysis - reported via callback
+    // 🔍 ENHANCED: Calculate gradient contributions by triplet type
+    if (callback) {
+        // Sample gradient analysis by triplet type
+        for (const auto& t : triplets) {
+            size_t idx_a = static_cast<size_t>(t.anchor) * n_components;
+            size_t idx_n = static_cast<size_t>(t.neighbor) * n_components;
+
+            // Compute gradient magnitude contribution for this triplet
+            double d_ij_squared = 0.0;
+            for (int d = 0; d < n_components; ++d) {
+                double diff = embedding[idx_a + d] - embedding[idx_n + d];
+                d_ij_squared += diff * diff;
+            }
+            double d_ij = std::sqrt(std::max(d_ij_squared, 1e-15));
+
+            double grad_mag = 0.0;
+            switch (t.type) {
+                case NEIGHBOR:
+                    grad_mag = std::abs(static_cast<double>(w_n) * 20.0 / std::pow(10.0 + d_ij, 2.0));
+                    neighbor_grad_sum += grad_mag;
+                    neighbor_grad_count++;
+                    break;
+                case MID_NEAR:
+                    grad_mag = std::abs(static_cast<double>(w_mn) * 20000.0 / std::pow(10000.0 + d_ij, 2.0));
+                    mn_grad_sum += grad_mag;
+                    mn_grad_count++;
+                    break;
+                case FURTHER:
+                    grad_mag = std::abs(static_cast<double>(w_f) * 2.0 / std::pow(1.0 + d_ij, 2.0));
+                    fp_grad_sum += grad_mag;
+                    fp_grad_count++;
+                    break;
+            }
+        }
+    }
+
+    // 🔬 PHASE 4: Periodic phase status reporting (every 15 iterations)
+    static int phase_status_counter = 0;
+    if (phase_status_counter++ % 15 == 0 && callback) {
+        char phase_status_msg[1024];
+        snprintf(phase_status_msg, sizeof(phase_status_msg),
+                "🗺️ PHASE STATUS v2.8.10: %s | Transitions: %d | Weights: w_n=%.3f, w_mn=%.3f, w_f=%.3f",
+                current_phase_name, phase_transition_count, w_n, w_mn, w_f);
+        callback("Phase Status", 0, 0, 0.0f, phase_status_msg);
+    }
+
+    // 📊 ENHANCED DEBUGGING: Comprehensive gradient statistics with force balance analysis
     static int debug_counter = 0;
     if (debug_counter++ % 10 == 0 && callback) {  // Report every 10th iteration
         // Count positive vs negative gradients to detect force imbalance
@@ -298,17 +480,37 @@ void compute_gradients(const std::vector<double>& embedding, const std::vector<T
         double pos_avg = positive_count > 0 ? pos_sum / positive_count : 0.0;
         double neg_avg = negative_count > 0 ? neg_sum / negative_count : 0.0;
 
-        char grad_msg[512];
+        // Calculate per-type averages
+        double neighbor_avg = neighbor_grad_count > 0 ? neighbor_grad_sum / neighbor_grad_count : 0.0;
+        double mn_avg = mn_grad_count > 0 ? mn_grad_sum / mn_grad_count : 0.0;
+        double fp_avg = fp_grad_count > 0 ? fp_grad_sum / fp_grad_count : 0.0;
+
+        char grad_msg[1024];
         snprintf(grad_msg, sizeof(grad_msg),
-                "Gradient Stats: min=%.6f, max=%.6f, |mean|=%.6f [+:%d(%.4f) -:%d(%.4f) 0:%d]",
-                grad_min, grad_max, grad_absmean, positive_count, pos_avg, negative_count, neg_avg, zero_count);
+                "🔬 GRADIENT ANALYSIS v2.8.10: min=%.6f, max=%.6f, |mean|=%.6f [+:%d(%.4f) -:%d(%.4f) 0:%d] | By type: N=%.4f, MN=%.4f, F=%.4f",
+                grad_min, grad_max, grad_absmean, positive_count, pos_avg, negative_count, neg_avg, zero_count,
+                neighbor_avg, mn_avg, fp_avg);
 
         if (grad_nan > 0 || grad_inf > 0) {
-            char warning_msg[600];
+            char warning_msg[1200];
             snprintf(warning_msg, sizeof(warning_msg), "%s WARNING: NaN=%d, Inf=%d", grad_msg, grad_nan, grad_inf);
             callback("Gradient Analysis", 0, 0, 0.0f, warning_msg);
         } else {
             callback("Gradient Analysis", 0, 0, 0.0f, grad_msg);
+        }
+
+        // 🎯 Force balance validation: Check if gradient types are balanced
+        double total_grad_contrib = neighbor_grad_sum + mn_grad_sum + fp_grad_sum;
+        if (total_grad_contrib > 1e-15) {
+            double n_ratio = neighbor_grad_sum / total_grad_contrib;
+            double mn_ratio = mn_grad_sum / total_grad_contrib;
+            double f_ratio = fp_grad_sum / total_grad_contrib;
+
+            char balance_msg[512];
+            snprintf(balance_msg, sizeof(balance_msg),
+                    "⚖️ FORCE BALANCE: NEIGHBOR=%.1f%%, MID_NEAR=%.1f%%, FURTHER=%.1f%% (weights: n=%.2f, mn=%.2f, f=%.2f)",
+                    n_ratio * 100.0, mn_ratio * 100.0, f_ratio * 100.0, w_n, w_mn, w_f);
+            callback("Force Balance", 0, 0, 0.0f, balance_msg);
         }
     }
 
@@ -373,13 +575,12 @@ void compute_gradients(const std::vector<double>& embedding, const std::vector<T
             size_t idx_a = static_cast<size_t>(t.anchor) * n_components;
             size_t idx_n = static_cast<size_t>(t.neighbor) * n_components;
 
-            // ERROR13 FIX: Use embedding coordinates (not gradients) for distance computation
-            double d_ij_squared = 0.0;
+            // FIX13: Use Python-matching distance calculation for consistency
+            double d_ij = 1.0;
             for (int d = 0; d < n_components; ++d) {
                 double diff = embedding[idx_a + d] - embedding[idx_n + d];
-                d_ij_squared += diff * diff;
+                d_ij += diff * diff;  // Python: d_ij = 1.0 + sum(diff²)
             }
-            double d_ij = std::sqrt(std::max(d_ij_squared, 1e-15));
 
             // Compute gradient magnitude for this triplet (using CORRECTED Python formulas - v2.8.7)
             switch (t.type) {
@@ -390,7 +591,7 @@ void compute_gradients(const std::vector<double>& embedding, const std::vector<T
                     grad_mag = static_cast<double>(w_mn) * 20000.0 / std::pow(10000.0 + d_ij, 2.0);  // ✅ v2.8.7: 20000.0 not 10000.0
                     break;
                 case FURTHER:
-                    grad_mag = -static_cast<double>(w_f) * 2.0 / std::pow(1.0 + d_ij, 2.0);  // ✅ v2.8.7: 2.0 not 1.0
+                    grad_mag = static_cast<double>(w_f) * 2.0 / std::pow(1.0 + d_ij, 2.0);  // ✅ v2.8.10: POSITIVE - attractive like Python!
                     break;
             }
 
@@ -409,17 +610,20 @@ void compute_gradients(const std::vector<double>& embedding, const std::vector<T
 }
 
 double compute_pacmap_loss(const std::vector<double>& embedding, const std::vector<Triplet>& triplets,
-                         float w_n, float w_mn, float w_f, int n_components) {
+                         float w_n, float w_mn, float w_f, int n_components,
+                         pacmap_progress_callback_internal callback) {
 
-    // ERROR13 FIX: Update loss function to match Python reference and new gradient formulas
-    // Loss should be consistent with gradients for proper optimization monitoring
+    // 🔬 PHASE 2: ENHANCED DEBUGGING - Loss computation with detailed by-type analysis
     double total_loss = 0.0;
+    double neighbor_loss = 0.0, mn_loss = 0.0, fp_loss = 0.0;
+    int neighbor_count = 0, mn_count = 0, fp_count = 0;
+    int skipped_zero = 0, skipped_nan = 0;
 
     for (const auto& triplet : triplets) {
         size_t idx_a = static_cast<size_t>(triplet.anchor) * n_components;
         size_t idx_n = static_cast<size_t>(triplet.neighbor) * n_components;
 
-        // ERROR13 FIX: Use true Euclidean distance with pure double precision (matching gradient computation)
+        // Use true Euclidean distance with pure double precision (matching gradient computation)
         double d_ij_squared = 0.0;
         for (int d = 0; d < n_components; ++d) {
             double diff = embedding[idx_a + d] - embedding[idx_n + d];
@@ -429,42 +633,81 @@ double compute_pacmap_loss(const std::vector<double>& embedding, const std::vect
 
         // Skip if distance is too small
         if (d_ij < 1e-15) {
+            skipped_zero++;
             continue;
         }
 
-        // ERROR13 FIX: Loss formulas consistent with Python reference gradients
-        // For gradient = w * d_ij / (C + d_ij), loss = w * C * log(1 + d_ij/C)
-        // Simplified: loss ≈ w * d_ij * C / (C + d_ij) for monitoring
-        // Using double precision for numerical stability
+        // ✅ v2.8.10: CORRECTED loss formulas consistent with FIXED gradient implementation
+        // ALL THREE TRIPLET TYPES are now ATTRACTIVE, so loss should decrease with smaller distances
         double loss_term = 0.0;
         switch (triplet.type) {
             case NEIGHBOR:
-                // Loss term consistent with grad = w_n * d_ij / (10.0 + d_ij)
-                loss_term = static_cast<double>(w_n) * 10.0 * d_ij / (10.0 + d_ij);
+                // Consistent with grad = w_n * 20.0 / (10.0 + d_ij)^2 (attractive)
+                loss_term = static_cast<double>(w_n) * 20.0 * d_ij / (10.0 + d_ij);
+                neighbor_loss += loss_term;
+                neighbor_count++;
                 break;
             case MID_NEAR:
-                // Loss term consistent with grad = w_mn * d_ij / (10000.0 + d_ij)
-                loss_term = static_cast<double>(w_mn) * 10000.0 * d_ij / (10000.0 + d_ij);
+                // Consistent with grad = w_mn * 20000.0 / (10000.0 + d_ij)^2 (attractive)
+                loss_term = static_cast<double>(w_mn) * 20000.0 * d_ij / (10000.0 + d_ij);
+                mn_loss += loss_term;
+                mn_count++;
                 break;
             case FURTHER:
-                // Loss term consistent with grad = -w_f / (1.0 + d_ij)
-                // For repulsive: want to maximize distance, so minimize -log(1 + d_ij)
-                loss_term = static_cast<double>(w_f) * std::log(1.0 + d_ij);
+                // ✅ v2.8.10: CORRECTED - now attractive, loss decreases with smaller distances
+                // Consistent with grad = w_f * 2.0 / (1.0 + d_ij)^2 (attractive)
+                loss_term = static_cast<double>(w_f) * 2.0 * d_ij / (1.0 + d_ij);
+                fp_loss += loss_term;
+                fp_count++;
                 break;
         }
 
-        // ERROR13: NaN safety - skip non-finite loss terms
+        // NaN safety - skip non-finite loss terms
         if (std::isfinite(loss_term)) {
             total_loss += loss_term;
+        } else {
+            skipped_nan++;
         }
     }
 
-    // ERROR13: NaN safety - return 0 if total_loss is not finite
+    // NaN safety - return 0 if total_loss is not finite
     if (!std::isfinite(total_loss)) {
+        if (callback) {
+            callback("Loss Computation", 0, 0, 0.0f, "⚠️ Loss computation failed - returning 0");
+        }
         return 0.0;
     }
 
     double avg_loss = total_loss / static_cast<double>(triplets.size());
+
+    // 🔍 ENHANCED DEBUGGING: Detailed loss analysis by triplet type (every 10 iterations)
+    static int loss_debug_counter = 0;
+    if (loss_debug_counter++ % 10 == 0 && callback) {
+        double neighbor_avg = neighbor_count > 0 ? neighbor_loss / neighbor_count : 0.0;
+        double mn_avg = mn_count > 0 ? mn_loss / mn_count : 0.0;
+        double fp_avg = fp_count > 0 ? fp_loss / fp_count : 0.0;
+
+        char loss_msg[1024];
+        snprintf(loss_msg, sizeof(loss_msg),
+                "📊 LOSS ANALYSIS v2.8.10: total=%.6f | By type: N=%.6f (%d), MN=%.6f (%d), F=%.6f (%d) | Skipped: zero=%d, nan=%d",
+                avg_loss, neighbor_avg, neighbor_count, mn_avg, mn_count, fp_avg, fp_count, skipped_zero, skipped_nan);
+        callback("Loss Analysis", 0, 0, 0.0f, loss_msg);
+
+        // Loss contribution balance analysis
+        double total_type_loss = neighbor_loss + mn_loss + fp_loss;
+        if (total_type_loss > 1e-15) {
+            double n_ratio = neighbor_loss / total_type_loss;
+            double mn_ratio = mn_loss / total_type_loss;
+            double f_ratio = fp_loss / total_type_loss;
+
+            char loss_balance_msg[512];
+            snprintf(loss_balance_msg, sizeof(loss_balance_msg),
+                    "⚖️ LOSS BALANCE: NEIGHBOR=%.1f%%, MID_NEAR=%.1f%%, FURTHER=%.1f%% (weights: n=%.2f, mn=%.2f, f=%.2f)",
+                    n_ratio * 100.0, mn_ratio * 100.0, f_ratio * 100.0, w_n, w_mn, w_f);
+            callback("Loss Balance", 0, 0, 0.0f, loss_balance_msg);
+        }
+    }
+
     return avg_loss;
 }
 

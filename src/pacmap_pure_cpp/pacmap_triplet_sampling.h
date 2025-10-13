@@ -50,5 +50,18 @@ extern float assess_triplet_quality(const std::vector<Triplet>& triplets,
                                    const std::vector<float>& data, int n_features);
 extern void print_sampling_statistics(const std::vector<Triplet>& triplets);
 
+// 🔬 PHASE 3: ENHANCED TRIPLET QUALITY VALIDATION
+extern void validate_triplet_quality(const std::vector<Triplet>& triplets,
+                                    const std::vector<double>& embedding, int n_components,
+                                    pacmap_progress_callback_internal callback = nullptr);
+extern void analyze_triplet_distance_distributions(const std::vector<Triplet>& triplets,
+                                                  const std::vector<double>& embedding, int n_components,
+                                                  pacmap_progress_callback_internal callback = nullptr);
+extern void check_triplet_coverage(const std::vector<Triplet>& triplets, int n_samples,
+                                  pacmap_progress_callback_internal callback = nullptr);
+extern void detect_triplet_anomalies(const std::vector<Triplet>& triplets,
+                                     const std::vector<double>& embedding, int n_components,
+                                     pacmap_progress_callback_internal callback = nullptr);
+
 // Distance computation helper
 extern float compute_sampling_distance(const float* x, const float* y, int n_features, PacMapMetric metric);

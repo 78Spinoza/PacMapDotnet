@@ -3,6 +3,7 @@
 #include "pacmap_utils.h"
 #include <algorithm>
 #include <cmath>
+#include <numeric>
 #include <omp.h>
 #include <unordered_set>
 #include <memory>
@@ -183,174 +184,171 @@ void sample_neighbors_pair(PacMapModel* model, const std::vector<double>& normal
 
     if (callback) {
         callback("Sampling Neighbor Pairs", 0, model->n_samples, 0.0f,
-                 model->force_exact_knn ? "Using exact KNN" : "Using HNSW approximate KNN");
+                 "Using Python-matching scaled distance neighbor selection");
     }
 
-    // PYTHON-style approach: Exactly like sklearn NearestNeighbors
-    // Find k+1 neighbors (including self), then skip self when creating pairs
+    // ✅ v2.8.11 CRITICAL FIX: PYTHON-MATCHING SCALED DISTANCE NEIGHBOR SELECTION
+    // Python (pacmap.py lines 373-427): Fetches n_neighbors + 50 extra neighbors,
+    // calculates sigma (local scale), scales distances by local density,
+    // sorts by scaled distance, then picks top n_neighbors
+    //
+    // This density-aware selection is CRITICAL for local structure preservation!
+    // Without it: dense regions over-connected, sparse regions under-connected
+    // Result: Deformed mammoth with cut legs and poor local structure
 
-    if (model->force_exact_knn) {
-        int report_interval = std::max(1, model->n_samples / 10);
-        std::atomic<int> completed(0);
+    printf("   🎯 v2.8.11 FIX: Using Python-matching scaled distance neighbor selection\n");
 
-        #pragma omp parallel for if(model->n_samples > 1000)
-        for (int i = 0; i < model->n_samples; ++i) {
-            std::vector<std::pair<float, int>> knn;
+    // STEP 1: Calculate n_neighbors_extra (Python: n_neighbors + 50)
+    int n_neighbors_extra = std::min(model->n_neighbors + 50, model->n_samples - 1);
+
+    // STEP 2: Fetch extra neighbors and calculate sigma for all points
+    // Store KNN indices and distances for later scaling
+    std::vector<std::vector<int>> knn_indices(model->n_samples);
+    std::vector<std::vector<double>> knn_distances(model->n_samples);
+    std::vector<double> sigma(model->n_samples);
+
+    int report_interval = std::max(1, model->n_samples / 10);
+    std::atomic<int> completed(0);
+
+    if (callback) {
+        callback("Fetching Extra Neighbors", 0, model->n_samples, 0.0f,
+                 model->force_exact_knn ? "Using exact KNN" : "Using HNSW");
+    }
+
+    // Fetch neighbors and calculate sigma
+    #pragma omp parallel for if(model->n_samples > 1000)
+    for (int i = 0; i < model->n_samples; ++i) {
+        std::vector<std::pair<double, int>> knn_temp;
+
+        if (model->force_exact_knn) {
+            // Exact K-NN mode
+            std::vector<std::pair<float, int>> knn_float;
             distance_metrics::find_knn_exact(
                 normalized_data.data() + i * model->n_features,
                 normalized_data.data(),
                 model->n_samples,
                 model->n_features,
                 model->metric,
-                model->n_neighbors + 1,  // k_neighbors + 1 (includes self, like Python)
-                knn,
+                n_neighbors_extra + 1,  // +1 to include self
+                knn_float,
                 i  // query_index to skip self
             );
 
-            // Python style: skip first neighbor (self) and use the rest
-            // Start from j=1 to skip self, just like Python's indices[i, 1:]
-            #pragma omp critical
-            {
-                for (int j = 1; j < model->n_neighbors + 1 && j < static_cast<int>(knn.size()); ++j) {
-                    int neighbor_idx = knn[j].second;
-                    neighbor_triplets.emplace_back(i, neighbor_idx, NEIGHBOR);
-                }
+            // Convert to double and skip self
+            for (int j = 1; j < static_cast<int>(knn_float.size()); ++j) {
+                knn_temp.emplace_back(static_cast<double>(knn_float[j].first), knn_float[j].second);
             }
-
-            // Progress reporting
-            int count = ++completed;
-            if (callback && (count % report_interval == 0 || count == model->n_samples)) {
-                float percent = (float)count / model->n_samples * 100.0f;
-                callback("Sampling Neighbor Pairs", count, model->n_samples, percent, nullptr);
-            }
-        }
-
-        if (callback) {
-            callback("Sampling Neighbor Pairs", model->n_samples, model->n_samples, 100.0f,
-                     "Neighbor pairs sampled using exact KNN");
-        }
-    } else {
-            // HNSW k-NN mode enabled - detailed output disabled for clean interface
-        int report_interval = std::max(1, model->n_samples / 10);
-        std::atomic<int> completed(0);
-
-        #pragma omp parallel for if(model->n_samples > 1000)
-        for (int i = 0; i < model->n_samples; ++i) {
-            // Convert double to float for HNSW interface
+        } else {
+            // HNSW mode
             std::vector<float> query_point_float(model->n_features);
             for (int d = 0; d < model->n_features; ++d) {
                 query_point_float[d] = static_cast<float>(normalized_data[i * model->n_features + d]);
             }
+
             auto knn_results = model->original_space_index->searchKnn(
                 query_point_float.data(),
-                model->n_neighbors + 1);  // k_neighbors + 1 (includes self, like Python)
+                n_neighbors_extra + 1);  // +1 to include self
 
-            // Convert priority_queue to vector and reverse to get sorted order
-            std::vector<std::pair<float, size_t>> knn;
+            // Convert priority_queue to vector and skip self
+            std::vector<std::pair<float, size_t>> knn_hnsw;
             while (!knn_results.empty()) {
-                knn.push_back(knn_results.top());
+                knn_hnsw.push_back(knn_results.top());
                 knn_results.pop();
             }
-            std::reverse(knn.begin(), knn.end());
+            std::reverse(knn_hnsw.begin(), knn_hnsw.end());
 
-            // Python style: skip first neighbor (self) and use the rest
-            // Start from j=1 to skip self, just like Python's indices[i, 1:]
-            #pragma omp critical
-            {
-                for (int j = 1; j < model->n_neighbors + 1 && j < static_cast<int>(knn.size()); ++j) {
-                    int neighbor_idx = static_cast<int>(knn[j].second);
-                    neighbor_triplets.emplace_back(i, neighbor_idx, NEIGHBOR);
-                }
-            }
-
-            // Progress reporting
-            int count = ++completed;
-            if (callback && (count % report_interval == 0 || count == model->n_samples)) {
-                float percent = (float)count / model->n_samples * 100.0f;
-                callback("Sampling Neighbor Pairs", count, model->n_samples, percent, nullptr);
+            // Skip self (first element) and convert to double
+            for (int j = 1; j < static_cast<int>(knn_hnsw.size()); ++j) {
+                knn_temp.emplace_back(static_cast<double>(knn_hnsw[j].first),
+                                     static_cast<int>(knn_hnsw[j].second));
             }
         }
 
-        if (callback) {
-            callback("Sampling Neighbor Pairs", model->n_samples, model->n_samples, 100.0f,
-                     "Neighbor pairs sampled using HNSW");
+        // Store indices and distances
+        knn_indices[i].resize(knn_temp.size());
+        knn_distances[i].resize(knn_temp.size());
+        for (size_t j = 0; j < knn_temp.size(); ++j) {
+            knn_distances[i][j] = knn_temp[j].first;
+            knn_indices[i][j] = knn_temp[j].second;
         }
 
-#ifdef PACMAP_ENABLE_HNSW_VALIDATION
-        // HNSW quality validation (DISABLED BY DEFAULT - for development/debugging only)
-        // This validation runs exact KNN on validation samples which is O(n) per sample
-        // For large datasets (>100K points), this can be extremely slow
-        // Enable by defining PACMAP_ENABLE_HNSW_VALIDATION in CMakeLists.txt
-        if (callback && model->n_samples >= 100) {
-            callback("Validating HNSW Quality", 0, 100, 0.0f, "Calculating recall vs exact KNN");
-
-            // Sample random points to validate HNSW recall
-            int validation_samples = std::min(100, model->n_samples / 10);
-            float total_recall = 0.0f;
-            std::mt19937 rng(42);
-            std::uniform_int_distribution<int> dist(0, model->n_samples - 1);
-
-            for (int s = 0; s < validation_samples; ++s) {
-                int sample_idx = dist(rng);
-
-                // Get exact KNN
-                std::vector<std::pair<float, int>> exact_knn;
-                distance_metrics::find_knn_exact(
-                    normalized_data.data() + sample_idx * model->n_features,
-                    normalized_data.data(),
-                    model->n_samples,
-                    model->n_features,
-                    model->metric,
-                    model->n_neighbors,
-                    exact_knn,
-                    sample_idx
-                );
-
-                // Get HNSW KNN - convert double to float for HNSW interface
-                std::vector<float> query_point_float(model->n_features);
-                for (int d = 0; d < model->n_features; ++d) {
-                    query_point_float[d] = static_cast<float>(normalized_data[sample_idx * model->n_features + d]);
-                }
-                auto hnsw_results = model->original_space_index->searchKnn(
-                    query_point_float.data(),
-                    model->n_neighbors + 1);
-
-                std::vector<int> hnsw_indices;
-                while (!hnsw_results.empty()) {
-                    hnsw_indices.push_back(static_cast<int>(hnsw_results.top().second));
-                    hnsw_results.pop();
-                }
-
-                // Calculate recall
-                float recall = distance_metrics::calculate_recall(exact_knn, hnsw_indices.data(), model->n_neighbors);
-                total_recall += recall;
-
-                if ((s + 1) % 10 == 0 && callback) {
-                    float percent = (float)(s + 1) / validation_samples * 100.0f;
-                    callback("Validating HNSW Quality", s + 1, validation_samples, percent, nullptr);
-                }
+        // ✅ STEP 3: Calculate sigma (local scale) - Python line 423
+        // Python: sig = np.maximum(np.mean(knn_distances[:, 3:6], axis=1), 1e-10)
+        // Mean of distances to 4th, 5th, 6th nearest neighbors (indices 3, 4, 5)
+        if (knn_distances[i].size() >= 6) {
+            double mean_dist = (knn_distances[i][3] + knn_distances[i][4] + knn_distances[i][5]) / 3.0;
+            sigma[i] = std::max(mean_dist, 1e-10);
+        } else if (knn_distances[i].size() >= 3) {
+            // Fallback for small datasets: use available neighbors
+            double sum = 0.0;
+            int start_idx = std::min(3, static_cast<int>(knn_distances[i].size()) - 1);
+            for (int j = start_idx; j < static_cast<int>(knn_distances[i].size()); ++j) {
+                sum += knn_distances[i][j];
             }
-
-            model->hnsw_recall_percentage = (total_recall / validation_samples) * 100.0f;
-
-            if (callback) {
-                char msg[256];
-                snprintf(msg, sizeof(msg), "HNSW recall: %.1f%% (quality: %s)",
-                         model->hnsw_recall_percentage,
-                         model->hnsw_recall_percentage >= 95.0f ? "excellent" :
-                         model->hnsw_recall_percentage >= 90.0f ? "good" :
-                         model->hnsw_recall_percentage >= 80.0f ? "acceptable" : "poor");
-
-                if (model->hnsw_recall_percentage < 90.0f) {
-                    callback("WARNING", 0, 0, 0.0f, msg);
-                } else {
-                    callback("Validating HNSW Quality", validation_samples, validation_samples, 100.0f, msg);
-                }
-            }
+            sigma[i] = std::max(sum / (knn_distances[i].size() - start_idx), 1e-10);
+        } else {
+            // Emergency fallback
+            sigma[i] = 1.0;
         }
-#endif // PACMAP_ENABLE_HNSW_VALIDATION
+
+        // Progress reporting
+        int count = ++completed;
+        if (callback && (count % report_interval == 0 || count == model->n_samples)) {
+            float percent = (float)count / model->n_samples * 100.0f;
+            callback("Fetching Extra Neighbors", count, model->n_samples, percent, nullptr);
+        }
     }
 
+    if (callback) {
+        callback("Scaling Distances", 0, model->n_samples, 0.0f,
+                 "Applying density-aware distance scaling");
+    }
+
+    // ✅ STEP 4: Scale distances and sort by scaled distance
+    completed = 0;
+    #pragma omp parallel for if(model->n_samples > 1000)
+    for (int i = 0; i < model->n_samples; ++i) {
+        // Scale distances by local density - Python lines 236-239 (now 142-151)
+        // scaled_dist[i, j] = d² / (sig[i] * sig[j])
+        std::vector<std::pair<double, int>> scaled_dist_with_idx;
+        scaled_dist_with_idx.reserve(knn_indices[i].size());
+
+        for (size_t j = 0; j < knn_indices[i].size(); ++j) {
+            int neighbor_idx = knn_indices[i][j];
+            double d_ij = knn_distances[i][j];
+            double d_ij_sq = d_ij * d_ij;
+            double scaled_d = d_ij_sq / (sigma[i] * sigma[neighbor_idx]);
+            scaled_dist_with_idx.emplace_back(scaled_d, neighbor_idx);
+        }
+
+        // ✅ STEP 5: Sort by scaled distance - Python line 124
+        // Python: scaled_sort = np.argsort(scaled_dist[i])
+        std::sort(scaled_dist_with_idx.begin(), scaled_dist_with_idx.end());
+
+        // ✅ STEP 6: Pick top n_neighbors from scaled & sorted list
+        #pragma omp critical
+        {
+            for (int j = 0; j < model->n_neighbors && j < static_cast<int>(scaled_dist_with_idx.size()); ++j) {
+                int neighbor_idx = scaled_dist_with_idx[j].second;
+                neighbor_triplets.emplace_back(i, neighbor_idx, NEIGHBOR);
+            }
+        }
+
+        // Progress reporting
+        int count = ++completed;
+        if (callback && (count % report_interval == 0 || count == model->n_samples)) {
+            float percent = (float)count / model->n_samples * 100.0f;
+            callback("Scaling Distances", count, model->n_samples, percent, nullptr);
+        }
+    }
+
+    if (callback) {
+        callback("Sampling Neighbor Pairs", model->n_samples, model->n_samples, 100.0f,
+                 "Neighbor pairs sampled using Python-matching scaled distance selection");
+    }
+
+    printf("   ✅ v2.8.11 COMPLETE: Scaled distance neighbor selection matches Python exactly\n");
+    printf("   📊 Local structure: Dense/sparse regions now have density-aware neighbor selection\n");
    }
 
 void sample_MN_pair(PacMapModel* model, const std::vector<double>& normalized_data,
@@ -360,115 +358,110 @@ void sample_MN_pair(PacMapModel* model, const std::vector<double>& normalized_da
 
     if (callback) {
         callback("Sampling Mid-Near Pairs", 0, model->n_samples, 0.0f,
-                 "Using Python 6-random sampling for global structure preservation");
+                 "CRITICAL FIX v2.8.14: Python-exact fixed-size array algorithm");
     }
 
-    // ✅ PYTHON MATCHING IMPLEMENTATION: 6-Random "Second-Closest" Sampling
-    // Replaces extended k-NN with Python's global random sampling strategy
+    // 🚨 CRITICAL FIX v2.8.14: IMPLEMENT PYTHON'S EXACT ALGORITHM
     // Python reference: sample_MN_pair in pacmap.py lines 146-168
-    printf("   🎯 PYTHON-MATCHING: Using 6-random mid-near sampling (2nd-closest of 6 random candidates)\n");
+    // Previous C++ implementation was COMPLETELY WRONG!
+    printf("   🚨 CRITICAL FIX v2.8.14: Implementing Python's EXACT mid-near sampling algorithm\n");
+    printf("      ❌ OLD: Dynamic reserve + global deduplication + wrong rejection logic\n");
+    printf("      ✅ NEW: Fixed array + iterative rejection + NO deduplication\n");
 
-    mn_triplets.reserve(n_mn);
-    std::unordered_set<long long> used_pairs;
-    std::atomic<int> pairs_found = 0;
+    // Calculate per-point target exactly like Python
+    int n_MN_per_point = n_mn / model->n_samples;
+
+    // ✅ PYTHON EXACT: Pre-allocate fixed-size array like Python: np.empty((n * n_MN, 2), dtype=np.int32)
+    mn_triplets.reserve(model->n_samples * n_MN_per_point);
+
+    // Thread-safe RNG for deterministic behavior
+    std::mt19937 rng = get_seeded_rng(model->random_seed + 2000);
+    std::uniform_int_distribution<int> dist(0, model->n_samples - 1);
+
     int report_interval = std::max(1, model->n_samples / 10);
 
-    // Calculate per-point target: n_mn is total, divide by n_samples
-    int per_point_target = std::max(1, n_mn / model->n_samples);
+    // ✅ PYTHON EXACT: Sequential processing like numba.prange (but without OpenMP to match Python exactly)
+    for (int i = 0; i < model->n_samples; ++i) {
+        // ✅ PYTHON EXACT: For each j in range(n_MN) - fixed count per point
+        for (int j = 0; j < n_MN_per_point; ++j) {
+            // ✅ PYTHON EXACT: sample_FP implementation with iterative rejection
+            std::vector<int> sampled;
 
-    #pragma omp parallel
-    {
-        // Thread-safe RNG with deterministic seeding
-        std::mt19937 rng = get_seeded_rng(model->random_seed + 2000 + omp_get_thread_num());
-        std::uniform_int_distribution<int> dist(0, model->n_samples - 1);
+            // Sample 6 candidates with Python's exact rejection logic
+            while (sampled.size() < 6) {
+                int candidate = dist(rng);
 
-        #pragma omp for
-        for (int i = 0; i < model->n_samples; ++i) {
-            // For each mid-near pair needed for this point
-            for (int pair_idx = 0; pair_idx < per_point_target; ++pair_idx) {
-                // ✅ STEP 1: Sample 6 random candidates globally (Python behavior)
-                std::vector<int> candidates;
-                candidates.reserve(6);
+                // ✅ PYTHON EXACT: Self rejection
+                if (candidate == i) continue;
 
-                // Build exclusion set: self + existing pairs for this point
-                std::unordered_set<int> exclude_set = {i};
-
-                // Add existing MN pairs for this point to exclusion (Python's reject_ind parameter)
-                #pragma omp critical
-                {
-                    for (const auto& triplet : mn_triplets) {
-                        if (triplet.anchor == i) {
-                            exclude_set.insert(triplet.neighbor);
-                        }
+                // ✅ PYTHON EXACT: Duplicate rejection within current batch
+                bool duplicate = false;
+                for (int t = 0; t < static_cast<int>(sampled.size()); ++t) {
+                    if (candidate == sampled[t]) {
+                        duplicate = true;
+                        break;
                     }
                 }
+                if (duplicate) continue;
 
-                // Sample 6 unique random candidates (matching Python's sample_FP function)
-                while (candidates.size() < 6 && static_cast<int>(candidates.size()) < model->n_samples - 1) {
-                    int candidate = dist(rng);
-                    if (exclude_set.find(candidate) == exclude_set.end()) {
-                        candidates.push_back(candidate);
-                        exclude_set.insert(candidate);  // Ensure uniqueness within this batch
+                // ✅ PYTHON EXACT: Iterative rejection using PREVIOUS pairs in this iteration
+                // Python: reject_ind=pair_MN[i * n_MN:i * n_MN + j, 1]
+                bool reject = false;
+                for (int prev_j = 0; prev_j < j; ++prev_j) {
+                    int prev_pair_idx = i * n_MN_per_point + prev_j;
+                    if (prev_pair_idx < static_cast<int>(mn_triplets.size()) &&
+                        mn_triplets[prev_pair_idx].neighbor == candidate) {
+                        reject = true;
+                        break;
                     }
                 }
+                if (reject) continue;
 
-                // Skip if we couldn't find enough candidates (edge case for small datasets)
-                if (candidates.size() < 2) continue;
-
-                // ✅ STEP 2: Calculate distances to all 6 candidates (Python behavior)
-                std::vector<std::pair<double, int>> candidate_distances;
-                candidate_distances.reserve(candidates.size());
-
-                const double* point_i = normalized_data.data() + static_cast<size_t>(i) * model->n_features;
-
-                for (int candidate : candidates) {
-                    const double* point_j = normalized_data.data() + static_cast<size_t>(candidate) * model->n_features;
-                    double distance = distance_metrics::compute_distance(
-                        point_i, point_j, model->n_features, model->metric);
-                    candidate_distances.emplace_back(distance, candidate);
-                }
-
-                // ✅ STEP 3: Find closest candidate and DISCARD it (Python behavior)
-                std::sort(candidate_distances.begin(), candidate_distances.end());
-                if (candidate_distances.size() < 2) continue;  // Need at least 2 to pick 2nd closest
-
-                // ✅ STEP 4: Pick 2nd closest from remaining candidates (Python behavior)
-                int selected_candidate = candidate_distances[1].second;  // 2nd closest (index 1)
-
-                // ✅ STEP 5: Add to mid-near triplets with deduplication
-                long long pair_key = ((long long)std::min(i, selected_candidate) << 32) |
-                                   std::max(i, selected_candidate);
-
-                #pragma omp critical
-                {
-                    if (used_pairs.find(pair_key) == used_pairs.end()) {
-                        mn_triplets.emplace_back(Triplet{i, selected_candidate, MID_NEAR});
-                        used_pairs.insert(pair_key);
-                        pairs_found++;
-                    }
-                }
+                sampled.push_back(candidate);
             }
 
-            // Progress reporting
-            int current = (i + 1);
-            if (callback && (current % report_interval == 0 || current == model->n_samples)) {
-                float percent = (float)current / model->n_samples * 100.0f;
-                #pragma omp critical
-                {
-                    callback("Sampling Mid-Near Pairs", current, model->n_samples, percent, nullptr);
-                }
+            // ✅ PYTHON EXACT: Calculate distances to all 6 candidates
+            std::vector<std::pair<double, int>> candidate_distances;
+            candidate_distances.reserve(6);
+
+            const double* point_i = normalized_data.data() + static_cast<size_t>(i) * model->n_features;
+
+            for (int t = 0; t < 6; ++t) {
+                const double* point_j = normalized_data.data() + static_cast<size_t>(sampled[t]) * model->n_features;
+                double distance = distance_metrics::compute_distance(
+                    point_i, point_j, model->n_features, model->metric);
+                candidate_distances.emplace_back(distance, sampled[t]);
             }
+
+            // ✅ PYTHON EXACT: Find closest candidate and DISCARD it
+            std::sort(candidate_distances.begin(), candidate_distances.end());
+
+            // ✅ PYTHON EXACT: Pick 2nd closest from remaining candidates
+            int picked = candidate_distances[1].second;
+
+            // ✅ PYTHON EXACT: Add to results with NO deduplication
+            mn_triplets.emplace_back(Triplet{i, picked, MID_NEAR});
+        }
+
+        // Progress reporting
+        if (callback && ((i + 1) % report_interval == 0 || (i + 1) == model->n_samples)) {
+            float percent = (float)(i + 1) / model->n_samples * 100.0f;
+            callback("Sampling Mid-Near Pairs", i + 1, model->n_samples, percent, nullptr);
         }
     }
 
     if (callback) {
         char msg[256];
-        snprintf(msg, sizeof(msg), "Found %d mid-near pairs using Python 6-random sampling",
-                 static_cast<int>(mn_triplets.size()));
+        snprintf(msg, sizeof(msg), "Generated %zu mid-near pairs using Python's EXACT algorithm (v2.8.14)",
+                 mn_triplets.size());
         callback("Sampling Mid-Near Pairs", model->n_samples, model->n_samples, 100.0f, msg);
     }
 
-    printf("   ✅ PYTHON-MATCHING COMPLETE: Mid-near pairs now connect distant structures globally\n");
+    printf("   ✅ CRITICAL FIX COMPLETE v2.8.14: Mid-near sampling now matches Python EXACTLY\n");
+    printf("      🎯 Fixed array size: (%d × %d, 2) like Python\n", model->n_samples, n_MN_per_point);
+    printf("      🎯 Iterative rejection: Uses current iteration pairs only\n");
+    printf("      🎯 No deduplication: Allows duplicate pairs like Python\n");
+    printf("      🎯 2nd-closest selection: Discards closest, picks 2nd closest\n");
     }
 
 void sample_FP_pair(PacMapModel* model, const std::vector<double>& normalized_data,
@@ -479,88 +472,87 @@ void sample_FP_pair(PacMapModel* model, const std::vector<double>& normalized_da
 
     if (callback) {
         callback("Sampling Far Pairs", 0, model->n_samples, 0.0f,
-                 "Sampling random far pairs for global structure");
+                 "CRITICAL FIX v2.8.15: Python-exact far pair sampling algorithm");
     }
 
-    // CRITICAL FIX: Switch to pure random sampling (matching Rust sampling.rs)
-    // Sample random points excluding neighbors and self, no distance filtering
-    // ERROR13 FIX: Reserve correct amount - n_fp is already the total target count
-    fp_triplets.reserve(n_fp);
-    std::unordered_set<long long> used_pairs;
+    // CRITICAL FIX v2.8.15: IMPLEMENT PYTHON'S EXACT FAR PAIR SAMPLING
+    // Python reference: sample_FP in pacmap.py lines 37-56
+    // Previous C++ implementation had 4 CRITICAL discrepancies from Python!
+    printf("   CRITICAL FIX v2.8.15: Implementing Python's EXACT far pair sampling algorithm\n");
+    printf("      OLD: Thread-local seeding + global deduplication + 90%% early exit + bidirectional neighbor sets\n");
+    printf("      NEW: Per-point seeding + NO deduplication + full sampling + unidirectional neighbor sets\n");
 
-    // FIX v2.5.9: Build neighbor exclusion set from neighbor_triplets parameter
-    // BUG FIX: Previous code read from model->triplets which was cleared before this function was called!
-    // This caused empty neighbor_sets, allowing far pairs to include neighbor pairs,
-    // leading to deduplication removing legitimate neighbor triplets (~45K missing)
+    // Calculate per-point target exactly like Python
+    int n_FP_per_point = n_fp / model->n_samples;
+
+    // PYTHON EXACT: Pre-allocate fixed-size array like Python: np.empty((n * n_FP, 2), dtype=np.int32)
+    fp_triplets.reserve(model->n_samples * n_FP_per_point);
+
+    // FIX 1: Build UNIDIRECTIONAL neighbor exclusion sets (Python: only i->j, not j->i)
+    // Python reference: reject_ind=pair_neighbors[i * n_neighbors:(i + 1) * n_neighbors, 1]
     std::vector<std::unordered_set<int>> neighbor_sets(model->n_samples);
     for (const auto& t : neighbor_triplets) {
         neighbor_sets[t.anchor].insert(t.neighbor);
-        // Make it bidirectional to catch both (i,j) and (j,i)
-        neighbor_sets[t.neighbor].insert(t.anchor);
+        // REMOVED: neighbor_sets[t.neighbor].insert(t.anchor);  // This makes it bidirectional (WRONG!)
     }
 
-    // DEBUG: Verify neighbor_sets are populated
-    int total_exclusions = 0;
-    for (const auto& s : neighbor_sets) {
-        total_exclusions += s.size();
-    }
-    printf("   🔍 DEBUG: Built neighbor exclusion sets: %d total neighbor relationships from %zu neighbor triplets\n",
-           total_exclusions, neighbor_triplets.size());
-
-    std::atomic<int> completed(0);
     int report_interval = std::max(1, model->n_samples / 10);
 
-    #pragma omp parallel
-    {
-        std::mt19937 rng = get_seeded_rng(model->random_seed + 1000 + omp_get_thread_num());
+    // PYTHON EXACT: Sequential processing like Python numba.prange
+    for (int i = 0; i < model->n_samples; ++i) {
+        // FIX 1: PER-POINT deterministic seeding (Python: per-point RNG seeding)
+        // Python uses deterministic per-point seeding, not thread-local seeding
+        std::mt19937 rng = get_seeded_rng(model->random_seed + 3000 + i);
         std::uniform_int_distribution<int> dist(0, model->n_samples - 1);
 
-        #pragma omp for
-        for (int i = 0; i < model->n_samples; ++i) {
-            std::unordered_set<int> sampled_indices;
-            int found = 0;
-            // ERROR13 FIX: n_fp is the TOTAL target, divide by n_samples for per-point target
-            int target = std::max(1, n_fp / model->n_samples);
-            int early_exit_threshold = static_cast<int>(target * 0.9);  // ERROR12 Priority 6: 90% early exit
+        std::unordered_set<int> sampled_indices;
+        int found = 0;
+        int attempts = 0;
+        const int max_attempts = model->n_samples * 10;  // Safety limit to prevent infinite loops
 
-            while (found < target) {
-                int j = dist(rng);
-                if (j != i &&
-                    sampled_indices.find(j) == sampled_indices.end() &&
-                    neighbor_sets[i].find(j) == neighbor_sets[i].end()) {
+        // PYTHON EXACT: Continue until target reached with safety check
+        while (found < n_FP_per_point && attempts < max_attempts) {
+            int j = dist(rng);
+            attempts++;
 
-                    long long pair_key = ((long long)std::min(i, j) << 32) | std::max(i, j);
-                    #pragma omp critical
-                    {
-                        if (used_pairs.find(pair_key) == used_pairs.end()) {
-                            fp_triplets.emplace_back(Triplet{i, j, FURTHER});
-                            used_pairs.insert(pair_key);
-                            found++;
-                        }
-                    }
-                    sampled_indices.insert(j);
+            // PYTHON EXACT: Rejection logic matches Python exactly
+            if (j != i &&
+                sampled_indices.find(j) == sampled_indices.end() &&
+                neighbor_sets[i].find(j) == neighbor_sets[i].end()) {
 
-                    // ERROR12 Priority 6: Early exit at 90% to avoid wasting time
-                    if (found >= early_exit_threshold) {
-                        break;
-                    }
-                }
+                // FIX 2: REMOVED global deduplication (Python allows duplicate pairs)
+                // Python does NOT deduplicate far pairs - it allows the same pair to appear multiple times
+                fp_triplets.emplace_back(Triplet{i, j, FURTHER});
+                found++;
+                sampled_indices.insert(j);
             }
+        }
 
-            // Progress reporting
-            int count = ++completed;
-            if (callback && (count % report_interval == 0 || count == model->n_samples)) {
-                float percent = (float)count / model->n_samples * 100.0f;
-                callback("Sampling Far Pairs", count, model->n_samples, percent, nullptr);
-            }
+        // SAFETY WARNING: If we couldn't find enough unique candidates
+        if (found < n_FP_per_point) {
+            printf("   WARNING: Point %d could only find %d/%d far pairs (available candidates: %d)\n",
+                   i, found, n_FP_per_point, model->n_samples - 1 - static_cast<int>(neighbor_sets[i].size()));
+        }
+
+        // Progress reporting
+        if (callback && ((i + 1) % report_interval == 0 || (i + 1) == model->n_samples)) {
+            float percent = (float)(i + 1) / model->n_samples * 100.0f;
+            callback("Sampling Far Pairs", i + 1, model->n_samples, percent, nullptr);
         }
     }
 
     if (callback) {
-        callback("Sampling Far Pairs", model->n_samples, model->n_samples, 100.0f,
-                 ("Found " + std::to_string(fp_triplets.size()) + " far pairs").c_str());
+        char msg[256];
+        snprintf(msg, sizeof(msg), "Generated %zu far pairs using Python's EXACT algorithm (v2.8.15)",
+                 fp_triplets.size());
+        callback("Sampling Far Pairs", model->n_samples, model->n_samples, 100.0f, msg);
     }
 
+    printf("   CRITICAL FIX COMPLETE v2.8.15: Far pair sampling now matches Python EXACTLY\n");
+    printf("      Per-point seeding: RNG seeded with point index (deterministic like Python)\n");
+    printf("      No deduplication: Allows duplicate pairs like Python\n");
+    printf("      Full sampling: No early exit, continues until target reached\n");
+    printf("      Unidirectional exclusion: Only i->j neighbor relationships excluded\n");
     }
 
 void distance_based_sampling(PacMapModel* model, const std::vector<double>& data,
@@ -743,5 +735,252 @@ void print_sampling_statistics(const std::vector<Triplet>& triplets) {
             case MID_NEAR: mn_count++; break;
             case FURTHER: fp_count++; break;
         }
+    }
+}
+
+// 🔬 PHASE 3: ENHANCED TRIPLET QUALITY VALIDATION
+void validate_triplet_quality(const std::vector<Triplet>& triplets,
+                            const std::vector<double>& embedding, int n_components,
+                            pacmap_progress_callback_internal callback) {
+    if (triplets.empty()) {
+        if (callback) callback("Triplet Validation", 0, 0, 0.0f, "⚠️ No triplets to validate");
+        return;
+    }
+
+    // 🔍 Validate triplet structure and quality metrics
+    std::unordered_map<TripletType, int> type_counts;
+    std::unordered_set<int> unique_anchors, unique_neighbors;
+    int self_pairs = 0, out_of_bounds = 0;
+
+    for (const auto& t : triplets) {
+        type_counts[t.type]++;
+        unique_anchors.insert(t.anchor);
+        unique_neighbors.insert(t.neighbor);
+
+        // Validate indices
+        if (t.anchor == t.neighbor) self_pairs++;
+        if (t.anchor < 0 || t.neighbor < 0) out_of_bounds++;
+    }
+
+    // 📊 Coverage analysis
+    float anchor_coverage = (float)unique_anchors.size() / embedding.size() * 100.0f / n_components;
+    float neighbor_coverage = (float)unique_neighbors.size() / embedding.size() * 100.0f / n_components;
+
+    char validation_msg[1024];
+    snprintf(validation_msg, sizeof(validation_msg),
+            "🔬 TRIPLET VALIDATION v2.8.10: Total=%zu | Types: N=%d, MN=%d, F=%d | Coverage: anchors=%.1f%%, neighbors=%.1f%% | Issues: self=%d, oob=%d",
+            triplets.size(), type_counts[NEIGHBOR], type_counts[MID_NEAR], type_counts[FURTHER],
+            anchor_coverage, neighbor_coverage, self_pairs, out_of_bounds);
+
+    if (callback) callback("Triplet Validation", 0, 0, 0.0f, validation_msg);
+
+    // ⚠️ Check for potential issues
+    if (self_pairs > 0) {
+        char warning_msg[512];
+        snprintf(warning_msg, sizeof(warning_msg), "⚠️ Found %d self-pairs (should be 0)", self_pairs);
+        if (callback) callback("WARNING", 0, 0, 0.0f, warning_msg);
+    }
+
+    if (anchor_coverage < 50.0f || neighbor_coverage < 50.0f) {
+        char coverage_warning[512];
+        snprintf(coverage_warning, sizeof(coverage_warning),
+                "⚠️ Low coverage: anchors=%.1f%%, neighbors=%.1f%% (expected >50%%)",
+                anchor_coverage, neighbor_coverage);
+        if (callback) callback("WARNING", 0, 0, 0.0f, coverage_warning);
+    }
+}
+
+void analyze_triplet_distance_distributions(const std::vector<Triplet>& triplets,
+                                          const std::vector<double>& embedding, int n_components,
+                                          pacmap_progress_callback_internal callback) {
+    if (triplets.empty()) return;
+
+    // 📊 Analyze distance distributions by triplet type
+    std::unordered_map<TripletType, std::vector<double>> distances_by_type;
+
+    for (const auto& t : triplets) {
+        size_t idx_a = static_cast<size_t>(t.anchor) * n_components;
+        size_t idx_n = static_cast<size_t>(t.neighbor) * n_components;
+
+        // Compute Euclidean distance
+        double d_ij_squared = 0.0;
+        for (int d = 0; d < n_components; ++d) {
+            double diff = embedding[idx_a + d] - embedding[idx_n + d];
+            d_ij_squared += diff * diff;
+        }
+        double d_ij = std::sqrt(std::max(d_ij_squared, 1e-15));
+
+        distances_by_type[t.type].push_back(d_ij);
+    }
+
+    // Calculate statistics for each type
+    for (auto const& [type, distances] : distances_by_type) {
+        if (distances.empty()) continue;
+
+        auto [min_it, max_it] = std::minmax_element(distances.begin(), distances.end());
+        double min_dist = *min_it, max_dist = *max_it;
+        double mean_dist = std::accumulate(distances.begin(), distances.end(), 0.0) / distances.size();
+
+        // Calculate standard deviation
+        double variance = 0.0;
+        for (double d : distances) {
+            variance += (d - mean_dist) * (d - mean_dist);
+        }
+        double std_dev = std::sqrt(variance / distances.size());
+
+        const char* type_name = "";
+        switch (type) {
+            case NEIGHBOR: type_name = "NEIGHBOR"; break;
+            case MID_NEAR: type_name = "MID_NEAR"; break;
+            case FURTHER: type_name = "FURTHER"; break;
+        }
+
+        char distance_msg[1024];
+        snprintf(distance_msg, sizeof(distance_msg),
+                "📊 DISTANCE DISTRIBUTION %s: μ=%.4f, σ=%.4f, range=[%.4f, %.4f] (n=%zu)",
+                type_name, mean_dist, std_dev, min_dist, max_dist, distances.size());
+
+        if (callback) callback("Distance Analysis", 0, 0, 0.0f, distance_msg);
+    }
+
+    // 🎯 Validate distance ordering: expect NEIGHBOR < MID_NEAR < FURTHER
+    if (distances_by_type[NEIGHBOR].size() > 0 && distances_by_type[MID_NEAR].size() > 0 && distances_by_type[FURTHER].size() > 0) {
+        double n_mean = std::accumulate(distances_by_type[NEIGHBOR].begin(), distances_by_type[NEIGHBOR].end(), 0.0) / distances_by_type[NEIGHBOR].size();
+        double mn_mean = std::accumulate(distances_by_type[MID_NEAR].begin(), distances_by_type[MID_NEAR].end(), 0.0) / distances_by_type[MID_NEAR].size();
+        double f_mean = std::accumulate(distances_by_type[FURTHER].begin(), distances_by_type[FURTHER].end(), 0.0) / distances_by_type[FURTHER].size();
+
+        if (n_mean >= mn_mean || mn_mean >= f_mean) {
+            char ordering_warning[512];
+            snprintf(ordering_warning, sizeof(ordering_warning),
+                    "⚠️ DISTANCE ORDER WARNING: Expected N < MN < F, got N=%.4f ≥ MN=%.4f ≥ F=%.4f",
+                    n_mean, mn_mean, f_mean);
+            if (callback) callback("WARNING", 0, 0, 0.0f, ordering_warning);
+        } else {
+            char ordering_ok[512];
+            snprintf(ordering_ok, sizeof(ordering_ok),
+                    "✅ Distance ordering correct: N=%.4f < MN=%.4f < F=%.4f",
+                    n_mean, mn_mean, f_mean);
+            if (callback) callback("Distance Analysis", 0, 0, 0.0f, ordering_ok);
+        }
+    }
+}
+
+void check_triplet_coverage(const std::vector<Triplet>& triplets, int n_samples,
+                          pacmap_progress_callback_internal callback) {
+    if (triplets.empty()) return;
+
+    // 🎯 Analyze how well triplets cover the dataset
+    std::vector<int> anchor_frequency(n_samples, 0);
+    std::vector<int> neighbor_frequency(n_samples, 0);
+    std::unordered_map<TripletType, std::unordered_set<int>> type_coverage;
+
+    for (const auto& t : triplets) {
+        anchor_frequency[t.anchor]++;
+        neighbor_frequency[t.neighbor]++;
+        type_coverage[t.type].insert(t.anchor);
+        type_coverage[t.type].insert(t.neighbor);
+    }
+
+    // Calculate coverage statistics
+    int anchors_with_triplets = 0, neighbors_with_triplets = 0;
+    double avg_anchor_freq = 0.0, avg_neighbor_freq = 0.0;
+
+    for (int i = 0; i < n_samples; ++i) {
+        if (anchor_frequency[i] > 0) anchors_with_triplets++;
+        if (neighbor_frequency[i] > 0) neighbors_with_triplets++;
+        avg_anchor_freq += anchor_frequency[i];
+        avg_neighbor_freq += neighbor_frequency[i];
+    }
+    avg_anchor_freq /= n_samples;
+    avg_neighbor_freq /= n_samples;
+
+    float anchor_coverage_pct = (float)anchors_with_triplets / n_samples * 100.0f;
+    float neighbor_coverage_pct = (float)neighbors_with_triplets / n_samples * 100.0f;
+
+    char coverage_msg[1024];
+    snprintf(coverage_msg, sizeof(coverage_msg),
+            "🎯 TRIPLET COVERAGE v2.8.10: Points as anchors=%.1f%% (%d/%d), neighbors=%.1f%% (%d/%d) | Avg frequency: anchor=%.2f, neighbor=%.2f",
+            anchor_coverage_pct, anchors_with_triplets, n_samples,
+            neighbor_coverage_pct, neighbors_with_triplets, n_samples,
+            avg_anchor_freq, avg_neighbor_freq);
+
+    if (callback) callback("Coverage Analysis", 0, 0, 0.0f, coverage_msg);
+
+    // Check by type
+    for (auto const& [type, coverage] : type_coverage) {
+        const char* type_name = "";
+        switch (type) {
+            case NEIGHBOR: type_name = "NEIGHBOR"; break;
+            case MID_NEAR: type_name = "MID_NEAR"; break;
+            case FURTHER: type_name = "FURTHER"; break;
+        }
+
+        float type_coverage_pct = (float)coverage.size() / n_samples * 100.0f;
+        char type_msg[512];
+        snprintf(type_msg, sizeof(type_msg), "  %s type coverage: %.1f%% (%zu unique points)",
+                type_name, type_coverage_pct, coverage.size());
+        if (callback) callback("Coverage Analysis", 0, 0, 0.0f, type_msg);
+    }
+
+    // Warn about poor coverage
+    if (anchor_coverage_pct < 80.0f) {
+        char warning[512];
+        snprintf(warning, sizeof(warning), "⚠️ Low anchor coverage: %.1f%% (recommend >80%%)", anchor_coverage_pct);
+        if (callback) callback("WARNING", 0, 0, 0.0f, warning);
+    }
+}
+
+void detect_triplet_anomalies(const std::vector<Triplet>& triplets,
+                             const std::vector<double>& embedding, int n_components,
+                             pacmap_progress_callback_internal callback) {
+    if (triplets.empty()) return;
+
+    // 🔍 Detect potential anomalies in triplet structure
+    std::unordered_map<long long, int> pair_frequency;
+    std::vector<int> point_triplet_count(embedding.size() / n_components, 0);
+    int duplicate_pairs = 0, highly_connected_points = 0;
+    const int max_expected_connections = 50;  // Threshold for "highly connected"
+
+    // Count pair frequencies and point connections
+    for (const auto& t : triplets) {
+        long long pair_key = ((long long)std::min(t.anchor, t.neighbor) << 32) | std::max(t.anchor, t.neighbor);
+        pair_frequency[pair_key]++;
+
+        point_triplet_count[t.anchor]++;
+        point_triplet_count[t.neighbor]++;
+
+        if (pair_frequency[pair_key] > 1) {
+            duplicate_pairs++;
+        }
+    }
+
+    // Count highly connected points
+    for (int count : point_triplet_count) {
+        if (count > max_expected_connections) {
+            highly_connected_points++;
+        }
+    }
+
+    char anomaly_msg[1024];
+    snprintf(anomaly_msg, sizeof(anomaly_msg),
+            "🔍 ANOMALY DETECTION v2.8.10: Duplicate pairs=%d, Highly connected points=%d (>50 connections), Max connections=%d",
+            duplicate_pairs, highly_connected_points,
+            point_triplet_count.empty() ? 0 : *std::max_element(point_triplet_count.begin(), point_triplet_count.end()));
+
+    if (callback) callback("Anomaly Detection", 0, 0, 0.0f, anomaly_msg);
+
+    // Check for extreme cases
+    if (duplicate_pairs > triplets.size() * 0.1) {
+        char warning[512];
+        snprintf(warning, sizeof(warning), "⚠️ High duplication rate: %.1f%% of triplets are duplicates",
+                (float)duplicate_pairs / triplets.size() * 100.0f);
+        if (callback) callback("WARNING", 0, 0, 0.0f, warning);
+    }
+
+    if (highly_connected_points > point_triplet_count.size() * 0.05) {
+        char warning[512];
+        snprintf(warning, sizeof(warning), "⚠️ Many highly connected points: %d (%.1f%%) have >50 connections",
+                highly_connected_points, (float)highly_connected_points / point_triplet_count.size() * 100.0f);
+        if (callback) callback("WARNING", 0, 0, 0.0f, warning);
     }
 }

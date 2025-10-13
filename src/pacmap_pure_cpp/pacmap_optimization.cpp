@@ -15,6 +15,7 @@ void optimize_embedding(PacMapModel* model, double* embedding_out, pacmap_progre
     std::vector<double> embedding(model->n_samples * model->n_components);
 
     // Initialize embedding with proper random normal distribution using model's initialization_std_dev parameter
+    // Python reference: np.random.normal(size=[n, n_dims]).astype(np.float32) * 0.0001
     if (callback) {
         char init_msg[256];
         snprintf(init_msg, sizeof(init_msg), "INITIALIZATION: Using std_dev=%.6f for %d samples x %d components",
@@ -231,17 +232,6 @@ void initialize_random_embedding_double(std::vector<double>& embedding, int n_sa
     }
 }
 
-void initialize_random_embedding_double_numpy(std::vector<double>& embedding, int n_samples, int n_components, NumpyRandom& numpy_rng, float std_dev) {
-    // Python-identical initialization using NumPy-compatible RNG
-    // Python: embedding = np.random.normal(0, 1e-4, (n_samples, n_components))
-
-    for (int i = 0; i < n_samples; ++i) {
-        for (int d = 0; d < n_components; ++d) {
-            size_t idx = static_cast<size_t>(i) * n_components + d;
-            embedding[idx] = numpy_rng.normal(0.0, static_cast<double>(std_dev));
-        }
-    }
-}
 
 void initialize_random_embedding(std::vector<float>& embedding, int n_samples, int n_components, std::mt19937& rng, float std_dev) {
     // Legacy function for compatibility - now forwards to double precision version
