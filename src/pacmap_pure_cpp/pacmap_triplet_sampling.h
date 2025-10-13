@@ -23,7 +23,7 @@ extern std::vector<float> compute_distance_percentiles(const std::vector<float>&
 // HNSW optimization for triplet sampling
 extern std::unique_ptr<hnswlib::HierarchicalNSW<float>> create_hnsw_index(
     const double* data, int n_samples, int n_features, PacMapMetric metric,
-    int M, int ef_construction, pacmap_progress_callback_internal callback = nullptr);
+    int M, int ef_construction, int ef_search, int random_seed, pacmap_progress_callback_internal callback = nullptr);
 
 // Triplet validation and filtering
 extern bool is_valid_triplet(const Triplet& triplet, int n_samples);

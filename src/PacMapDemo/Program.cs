@@ -42,7 +42,7 @@ namespace PacMapDemo
 
                 // Run core demonstrations
                 Run10kMammothDemo(data);
-                // CreateFlagship1MHairyMammoth(); // DISABLED - testing exact KNN only
+           
 
                 OpenResultsFolder();
 
@@ -52,11 +52,14 @@ namespace PacMapDemo
                 // Run hyperparameter experiments
                 RunHyperparameterExperiments(data, labels); // DISABLED - testing exact KNN only
 
+
+                CreateFlagship1MHairyMammoth();
+
                 // Run advanced parameter tuning
-                // DemoAdvancedParameterTuning(data, labels); // DISABLED - testing exact KNN only
+                DemoAdvancedParameterTuning(data, labels); // DISABLED - testing exact KNN only
 
                 // Run MNIST demo
-                // RunMnistDemo(); // DISABLED - testing exact KNN only
+                RunMnistDemo(); // DISABLED - testing exact KNN only
 
                 Console.WriteLine("🎉 ALL DEMONSTRATIONS AND EXPERIMENTS COMPLETED!");
                 Console.WriteLine($"📁 Check {ResultsDir} folder for visualizations.");
@@ -255,21 +258,24 @@ namespace PacMapDemo
         /// </summary>
         private static void Run10kMammothDemo(double[,] data)
         {
-            Console.WriteLine("🦣 Running 10K Mammoth Exact KNN Demo...");
+            Console.WriteLine("🦣 Running 10K Mammoth Demo...");
             var pacmap = new PacMapModel();
             var stopwatch = Stopwatch.StartNew();
             var embedding = pacmap.Fit(
                 data: data,
                 embeddingDimension: 2,
                 nNeighbors: 10,
-                mnRatio: 0.5f,
+                mnRatio: 1.1f,
                 fpRatio: 2.0f,
                 learningRate: 1.0f,
                 numIters: (100, 100, 250),
-                forceExactKnn: true,
+                forceExactKnn: false,
                 autoHNSWParam: false,
+                hnswM: 16,
+                hnswEfSearch: 100,
+                hnswEfConstruction: 150,
                 randomSeed: 42,
-                progressCallback: UnifiedProgressCallbackLogger
+                progressCallback: UnifiedProgressCallback
             );
             stopwatch.Stop();
             Console.WriteLine();
@@ -281,7 +287,7 @@ namespace PacMapDemo
             pacmap.Save(modelPath);
             Console.WriteLine($"✅ Model saved: {modelPath}");
 
-            // Create visualization
+            // Create visualization with complete model info
             CreateVisualizations(embedding, data, new int[data.GetLength(0)], pacmap, stopwatch.Elapsed.TotalSeconds);
         }
 
@@ -323,34 +329,12 @@ namespace PacMapDemo
 
             // Save model
             string modelPath = Path.Combine(ResultsDir, "hairy_mammoth_1m_hnsw.pmm");
-            pacmap.Save(modelPath);
-            Console.WriteLine($"   ✅ Model saved: {modelPath}");
+         
 
             // Create visualization
             string outputPath = Path.Combine(ResultsDir, "hairy_mammoth_1m_embedding.png");
-            var modelInfo = pacmap.ModelInfo;
-            var paramInfo = new Dictionary<string, object>
-            {
-                ["PACMAP Version"] = PacMapModel.GetVersion(),
-                ["n_neighbors"] = modelInfo.Neighbors,
-                ["embedding_dimension"] = modelInfo.OutputDimension,
-                ["distance_metric"] = modelInfo.Metric.ToString(),
-                ["mn_ratio"] = modelInfo.MN_ratio.ToString("F2"),
-                ["fp_ratio"] = modelInfo.FP_ratio.ToString("F2"),
-                ["learning_rate"] = pacmap.LearningRate.ToString("F3"),
-                ["init_std_dev"] = pacmap.InitializationStdDev.ToString("E0"),
-                ["phase_iters"] = $"({pacmap.NumIters.phase1}, {pacmap.NumIters.phase2}, {pacmap.NumIters.phase3})",
-                ["data_points"] = modelInfo.TrainingSamples,
-                ["original_dimensions"] = modelInfo.InputDimension,
-                ["hnsw_m"] = modelInfo.HnswM,
-                ["hnsw_ef_construction"] = modelInfo.HnswEfConstruction,
-                ["hnsw_ef_search"] = modelInfo.HnswEfSearch,
-                ["KNN_Mode"] = modelInfo.ForceExactKnn ? "Direct KNN" : "HNSW",
-                ["random_seed"] = modelInfo.RandomSeed,
-                ["execution_time"] = $"{stopwatch.Elapsed.TotalSeconds:F2}s"
-            };
-
-            var title = BuildVisualizationTitle(paramInfo, "Flagship 1M Hairy Mammoth");
+            var paramInfo = CreateFitParamInfo(pacmap, stopwatch.Elapsed.TotalSeconds, "Flagship_1M_Hairy_Mammoth");
+            var title = BuildVisualizationTitle(pacmap, "Flagship 1M Hairy Mammoth");
             Visualizer.PlotMammothPacMAP(embedding, data, title, outputPath, paramInfo);
             Console.WriteLine($"   ✅ Created: {Path.GetFileName(outputPath)}");
         }
@@ -369,28 +353,9 @@ namespace PacMapDemo
 
                 string pacmapPath = Path.Combine(ResultsDir, "mammoth_pacmap_embedding.png");
                 var modelInfo = pacmap.ModelInfo;
-                var paramInfo = new Dictionary<string, object>
-                {
-                    ["PACMAP Version"] = PacMapModel.GetVersion(),
-                    ["n_neighbors"] = modelInfo.Neighbors,
-                    ["embedding_dimension"] = modelInfo.OutputDimension,
-                    ["distance_metric"] = modelInfo.Metric.ToString(),
-                    ["mn_ratio"] = modelInfo.MN_ratio.ToString("F2"),
-                    ["fp_ratio"] = modelInfo.FP_ratio.ToString("F2"),
-                    ["learning_rate"] = pacmap.LearningRate.ToString("F3"),
-                    ["init_std_dev"] = pacmap.InitializationStdDev.ToString("E0"),
-                    ["phase_iters"] = $"({pacmap.NumIters.phase1}, {pacmap.NumIters.phase2}, {pacmap.NumIters.phase3})",
-                    ["data_points"] = modelInfo.TrainingSamples,
-                    ["original_dimensions"] = modelInfo.InputDimension,
-                    ["hnsw_m"] = modelInfo.HnswM,
-                    ["hnsw_ef_construction"] = modelInfo.HnswEfConstruction,
-                    ["hnsw_ef_search"] = modelInfo.HnswEfSearch,
-                    ["KNN_Mode"] = modelInfo.ForceExactKnn ? "Direct KNN" : "HNSW",
-                    ["random_seed"] = modelInfo.RandomSeed,
-                    ["execution_time"] = $"{executionTime:F2}s"
-                };
+                var paramInfo = CreateFitParamInfo(pacmap, executionTime, "Main_Demo");
 
-                var title = BuildVisualizationTitle(paramInfo);
+                var title = BuildVisualizationTitle(pacmap);
                 Visualizer.PlotMammothPacMAP(embedding, originalData, title, pacmapPath, paramInfo);
                 Console.WriteLine($"   ✅ Created: {Path.GetFileName(pacmapPath)}");
                 Console.WriteLine($"   📊 KNN Mode: {paramInfo["KNN_Mode"]}");
@@ -403,21 +368,48 @@ namespace PacMapDemo
         }
 
         /// <summary>
-        /// Builds a comprehensive title for visualizations.
+        /// Creates parameter info dictionary from model info (essential FIT parameters only).
         /// </summary>
-        private static string BuildVisualizationTitle(Dictionary<string, object> paramInfo, string prefix = "Mammoth PACMAP 2D Embedding")
+        private static Dictionary<string, object> CreateFitParamInfo(PacMapModel model, double executionTime, string experimentType = "")
         {
-            var version = paramInfo["PACMAP Version"].ToString()?.Replace(" (Corrected Gradients)", "").Replace("-CLEAN-OUTPUT", "") ?? "Unknown";
-            var knnMode = paramInfo["KNN_Mode"].ToString() ?? "Unknown";
-            var sampleSize = paramInfo["data_points"].ToString();
-            var execTime = paramInfo["execution_time"].ToString();
+            var modelInfo = model.ModelInfo;
+            return new Dictionary<string, object>
+            {
+                ["experiment_type"] = experimentType,
+                ["PACMAP Version"] = PacMapModel.GetVersion(),
+                ["n_neighbors"] = modelInfo.Neighbors,
+                ["embedding_dimension"] = modelInfo.OutputDimension,
+                ["distance_metric"] = modelInfo.Metric.ToString(),
+                ["mn_ratio"] = modelInfo.MN_ratio.ToString("F2"),
+                ["fp_ratio"] = modelInfo.FP_ratio.ToString("F2"),
+                ["learning_rate"] = modelInfo.AdamEps.ToString("F6"),
+                ["init_std_dev"] = modelInfo.InitializationStdDev.ToString("E0"),
+                ["phase_iters"] = $"({model.NumIters.phase1}, {model.NumIters.phase2}, {model.NumIters.phase3})",
+                ["data_points"] = modelInfo.TrainingSamples,
+                ["original_dimensions"] = modelInfo.InputDimension,
+                ["hnsw_m"] = modelInfo.HnswM,
+                ["hnsw_ef_construction"] = modelInfo.HnswEfConstruction,
+                ["hnsw_ef_search"] = modelInfo.HnswEfSearch,
+                ["KNN_Mode"] = modelInfo.ForceExactKnn ? "Direct KNN" : "HNSW",
+                ["random_seed"] = modelInfo.RandomSeed,
+                ["execution_time"] = $"{executionTime:F2}s"
+            };
+        }
+
+        /// <summary>
+        /// Builds a title for visualizations from model info.
+        /// </summary>
+        private static string BuildVisualizationTitle(PacMapModel model, string prefix = "Mammoth PACMAP 2D Embedding")
+        {
+            var modelInfo = model.ModelInfo;
+            var version = PacMapModel.GetVersion().Replace(" (Corrected Gradients)", "").Replace("-CLEAN-OUTPUT", "");
+            var knnMode = modelInfo.ForceExactKnn ? "Direct KNN" : "HNSW";
 
             return $@"{prefix}
-PACMAP v{version} | Sample: {sampleSize:N0} | {knnMode}
-k={paramInfo["n_neighbors"]} | {paramInfo["distance_metric"]} | dims={paramInfo["embedding_dimension"]} | seed={paramInfo["random_seed"]}
-mn={paramInfo["mn_ratio"]} | fp={paramInfo["fp_ratio"]} | lr={paramInfo["learning_rate"]} | std={paramInfo["init_std_dev"]}
-phases={paramInfo["phase_iters"]} | HNSW: M={paramInfo["hnsw_m"]}, ef_c={paramInfo["hnsw_ef_construction"]}, ef_s={paramInfo["hnsw_ef_search"]}
-Time: {execTime} | Original dims: {paramInfo["original_dimensions"]}";
+PACMAP v{version} | Sample: {modelInfo.TrainingSamples:N0} | {knnMode}
+k={modelInfo.Neighbors} | {modelInfo.Metric} | dims={modelInfo.OutputDimension} | seed={modelInfo.RandomSeed}
+mn={modelInfo.MN_ratio:F2} | fp={modelInfo.FP_ratio:F2} | lr={modelInfo.AdamEps:F6} | std={modelInfo.InitializationStdDev:E0}
+phases=({model.NumIters.phase1}, {model.NumIters.phase2}, {model.NumIters.phase3}) | HNSW: M={modelInfo.HnswM}, ef_c={modelInfo.HnswEfConstruction}, ef_s={modelInfo.HnswEfSearch}";
         }
 
         /// <summary>
@@ -507,29 +499,10 @@ Time: {execTime} | Original dims: {paramInfo["original_dimensions"]}";
             GenerateProjection(originalData, embedding1, "XZ", Path.Combine(outputDir, "original_3d_XZ_SideView.png"));
             GenerateProjection(originalData, embedding1, "YZ", Path.Combine(outputDir, "original_3d_YZ_FrontView.png"));
 
-            var modelInfo = model.ModelInfo;
-            var paramInfo1 = new Dictionary<string, object>
-            {
-                ["test_type"] = "Reproducibility Test - Embedding 1",
-                ["n_neighbors"] = modelInfo.Neighbors,
-                ["distance_metric"] = modelInfo.Metric.ToString(),
-                ["mn_ratio"] = modelInfo.MN_ratio.ToString("F2"),
-                ["fp_ratio"] = modelInfo.FP_ratio.ToString("F2"),
-                ["learning_rate"] = model.LearningRate.ToString("F3"),
-                ["init_std_dev"] = model.InitializationStdDev.ToString("E0"),
-                ["phase_iters"] = $"({model.NumIters.phase1}, {model.NumIters.phase2}, {model.NumIters.phase3})",
-                ["data_points"] = modelInfo.TrainingSamples,
-                ["original_dimensions"] = modelInfo.InputDimension,
-                ["random_seed"] = modelInfo.RandomSeed,
-                ["KNN_Mode"] = modelInfo.ForceExactKnn ? "Direct KNN" : "HNSW",
-                ["hnsw_m"] = modelInfo.HnswM,
-                ["hnsw_ef_construction"] = modelInfo.HnswEfConstruction,
-                ["hnsw_ef_search"] = modelInfo.HnswEfSearch
-            };
-
-            var paramInfo2 = new Dictionary<string, object>(paramInfo1) { ["test_type"] = "Reproducibility Test - Embedding 2" };
-            var title1 = $"PACMAP Reproducibility Test - Embedding 1\n{modelInfo.Metric} | k={modelInfo.Neighbors} | {(modelInfo.ForceExactKnn ? "Direct KNN" : "HNSW")}\nmn={modelInfo.MN_ratio:F2} fp={modelInfo.FP_ratio:F2} lr={model.LearningRate:F3}";
-            var title2 = $"PACMAP Reproducibility Test - Embedding 2\n{modelInfo.Metric} | k={modelInfo.Neighbors} | {(modelInfo.ForceExactKnn ? "Direct KNN" : "HNSW")}\nmn={modelInfo.MN_ratio:F2} fp={modelInfo.FP_ratio:F2} lr={model.LearningRate:F3}";
+            var paramInfo1 = CreateFitParamInfo(model, 0, "Reproducibility_Test_Embedding_1");
+            var paramInfo2 = CreateFitParamInfo(model, 0, "Reproducibility_Test_Embedding_2");
+            var title1 = BuildVisualizationTitle(model, "PACMAP Reproducibility Test - Embedding 1");
+            var title2 = BuildVisualizationTitle(model, "PACMAP Reproducibility Test - Embedding 2");
 
             Visualizer.PlotSimplePacMAP(embedding1, title1, Path.Combine(outputDir, "embedding1.png"), paramInfo1);
             Visualizer.PlotSimplePacMAP(embedding2, title2, Path.Combine(outputDir, "embedding2.png"), paramInfo2);
@@ -550,7 +523,7 @@ Time: {execTime} | Original dims: {paramInfo["original_dimensions"]}";
             DemoNeighborExperiments(data, labels, optimalHNSWParams);
             DemoLearningRateExperiments(data, labels, optimalHNSWParams);
             DemoInitializationStdDevExperiments(data, labels, optimalHNSWParams);
-           // DemoExtendedLearningRateExperiments(data, labels, optimalHNSWParams);
+            DemoExtendedLearningRateExperiments(data, labels, optimalHNSWParams);
         }
 
         /// <summary>
@@ -573,7 +546,7 @@ Time: {execTime} | Original dims: {paramInfo["original_dimensions"]}";
                 forceExactKnn: false,
                 autoHNSWParam: true,
                 randomSeed: 42,
-                progressCallback: CreatePrefixedLoggerCallback("Auto-Discovery")
+                progressCallback: CreatePrefixedCallback("Auto-Discovery")
             );
             stopwatch.Stop();
             Console.WriteLine();
@@ -587,13 +560,13 @@ Time: {execTime} | Original dims: {paramInfo["original_dimensions"]}";
         private static void DemoNeighborExperiments(double[,] data, int[] labels, (int M, int EfConstruction, int EfSearch) hnswParams)
         {
             Console.WriteLine("🔬 Testing Neighbor Counts (5-50)...");
-            var neighborTests = Enumerable.Range(0, 10).Select(i => 5 + i * 5).ToArray();
+            var neighborTests = Enumerable.Range(0, 30).Select(i => 5 + i * 2).ToArray();
             var results = new List<(int nNeighbors, double[,] embedding, double time, double quality)>();
 
             foreach (var nNeighbors in neighborTests)
             {
                 Console.WriteLine($"   📊 Testing n_neighbors = {nNeighbors}...");
-                var model = new PacMapModel(mnRatio: 1.2f, fpRatio: 2.0f, learningRate: 1.0f, initializationStdDev: 1e-4f, numIters: (100, 100, 250));
+                var model = new PacMapModel(mnRatio: 1.2f, fpRatio: 2.0f, learningRate: 1.0f, initializationStdDev: 1e-3f, numIters: (100, 100, 250));
                 var stopwatch = Stopwatch.StartNew();
                 var embedding = model.Fit(
                     data: data,
@@ -618,24 +591,14 @@ Time: {execTime} | Original dims: {paramInfo["original_dimensions"]}";
                 results.Add((nNeighbors, embedding, stopwatch.Elapsed.TotalSeconds, quality));
                 Console.WriteLine($"   ✅ n={nNeighbors}: quality={quality:F4}, time={stopwatch.Elapsed.TotalSeconds:F2}s");
 
-                var paramInfo = new Dictionary<string, object>
-                {
-                    ["experiment_type"] = "Neighbor_Experiments",
-                    ["n_neighbors"] = nNeighbors,
-                    ["mn_ratio"] = "1.2",
-                    ["fp_ratio"] = "2.0",
-                    ["learning_rate"] = "1.0",
-                    ["hnsw_m"] = hnswParams.M,
-                    ["hnsw_ef_construction"] = hnswParams.EfConstruction,
-                    ["hnsw_ef_search"] = hnswParams.EfSearch,
-                    ["embedding_quality"] = quality.ToString("F4"),
-                    ["execution_time"] = $"{stopwatch.Elapsed.TotalSeconds:F2}s"
-                };
+                var paramInfo = CreateFitParamInfo(model, stopwatch.Elapsed.TotalSeconds, "Neighbor_Experiments");
+                paramInfo["embedding_quality"] = quality.ToString("F4");
 
                 var experimentDir = Path.Combine(ResultsDir, "neighbor_experiments");
                 Directory.CreateDirectory(experimentDir);
-                var outputPath = Path.Combine(experimentDir, $"{(nNeighbors - 5) / 5 + 1:D4}.png");
-                var title = $"Neighbor Experiment: n={nNeighbors}\nHNSW: M={hnswParams.M}, ef={hnswParams.EfSearch}\nQuality: {quality:F4}, Time: {stopwatch.Elapsed.TotalSeconds:F2}s";
+                var outputPath = Path.Combine(experimentDir, $"{(nNeighbors - 5) / 2 + 1:D4}.png");
+                var modelInfo = model.ModelInfo;
+                var title = $"Neighbor Experiment: n={modelInfo.Neighbors}\n" + BuildVisualizationTitle(model, "Neighbor Experiment");
                 Visualizer.PlotMammothPacMAP(embedding, data, title, outputPath, paramInfo);
                 Console.WriteLine($"   📈 Saved: {Path.GetFileName(outputPath)}");
             }
@@ -653,13 +616,13 @@ Time: {execTime} | Original dims: {paramInfo["original_dimensions"]}";
         private static void DemoLearningRateExperiments(double[,] data, int[] labels, (int M, int EfConstruction, int EfSearch) hnswParams)
         {
             Console.WriteLine("🎓 Testing Learning Rates (0.5-1.0)...");
-            var learningRateTests = new[] { 0.5f, 0.6f, 0.7f, 0.8f, 0.9f, 1.0f };
+            var learningRateTests = new[] { 0.6f, 0.65f, 0.7f, 0.75f, 0.8f, 0.85f, 0.9f, 0.95f, 1.0f };
             var results = new List<(float learningRate, double[,] embedding, double time, double quality)>();
 
             foreach (var learningRate in learningRateTests)
             {
                 Console.WriteLine($"   📊 Testing learning_rate = {learningRate:F1}...");
-                var model = new PacMapModel(mnRatio: 1.2f, fpRatio: 2.0f, learningRate: learningRate, initializationStdDev: 1e-4f, numIters: (100, 100, 250));
+                var model = new PacMapModel(mnRatio: 1.2f, fpRatio: 2.0f, learningRate: learningRate, initializationStdDev: 1e-3f, numIters: (100, 100, 250));
                 var stopwatch = Stopwatch.StartNew();
                 var embedding = model.Fit(
                     data: data,
@@ -684,25 +647,15 @@ Time: {execTime} | Original dims: {paramInfo["original_dimensions"]}";
                 results.Add((learningRate, embedding, stopwatch.Elapsed.TotalSeconds, quality));
                 Console.WriteLine($"   ✅ lr={learningRate:F1}: quality={quality:F4}, time={stopwatch.Elapsed.TotalSeconds:F2}s");
 
-                var paramInfo = new Dictionary<string, object>
-                {
-                    ["experiment_type"] = "Learning_Rate_Experiments",
-                    ["learning_rate"] = learningRate.ToString("F1"),
-                    ["n_neighbors"] = "10",
-                    ["mn_ratio"] = "1.2",
-                    ["fp_ratio"] = "2.0",
-                    ["hnsw_m"] = hnswParams.M,
-                    ["hnsw_ef_construction"] = hnswParams.EfConstruction,
-                    ["hnsw_ef_search"] = hnswParams.EfSearch,
-                    ["embedding_quality"] = quality.ToString("F4"),
-                    ["execution_time"] = $"{stopwatch.Elapsed.TotalSeconds:F2}s"
-                };
+                var paramInfo = CreateFitParamInfo(model, stopwatch.Elapsed.TotalSeconds, "Learning_Rate_Experiments");
+                paramInfo["embedding_quality"] = quality.ToString("F4");
 
                 var experimentDir = Path.Combine(ResultsDir, "learning_rate_experiments");
                 Directory.CreateDirectory(experimentDir);
-                var imageNumber = (int)((learningRate - 0.5f) / 0.1f) + 1;
+                var imageNumber = (int)((learningRate - 0.6f) / 0.05f) + 1;
                 var outputPath = Path.Combine(experimentDir, $"{imageNumber:D4}.png");
-                var title = $"Learning Rate Experiment: lr={learningRate:F1}\nHNSW: M={hnswParams.M}, ef={hnswParams.EfSearch}\nQuality: {quality:F4}, Time: {stopwatch.Elapsed.TotalSeconds:F2}s";
+                var modelInfo = model.ModelInfo;
+                var title = $"Learning Rate Experiment: lr={learningRate:F1}\n" + BuildVisualizationTitle(model, "Learning Rate Experiment");
                 Visualizer.PlotMammothPacMAP(embedding, data, title, outputPath, paramInfo);
                 Console.WriteLine($"   📈 Saved: {Path.GetFileName(outputPath)}");
             }
@@ -750,20 +703,8 @@ Time: {execTime} | Original dims: {paramInfo["original_dimensions"]}";
                 results.Add((initStdDev, embedding, stopwatch.Elapsed.TotalSeconds, quality));
                 Console.WriteLine($"   ✅ init_std={initStdDev:E1}: quality={quality:F4}, time={stopwatch.Elapsed.TotalSeconds:F2}s");
 
-                var paramInfo = new Dictionary<string, object>
-                {
-                    ["experiment_type"] = "Initialization_Std_Dev_Experiments",
-                    ["initialization_std_dev"] = initStdDev.ToString("E1"),
-                    ["n_neighbors"] = "10",
-                    ["mn_ratio"] = "1.2",
-                    ["fp_ratio"] = "2.0",
-                    ["learning_rate"] = "1.0",
-                    ["hnsw_m"] = hnswParams.M,
-                    ["hnsw_ef_construction"] = hnswParams.EfConstruction,
-                    ["hnsw_ef_search"] = hnswParams.EfSearch,
-                    ["embedding_quality"] = quality.ToString("F4"),
-                    ["execution_time"] = $"{stopwatch.Elapsed.TotalSeconds:F2}s"
-                };
+                var paramInfo = CreateFitParamInfo(model, stopwatch.Elapsed.TotalSeconds, "Initialization_Std_Dev_Experiments");
+                paramInfo["embedding_quality"] = quality.ToString("F4");
 
                 var experimentDir = Path.Combine(ResultsDir, "init_std_dev_experiments");
                 Directory.CreateDirectory(experimentDir);
@@ -776,7 +717,8 @@ Time: {execTime} | Original dims: {paramInfo["original_dimensions"]}";
                     _ => 1
                 };
                 var outputPath = Path.Combine(experimentDir, $"{imageNumber:D4}.png");
-                var title = $"Init Std Dev Experiment: {initStdDev:E1}\nHNSW: M={hnswParams.M}, ef={hnswParams.EfSearch}\nQuality: {quality:F4}, Time: {stopwatch.Elapsed.TotalSeconds:F2}s";
+                var modelInfo = model.ModelInfo;
+                var title = $"Init Std Dev Experiment: {modelInfo.InitializationStdDev:E0}\n" + BuildVisualizationTitle(model, "Init Std Dev Experiment");
                 Visualizer.PlotMammothPacMAP(embedding, data, title, outputPath, paramInfo);
                 Console.WriteLine($"   📈 Saved: {Path.GetFileName(outputPath)}");
             }
@@ -788,73 +730,7 @@ Time: {execTime} | Original dims: {paramInfo["original_dimensions"]}";
             Console.WriteLine($"⏱️ Execution times: {results.Min(r => r.time):F2}s to {results.Max(r => r.time):F2}s");
         }
 
-        /// <summary>
-        /// Tests extended learning rate values.
-        /// </summary>
-        private static void DemoExtendedLearningRateExperiments(double[,] data, int[] labels, (int M, int EfConstruction, int EfSearch) hnswParams)
-        {
-            Console.WriteLine("🎓 Testing Extended Learning Rates...");
-            var learningRateTests = new[] { 1.0f, 0.9f, 0.8f, 0.7f, 0.6f, 0.5f };
-            var results = new List<(float learningRate, double[,] embedding, double time, double quality)>();
-
-            foreach (var learningRate in learningRateTests)
-            {
-                Console.WriteLine($"   📊 Testing learning_rate = {learningRate:F1}...");
-                var model = new PacMapModel(mnRatio: 1.2f, fpRatio: 2.0f, learningRate: learningRate, initializationStdDev: 1e-4f, numIters: (100, 100, 250));
-                var stopwatch = Stopwatch.StartNew();
-                var embedding = model.Fit(
-                    data: data,
-                    embeddingDimension: 2,
-                    nNeighbors: 10,
-                    learningRate: learningRate,
-                    mnRatio: 1.2f,
-                    fpRatio: 2.0f,
-                    numIters: (100, 100, 250),
-                    metric: DistanceMetric.Euclidean,
-                    forceExactKnn: false,
-                    hnswM: hnswParams.M,
-                    hnswEfConstruction: hnswParams.EfConstruction,
-                    hnswEfSearch: hnswParams.EfSearch,
-                    autoHNSWParam: false,
-                    randomSeed: 42,
-                    progressCallback: CreatePrefixedCallback($"lr={learningRate:F1}")
-                );
-                stopwatch.Stop();
-                Console.WriteLine();
-                double quality = CalculateEmbeddingQuality(embedding, labels);
-                results.Add((learningRate, embedding, stopwatch.Elapsed.TotalSeconds, quality));
-                Console.WriteLine($"   ✅ lr={learningRate:F1}: quality={quality:F4}, time={stopwatch.Elapsed.TotalSeconds:F2}s");
-
-                var paramInfo = new Dictionary<string, object>
-                {
-                    ["experiment_type"] = "Extended_Learning_Rate_Experiments",
-                    ["learning_rate"] = learningRate.ToString("F1"),
-                    ["n_neighbors"] = "10",
-                    ["mn_ratio"] = "1.2",
-                    ["fp_ratio"] = "2.0",
-                    ["initialization_std_dev"] = "1e-4",
-                    ["hnsw_m"] = hnswParams.M,
-                    ["hnsw_ef_construction"] = hnswParams.EfConstruction,
-                    ["hnsw_ef_search"] = hnswParams.EfSearch,
-                    ["embedding_quality"] = quality.ToString("F4"),
-                    ["execution_time"] = $"{stopwatch.Elapsed.TotalSeconds:F2}s"
-                };
-
-                var experimentDir = Path.Combine(ResultsDir, "extended_lr_experiments");
-                Directory.CreateDirectory(experimentDir);
-                var imageNumber = (int)((1.0f - learningRate) / 0.1f) + 1;
-                var outputPath = Path.Combine(experimentDir, $"{imageNumber:D4}.png");
-                var title = $"Extended LR Experiment: lr={learningRate:F1}\nHNSW: M={hnswParams.M}, ef={hnswParams.EfSearch}\nQuality: {quality:F4}, Time: {stopwatch.Elapsed.TotalSeconds:F2}s";
-                Visualizer.PlotMammothPacMAP(embedding, data, title, outputPath, paramInfo);
-                Console.WriteLine($"   📈 Saved: {Path.GetFileName(outputPath)}");
-            }
-
-            Console.WriteLine("📊 Extended Learning Rate Experiments Summary");
-            Console.WriteLine(new string('=', 60));
-            var bestResult = results.OrderBy(r => r.quality).First();
-            Console.WriteLine($"🏆 Best learning rate: {bestResult.learningRate:F1} (quality: {bestResult.quality:F4})");
-            Console.WriteLine($"⏱️ Execution times: {results.Min(r => r.time):F2}s to {results.Max(r => r.time):F2}s");
-        }
+     
 
         /// <summary>
         /// Runs advanced parameter tuning experiments.
@@ -906,27 +782,15 @@ Time: {execTime} | Original dims: {paramInfo["original_dimensions"]}";
                 results.Add((config.Name, embedding, stopwatch.Elapsed.TotalSeconds, quality));
                 Console.WriteLine($"   ✅ {config.Name}: quality={quality:F4}, time={stopwatch.Elapsed.TotalSeconds:F2}s");
 
-                var paramInfo = new Dictionary<string, object>
-                {
-                    ["experiment_type"] = "Advanced_Parameter_Tuning",
-                    ["configuration"] = config.Name,
-                    ["n_neighbors"] = "10",
-                    ["mn_ratio"] = config.MNRatio.ToString("F2"),
-                    ["fp_ratio"] = config.FPRatio.ToString("F2"),
-                    ["learning_rate"] = config.LearningRate.ToString("F2"),
-                    ["initialization_std_dev"] = "1e-4",
-                    ["hnsw_m"] = optimalHNSWParams.M,
-                    ["hnsw_ef_construction"] = optimalHNSWParams.EfConstruction,
-                    ["hnsw_ef_search"] = optimalHNSWParams.EfSearch,
-                    ["embedding_quality"] = quality.ToString("F4"),
-                    ["execution_time"] = $"{stopwatch.Elapsed.TotalSeconds:F2}s"
-                };
+                var paramInfo = CreateFitParamInfo(model, stopwatch.Elapsed.TotalSeconds, "Advanced_Parameter_Tuning");
+                paramInfo["configuration"] = config.Name;
+                paramInfo["embedding_quality"] = quality.ToString("F4");
 
                 var experimentDir = Path.Combine(ResultsDir, "advanced_param_experiments");
                 Directory.CreateDirectory(experimentDir);
                 var imageNumber = Array.IndexOf(testConfigs, config) + 1;
                 var outputPath = Path.Combine(experimentDir, $"{imageNumber:D4}_{config.Name}.png");
-                var title = $"Advanced Param Experiment: {config.Name}\nmn={config.MNRatio:F2}, fp={config.FPRatio:F2}, lr={config.LearningRate:F2}\nHNSW: M={optimalHNSWParams.M}, ef={optimalHNSWParams.EfSearch}\nQuality: {quality:F4}, Time: {stopwatch.Elapsed.TotalSeconds:F2}s";
+                var title = $"Advanced Param Experiment: {config.Name}\n" + BuildVisualizationTitle(model, "Advanced Parameter Tuning Experiment");
                 Visualizer.PlotMammothPacMAP(embedding, data, title, outputPath, paramInfo);
                 Console.WriteLine($"   📈 Saved: {Path.GetFileName(outputPath)}");
             }

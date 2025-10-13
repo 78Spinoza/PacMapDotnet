@@ -849,7 +849,8 @@ namespace persistence_utils {
                     model->original_space.get(),
                     model->n_samples,
                     model->hnsw_m,
-                    model->hnsw_ef_construction
+                    model->hnsw_ef_construction,
+                    model->random_seed
                 );
                 model->original_space_index->setEf(model->hnsw_ef_search);
 

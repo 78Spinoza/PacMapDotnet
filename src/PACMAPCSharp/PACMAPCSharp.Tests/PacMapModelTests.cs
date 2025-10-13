@@ -8,7 +8,7 @@ namespace PACMAPCSharp.Tests
     [TestClass]
     public class PacMapModelTests
     {
-        private float[,] _testData = null!;
+        private double[,] _testData = null!;
         private const int TestSamples = 200;
         private const int TestFeatures = 10;
 
@@ -279,7 +279,7 @@ namespace PACMAPCSharp.Tests
 
             try
             {
-                float[,] originalProjection;
+                double[,] originalProjection;
                 var testPoint = GenerateSingleSample(TestFeatures, seed: 777);
 
                 // STEP 1: Create first model, fit, project, and save
@@ -305,7 +305,7 @@ namespace PACMAPCSharp.Tests
                 // model1 is now DISPOSED
 
                 // STEP 2: Create completely separate model and load
-                float[,] loadedProjection;
+                double[,] loadedProjection;
                 using (var model2 = PacMapModel.Load(modelPath))
                 {
                     Assert.IsTrue(model2.IsFitted);
@@ -365,8 +365,8 @@ namespace PACMAPCSharp.Tests
 
             try
             {
-                float[,] originalProjection;
-                float[,] testPoint = GenerateSingleSample(TestFeatures, seed: 777);
+                double[,] originalProjection;
+                double[,] testPoint = GenerateSingleSample(TestFeatures, seed: 777);
 
                 // Train, project, and save model
                 using (var model = new PacMapModel())
@@ -443,7 +443,7 @@ namespace PACMAPCSharp.Tests
                 model.Fit(null!, embeddingDimension: 2));
 
             // Test empty data
-            var emptyData = new float[0, 0];
+            var emptyData = new double[0, 0];
             Assert.ThrowsException<ArgumentException>(() =>
                 model.Fit(emptyData, embeddingDimension: 2));
 
@@ -461,9 +461,9 @@ namespace PACMAPCSharp.Tests
 
         #region Helper Methods
 
-        private static float[,] GenerateTestData(int nSamples, int nFeatures, int seed = 42)
+        private static double[,] GenerateTestData(int nSamples, int nFeatures, int seed = 42)
         {
-            var data = new float[nSamples, nFeatures];
+            var data = new double[nSamples, nFeatures];
             var random = new Random(seed);
 
             // Generate simple normal distribution (same as C++ test) for quantization testing
@@ -471,25 +471,25 @@ namespace PACMAPCSharp.Tests
             {
                 for (int j = 0; j < nFeatures; j++)
                 {
-                    // Normal distribution with mean=0, std=1 (same as C++ std::normal_distribution<float>(0.0f, 1.0f))
+                    // Normal distribution with mean=0, std=1 (same as C++ std::normal_distribution<double>(0.0, 1.0))
                     double u1 = 1.0 - random.NextDouble();
                     double u2 = 1.0 - random.NextDouble();
                     double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
 
-                    data[i, j] = (float)randStdNormal;
+                    data[i, j] = randStdNormal;
                 }
             }
 
             return data;
         }
 
-        private static float[,] CreateCppMatchingTestData()
+        private static double[,] CreateCppMatchingTestData()
         {
             // Create large dataset that properly exercises HNSW index and exact match detection
             // Use realistic size that would trigger the original quantization bug
             const int nSamples = 2000; // Large dataset to properly test HNSW index
             const int nFeatures = 305;
-            var data = new float[nSamples, nFeatures];
+            var data = new double[nSamples, nFeatures];
             var random = new Random(42);
 
             // Generate using Box-Muller transform (same as C++ std::normal_distribution)
@@ -501,7 +501,7 @@ namespace PACMAPCSharp.Tests
                     double u1 = 1.0 - random.NextDouble(); // Ensure u1 > 0
                     double u2 = 1.0 - random.NextDouble(); // Ensure u2 > 0
                     double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-                    data[i, j] = (float)randStdNormal;
+                    data[i, j] = randStdNormal;
                 }
             }
 
@@ -511,20 +511,20 @@ namespace PACMAPCSharp.Tests
             return data;
         }
 
-        private static float[,] GenerateSingleSample(int nFeatures, int seed = 999)
+        private static double[,] GenerateSingleSample(int nFeatures, int seed = 999)
         {
-            var data = new float[1, nFeatures];
+            var data = new double[1, nFeatures];
             var random = new Random(seed);
 
             for (int j = 0; j < nFeatures; j++)
             {
-                data[0, j] = (float)(random.NextDouble() * 2 - 1); // Range [-1, 1]
+                data[0, j] = random.NextDouble() * 2 - 1; // Range [-1, 1]
             }
 
             return data;
         }
 
-        private static double CalculateMSE(float[,] embedding1, float[,] embedding2)
+        private static double CalculateMSE(double[,] embedding1, double[,] embedding2)
         {
             if (embedding1.GetLength(0) != embedding2.GetLength(0) ||
                 embedding1.GetLength(1) != embedding2.GetLength(1))
@@ -547,7 +547,7 @@ namespace PACMAPCSharp.Tests
             return sumSquaredDiff / totalElements;
         }
 
-        private static void ValidateEmbeddingQuality(float[,] embedding, string modeName)
+        private static void ValidateEmbeddingQuality(double[,] embedding, string modeName)
         {
             // Basic quality checks
             int nSamples = embedding.GetLength(0);
@@ -562,8 +562,8 @@ namespace PACMAPCSharp.Tests
             {
                 for (int j = 0; j < nDim; j++)
                 {
-                    float val = embedding[i, j];
-                    if (float.IsNaN(val) || float.IsInfinity(val))
+                    double val = embedding[i, j];
+                    if (double.IsNaN(val) || double.IsInfinity(val))
                     {
                         invalidCount++;
                     }
@@ -597,7 +597,7 @@ namespace PACMAPCSharp.Tests
 
             try
             {
-                float[,] trainingEmbeddings;
+                double[,] trainingEmbeddings;
 
                 // STEP 1: Train model and get training embeddings
                 using (var model = new PacMapModel())

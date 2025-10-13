@@ -361,7 +361,10 @@ namespace fit_utils {
             auto opt_duration = std::chrono::duration_cast<std::chrono::milliseconds>(opt_end - opt_start);
 
             // Debug final embedding statistics
-            std::vector<float> embedding_vec(embedding, embedding + n_obs * embedding_dim);
+            std::vector<float> embedding_vec(n_obs * embedding_dim);
+            for (int i = 0; i < n_obs * embedding_dim; ++i) {
+                embedding_vec[i] = static_cast<float>(embedding[i]);
+            }
             float init_mean = std::accumulate(embedding_vec.begin(), embedding_vec.end(), 0.0f) / embedding_vec.size();
             float init_std = 0.0f;
             for (float e : embedding_vec) init_std += (e - init_mean) * (e - init_mean);
@@ -416,7 +419,8 @@ namespace fit_utils {
                     model->embedding_space.get(),
                     model->n_samples,
                     model->hnsw_m,
-                    model->hnsw_ef_construction
+                    model->hnsw_ef_construction,
+                    model->random_seed
                 );
                 model->embedding_space_index->setEf(model->hnsw_ef_search);
 

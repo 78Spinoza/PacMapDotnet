@@ -24,20 +24,7 @@ void optimize_embedding(PacMapModel* model, double* embedding_out, pacmap_progre
     }
     initialize_random_embedding_double(embedding, model->n_samples, model->n_components, model->rng, model->initialization_std_dev);
 
-    // DEBUG: Show initial embedding range via callback
-    double init_min = embedding[0], init_max = embedding[0], init_absmax = 0.0;
-    for (const auto& val : embedding) {
-        init_min = std::min(init_min, val);
-        init_max = std::max(init_max, val);
-        init_absmax = std::max(init_absmax, std::abs(val));
-    }
-    if (callback) {
-        char range_msg[256];
-        snprintf(range_msg, sizeof(range_msg), "INITIAL EMBEDDING RANGE: [%.6f, %.6f], max|coord|=%.6f",
-                init_min, init_max, init_absmax);
-        callback("Initialization", 0, 0, 0.0f, range_msg);
-    }
-
+    
     int total_iters = model->phase1_iters + model->phase2_iters + model->phase3_iters;
 
     if (model->triplets.empty()) {
@@ -151,40 +138,7 @@ void optimize_embedding(PacMapModel* model, double* embedding_out, pacmap_progre
                                                    w_n, w_mn, w_f, model->n_components);
             loss_history.push_back(static_cast<float>(loss));
 
-            // DEBUG: Comprehensive embedding analysis for oval diagnosis
-            double emb_min = embedding[0], emb_max = embedding[0], emb_absmax = 0.0;
-            double emb_mean = 0.0, emb_absmean = 0.0;
-            for (const auto& val : embedding) {
-                emb_min = std::min(emb_min, val);
-                emb_max = std::max(emb_max, val);
-                emb_absmax = std::max(emb_absmax, std::abs(val));
-                emb_mean += val;
-                emb_absmean += std::abs(val);
-            }
-            emb_mean /= embedding.size();
-            emb_absmean /= embedding.size();
-
-            // Calculate embedding spread ratio (width/height) to detect oval formation
-            double width = emb_max - emb_min;
-            double spread_ratio = width / (emb_absmax > 0 ? emb_absmax * 2 : 1.0);
-
-            if (iter % 10 == 0 && callback) {  // Report every 10th iteration for detailed analysis
-                std::string phase = get_current_phase(iter, model->phase1_iters, model->phase2_iters);
-                char analysis_msg[512];
-                snprintf(analysis_msg, sizeof(analysis_msg),
-                        "EMBEDDING ANALYSIS: iter=%d, phase=%s | Range: [%.4f, %.4f], width=%.4f, max|coord|=%.4f | mean=%.6f, |mean|=%.6f, spread_ratio=%.3f | weights: w_n=%.2f, w_mn=%.3f, w_f=%.2f, loss=%.6f",
-                        iter, phase.c_str(), emb_min, emb_max, width, emb_absmax, emb_mean, emb_absmean, spread_ratio, w_n, w_mn, w_f, loss);
-
-                callback("Embedding Analysis", iter, total_iters, 0.0f, analysis_msg);
-
-                // Detect oval formation warning
-                if (spread_ratio > 0.7 && spread_ratio < 1.3 && emb_absmax > 5.0) {
-                    char warning_msg[256];
-                    snprintf(warning_msg, sizeof(warning_msg), "WARNING: Potential oval formation detected (ratio=%.3f)", spread_ratio);
-                    callback("Oval Detection", iter, total_iters, 0.0f, warning_msg);
-                }
-            }
-
+            
             monitor_optimization_progress(iter, total_iters, loss, get_current_phase(iter, model->phase1_iters, model->phase2_iters), callback);
 
             // Early termination check
@@ -515,8 +469,7 @@ void configure_memory_usage(PacMapModel* model, size_t available_memory_mb) {
 
     if (estimated_memory_mb > available_memory_mb * 0.8f) {
         model->use_quantization = true;
-        std::cout << "Enabling quantization due to memory constraints" << std::endl;
-    }
+            }
 }
 
 void validate_optimization_state(const PacMapModel* model, const std::vector<float>& embedding) {

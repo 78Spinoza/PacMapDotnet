@@ -348,7 +348,7 @@ namespace PacMapDemo
         /// </summary>
         public static int[] GetRandomSamples(MnistData data, int samplesPerDigit = 10, int? seed = null)
         {
-            var random = seed.HasValue ? new Random(seed.Value) : new Random();
+            var random = new Random(seed ?? 42);
             var samples = new List<int>();
 
             for (int digit = 0; digit < 10; digit++)

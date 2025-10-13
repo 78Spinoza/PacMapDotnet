@@ -42,12 +42,12 @@ namespace PacMapValidationTest
             int nSamples = 100;
             int nFeatures = 10;
 
-            var data = new float[nSamples, nFeatures];
+            var data = new double[nSamples, nFeatures];
             for (int i = 0; i < nSamples; i++)
             {
                 for (int j = 0; j < nFeatures; j++)
                 {
-                    data[i, j] = (float)random.NextDouble();
+                    data[i, j] = random.NextDouble();
                 }
             }
 
@@ -76,9 +76,9 @@ namespace PacMapValidationTest
             {
                 for (int j = 0; j < 2; j++)
                 {
-                    float val = embedding[i, j];
-                    if (float.IsNaN(val)) nanCount++;
-                    if (float.IsInfinity(val)) infCount++;
+                    double val = embedding[i, j];
+                    if (double.IsNaN(val)) nanCount++;
+                    if (double.IsInfinity(val)) infCount++;
                     minVal = Math.Min(minVal, val);
                     maxVal = Math.Max(maxVal, val);
                 }
@@ -96,12 +96,12 @@ namespace PacMapValidationTest
         {
             Console.WriteLine("\n--- Test 2: Embedding Dimensions ---");
 
-            var data = new float[50, 5]; // 50 samples, 5 features
+            var data = new double[50, 5]; // 50 samples, 5 features
             var random = new Random(123);
 
             for (int i = 0; i < 50; i++)
                 for (int j = 0; j < 5; j++)
-                    data[i, j] = (float)random.NextDouble();
+                    data[i, j] = random.NextDouble();
 
             using var model = new PacMapModel();
 
@@ -130,14 +130,14 @@ namespace PacMapValidationTest
             int nPerCluster = 25;
             int nFeatures = 8;
 
-            var data = new float[nPerCluster * 2, nFeatures];
+            var data = new double[nPerCluster * 2, nFeatures];
 
             // Cluster 1: centered around 0
             for (int i = 0; i < nPerCluster; i++)
             {
                 for (int j = 0; j < nFeatures; j++)
                 {
-                    data[i, j] = (float)random.NextNormal() * 0.3f; // Small variance
+                    data[i, j] = random.NextNormal() * 0.3; // Small variance
                 }
             }
 
@@ -146,7 +146,7 @@ namespace PacMapValidationTest
             {
                 for (int j = 0; j < nFeatures; j++)
                 {
-                    data[nPerCluster + i, j] = 5.0f + (float)random.NextNormal() * 0.3f;
+                    data[nPerCluster + i, j] = 5.0 + random.NextNormal() * 0.3;
                 }
             }
 
@@ -202,11 +202,11 @@ namespace PacMapValidationTest
             Console.WriteLine("\n--- Test 4: Reproducibility Test ---");
 
             var random = new Random(42);
-            var data = new float[30, 6];
+            var data = new double[30, 6];
 
             for (int i = 0; i < 30; i++)
                 for (int j = 0; j < 6; j++)
-                    data[i, j] = (float)random.NextDouble();
+                    data[i, j] = random.NextDouble();
 
             // Create two models (deterministic behavior should be consistent)
             using var model1 = new PacMapModel();
@@ -243,7 +243,7 @@ namespace PacMapValidationTest
             Console.WriteLine("✅ Results are reproducible with same seed");
         }
 
-        static double EuclideanDistance(float[,] embedding, int i, int j)
+        static double EuclideanDistance(double[,] embedding, int i, int j)
         {
             double sum = 0;
             for (int d = 0; d < embedding.GetLength(1); d++)

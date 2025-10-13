@@ -44,6 +44,8 @@ void sample_triplets(PacMapModel* model, double* data, pacmap_progress_callback_
                                                         model->metric,
                                                         model->hnsw_m,
                                                         model->hnsw_ef_construction,
+                                                        model->hnsw_ef_search,
+                                                        model->random_seed,
                                                         callback);
 
         if (!model->original_space_index) {
@@ -96,8 +98,7 @@ void sample_triplets(PacMapModel* model, double* data, pacmap_progress_callback_
     // ✅ v2.8.9 FIX: DISABLED shuffling to match Python sequential processing
     // PROBLEM: Shuffled order + OpenMP = mixed force application = fragmentation
     // SOLUTION: Use Python's deterministic NEIGHBOR→MN→FURTHER sequential order
-    printf("   📋 PYTHON-MATCHING: Using sequential triplet processing (NEIGHBOR→MN→FURTHER) like Python\n");
-    // std::shuffle(model->triplets.begin(), model->triplets.end(), model->rng);  // DISABLED - v2.8.9
+        // std::shuffle(model->triplets.begin(), model->triplets.end(), model->rng);  // DISABLED - v2.8.9
 
     // ERROR13 FIX: Add triplet deduplication and validation
     // Remove invalid triplets (self-pairs, out-of-bounds indices)
@@ -110,8 +111,7 @@ void sample_triplets(PacMapModel* model, double* data, pacmap_progress_callback_
     // This caused severe underrepresentation of local attractive forces → oval formation
     //
     // DISABLE deduplication to match Python's behavior:
-    printf("   ⚠️  DEDUPLICATION DISABLED: Keeping directional pairs to match Python reference\n");
-
+    
     // Keep this for reference - shows what deduplication was doing:
     // deduplicate_triplets(model->triplets);  // ← COMMENTED OUT - was removing 44K neighbor triplets!
 
@@ -196,8 +196,7 @@ void sample_neighbors_pair(PacMapModel* model, const std::vector<double>& normal
     // Without it: dense regions over-connected, sparse regions under-connected
     // Result: Deformed mammoth with cut legs and poor local structure
 
-    printf("   🎯 v2.8.11 FIX: Using Python-matching scaled distance neighbor selection\n");
-
+    
     // STEP 1: Calculate n_neighbors_extra (Python: n_neighbors + 50)
     int n_neighbors_extra = std::min(model->n_neighbors + 50, model->n_samples - 1);
 
@@ -347,9 +346,7 @@ void sample_neighbors_pair(PacMapModel* model, const std::vector<double>& normal
                  "Neighbor pairs sampled using Python-matching scaled distance selection");
     }
 
-    printf("   ✅ v2.8.11 COMPLETE: Scaled distance neighbor selection matches Python exactly\n");
-    printf("   📊 Local structure: Dense/sparse regions now have density-aware neighbor selection\n");
-   }
+       }
 
 void sample_MN_pair(PacMapModel* model, const std::vector<double>& normalized_data,
                    std::vector<Triplet>& mn_triplets, int n_mn, pacmap_progress_callback_internal callback) {
@@ -364,10 +361,7 @@ void sample_MN_pair(PacMapModel* model, const std::vector<double>& normalized_da
     // 🚨 CRITICAL FIX v2.8.14: IMPLEMENT PYTHON'S EXACT ALGORITHM
     // Python reference: sample_MN_pair in pacmap.py lines 146-168
     // Previous C++ implementation was COMPLETELY WRONG!
-    printf("   🚨 CRITICAL FIX v2.8.14: Implementing Python's EXACT mid-near sampling algorithm\n");
-    printf("      ❌ OLD: Dynamic reserve + global deduplication + wrong rejection logic\n");
-    printf("      ✅ NEW: Fixed array + iterative rejection + NO deduplication\n");
-
+    
     // Calculate per-point target exactly like Python
     int n_MN_per_point = n_mn / model->n_samples;
 
@@ -457,12 +451,7 @@ void sample_MN_pair(PacMapModel* model, const std::vector<double>& normalized_da
         callback("Sampling Mid-Near Pairs", model->n_samples, model->n_samples, 100.0f, msg);
     }
 
-    printf("   ✅ CRITICAL FIX COMPLETE v2.8.14: Mid-near sampling now matches Python EXACTLY\n");
-    printf("      🎯 Fixed array size: (%d × %d, 2) like Python\n", model->n_samples, n_MN_per_point);
-    printf("      🎯 Iterative rejection: Uses current iteration pairs only\n");
-    printf("      🎯 No deduplication: Allows duplicate pairs like Python\n");
-    printf("      🎯 2nd-closest selection: Discards closest, picks 2nd closest\n");
-    }
+        }
 
 void sample_FP_pair(PacMapModel* model, const std::vector<double>& normalized_data,
                    const std::vector<Triplet>& neighbor_triplets,
@@ -478,10 +467,7 @@ void sample_FP_pair(PacMapModel* model, const std::vector<double>& normalized_da
     // CRITICAL FIX v2.8.15: IMPLEMENT PYTHON'S EXACT FAR PAIR SAMPLING
     // Python reference: sample_FP in pacmap.py lines 37-56
     // Previous C++ implementation had 4 CRITICAL discrepancies from Python!
-    printf("   CRITICAL FIX v2.8.15: Implementing Python's EXACT far pair sampling algorithm\n");
-    printf("      OLD: Thread-local seeding + global deduplication + 90%% early exit + bidirectional neighbor sets\n");
-    printf("      NEW: Per-point seeding + NO deduplication + full sampling + unidirectional neighbor sets\n");
-
+    
     // Calculate per-point target exactly like Python
     int n_FP_per_point = n_fp / model->n_samples;
 
@@ -530,9 +516,7 @@ void sample_FP_pair(PacMapModel* model, const std::vector<double>& normalized_da
 
         // SAFETY WARNING: If we couldn't find enough unique candidates
         if (found < n_FP_per_point) {
-            printf("   WARNING: Point %d could only find %d/%d far pairs (available candidates: %d)\n",
-                   i, found, n_FP_per_point, model->n_samples - 1 - static_cast<int>(neighbor_sets[i].size()));
-        }
+                    }
 
         // Progress reporting
         if (callback && ((i + 1) % report_interval == 0 || (i + 1) == model->n_samples)) {
@@ -548,12 +532,7 @@ void sample_FP_pair(PacMapModel* model, const std::vector<double>& normalized_da
         callback("Sampling Far Pairs", model->n_samples, model->n_samples, 100.0f, msg);
     }
 
-    printf("   CRITICAL FIX COMPLETE v2.8.15: Far pair sampling now matches Python EXACTLY\n");
-    printf("      Per-point seeding: RNG seeded with point index (deterministic like Python)\n");
-    printf("      No deduplication: Allows duplicate pairs like Python\n");
-    printf("      Full sampling: No early exit, continues until target reached\n");
-    printf("      Unidirectional exclusion: Only i->j neighbor relationships excluded\n");
-    }
+        }
 
 void distance_based_sampling(PacMapModel* model, const std::vector<double>& data,
                            int oversample_factor, int target_pairs, float min_dist, float max_dist,
@@ -620,7 +599,7 @@ std::vector<float> compute_distance_percentiles(const std::vector<float>& data, 
 
 std::unique_ptr<hnswlib::HierarchicalNSW<float>> create_hnsw_index(
     const double* data, int n_samples, int n_features, PacMapMetric metric,
-    int M, int ef_construction, pacmap_progress_callback_internal callback) {
+    int M, int ef_construction, int ef_search, int random_seed, pacmap_progress_callback_internal callback) {
 
     if (callback) {
         callback("Building HNSW Index", 0, n_samples, 0.0f, "Initializing HNSW structure");
@@ -646,7 +625,8 @@ std::unique_ptr<hnswlib::HierarchicalNSW<float>> create_hnsw_index(
             break;
     }
 
-    auto index = std::make_unique<hnswlib::HierarchicalNSW<float>>(space, n_samples, M, ef_construction);
+    auto index = std::make_unique<hnswlib::HierarchicalNSW<float>>(space, n_samples, M, ef_construction, random_seed);  // Use user-provided random seed
+    index->setEf(ef_search);  // Set query-time ef parameter to match API specification
 
     // Add data points to index with progress reporting
     // Use parallel insertion for large datasets (>5000 points) - HNSW is thread-safe
@@ -777,17 +757,11 @@ void validate_triplet_quality(const std::vector<Triplet>& triplets,
     // ⚠️ Check for potential issues
     if (self_pairs > 0) {
         char warning_msg[512];
-        snprintf(warning_msg, sizeof(warning_msg), "⚠️ Found %d self-pairs (should be 0)", self_pairs);
-        if (callback) callback("WARNING", 0, 0, 0.0f, warning_msg);
-    }
+            }
 
     if (anchor_coverage < 50.0f || neighbor_coverage < 50.0f) {
         char coverage_warning[512];
-        snprintf(coverage_warning, sizeof(coverage_warning),
-                "⚠️ Low coverage: anchors=%.1f%%, neighbors=%.1f%% (expected >50%%)",
-                anchor_coverage, neighbor_coverage);
-        if (callback) callback("WARNING", 0, 0, 0.0f, coverage_warning);
-    }
+            }
 }
 
 void analyze_triplet_distance_distributions(const std::vector<Triplet>& triplets,
@@ -836,12 +810,7 @@ void analyze_triplet_distance_distributions(const std::vector<Triplet>& triplets
         }
 
         char distance_msg[1024];
-        snprintf(distance_msg, sizeof(distance_msg),
-                "📊 DISTANCE DISTRIBUTION %s: μ=%.4f, σ=%.4f, range=[%.4f, %.4f] (n=%zu)",
-                type_name, mean_dist, std_dev, min_dist, max_dist, distances.size());
-
-        if (callback) callback("Distance Analysis", 0, 0, 0.0f, distance_msg);
-    }
+            }
 
     // 🎯 Validate distance ordering: expect NEIGHBOR < MID_NEAR < FURTHER
     if (distances_by_type[NEIGHBOR].size() > 0 && distances_by_type[MID_NEAR].size() > 0 && distances_by_type[FURTHER].size() > 0) {
@@ -851,17 +820,7 @@ void analyze_triplet_distance_distributions(const std::vector<Triplet>& triplets
 
         if (n_mean >= mn_mean || mn_mean >= f_mean) {
             char ordering_warning[512];
-            snprintf(ordering_warning, sizeof(ordering_warning),
-                    "⚠️ DISTANCE ORDER WARNING: Expected N < MN < F, got N=%.4f ≥ MN=%.4f ≥ F=%.4f",
-                    n_mean, mn_mean, f_mean);
-            if (callback) callback("WARNING", 0, 0, 0.0f, ordering_warning);
-        } else {
-            char ordering_ok[512];
-            snprintf(ordering_ok, sizeof(ordering_ok),
-                    "✅ Distance ordering correct: N=%.4f < MN=%.4f < F=%.4f",
-                    n_mean, mn_mean, f_mean);
-            if (callback) callback("Distance Analysis", 0, 0, 0.0f, ordering_ok);
-        }
+                    }
     }
 }
 
@@ -898,14 +857,7 @@ void check_triplet_coverage(const std::vector<Triplet>& triplets, int n_samples,
     float neighbor_coverage_pct = (float)neighbors_with_triplets / n_samples * 100.0f;
 
     char coverage_msg[1024];
-    snprintf(coverage_msg, sizeof(coverage_msg),
-            "🎯 TRIPLET COVERAGE v2.8.10: Points as anchors=%.1f%% (%d/%d), neighbors=%.1f%% (%d/%d) | Avg frequency: anchor=%.2f, neighbor=%.2f",
-            anchor_coverage_pct, anchors_with_triplets, n_samples,
-            neighbor_coverage_pct, neighbors_with_triplets, n_samples,
-            avg_anchor_freq, avg_neighbor_freq);
-
-    if (callback) callback("Coverage Analysis", 0, 0, 0.0f, coverage_msg);
-
+    
     // Check by type
     for (auto const& [type, coverage] : type_coverage) {
         const char* type_name = "";
@@ -925,9 +877,7 @@ void check_triplet_coverage(const std::vector<Triplet>& triplets, int n_samples,
     // Warn about poor coverage
     if (anchor_coverage_pct < 80.0f) {
         char warning[512];
-        snprintf(warning, sizeof(warning), "⚠️ Low anchor coverage: %.1f%% (recommend >80%%)", anchor_coverage_pct);
-        if (callback) callback("WARNING", 0, 0, 0.0f, warning);
-    }
+            }
 }
 
 void detect_triplet_anomalies(const std::vector<Triplet>& triplets,
@@ -962,25 +912,9 @@ void detect_triplet_anomalies(const std::vector<Triplet>& triplets,
     }
 
     char anomaly_msg[1024];
-    snprintf(anomaly_msg, sizeof(anomaly_msg),
-            "🔍 ANOMALY DETECTION v2.8.10: Duplicate pairs=%d, Highly connected points=%d (>50 connections), Max connections=%d",
-            duplicate_pairs, highly_connected_points,
-            point_triplet_count.empty() ? 0 : *std::max_element(point_triplet_count.begin(), point_triplet_count.end()));
-
-    if (callback) callback("Anomaly Detection", 0, 0, 0.0f, anomaly_msg);
-
+    
     // Check for extreme cases
     if (duplicate_pairs > triplets.size() * 0.1) {
         char warning[512];
-        snprintf(warning, sizeof(warning), "⚠️ High duplication rate: %.1f%% of triplets are duplicates",
-                (float)duplicate_pairs / triplets.size() * 100.0f);
-        if (callback) callback("WARNING", 0, 0, 0.0f, warning);
-    }
-
-    if (highly_connected_points > point_triplet_count.size() * 0.05) {
-        char warning[512];
-        snprintf(warning, sizeof(warning), "⚠️ Many highly connected points: %d (%.1f%%) have >50 connections",
-                highly_connected_points, (float)highly_connected_points / point_triplet_count.size() * 100.0f);
-        if (callback) callback("WARNING", 0, 0, 0.0f, warning);
-    }
+            }
 }

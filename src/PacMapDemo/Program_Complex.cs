@@ -680,7 +680,7 @@ namespace PacMapDemo
                 Console.WriteLine($"   - Force exact KNN: TRUE (HNSW disabled)");
                 Console.WriteLine($"   - Use quantization: FALSE (quantization disabled)");
                 Console.WriteLine($"   - Distance metric: Euclidean");
-                Console.WriteLine($"   - Random seed: 42");
+                Console.WriteLine($"   - Random randomSeed: 42");
                 Console.WriteLine($"   - Input data shape: {mnistImages.GetLength(0)} samples × {mnistImages.GetLength(1)} features");
                 Console.WriteLine();
 
@@ -694,7 +694,7 @@ namespace PacMapDemo
                                      normalization: NormalizationMode.ZScore,
                                      metric: DistanceMetric.Euclidean,
                                      hnswUseCase: HnswUseCase.HighAccuracy,
-                                     forceExactKnn: true, seed: 42, progressCallback: ProgressHandler);
+                                     forceExactKnn: true, randomSeed: 42, progressCallback: ProgressHandler);
                 var embedding = result;
 
                 stopwatch.Stop();
@@ -780,7 +780,7 @@ namespace PacMapDemo
                 var resultKNN = modelKNN.Fit(mammothData, embeddingDimension: 2, neighbors: 10,
                                             normalization: NormalizationMode.ZScore,
                                             metric: DistanceMetric.Euclidean,
-                                            forceExactKnn: true, autodetectHnswParams: true, seed: 42, progressCallback: ProgressHandler);
+                                            forceExactKnn: true, autodetectHnswParams: true, randomSeed: 42, progressCallback: ProgressHandler);
                 stopwatchKNN.Stop();
 
                 var embeddingKNN = resultKNN;
@@ -825,7 +825,7 @@ namespace PacMapDemo
                                                   normalization: NormalizationMode.ZScore,
                                                   metric: DistanceMetric.Euclidean,
                                                   hnswUseCase: HnswUseCase.Balanced,
-                                                  forceExactKnn: false, autodetectHnswParams: true, seed: 42, progressCallback: ProgressHandler);
+                                                  forceExactKnn: false, autodetectHnswParams: true, randomSeed: 42, progressCallback: ProgressHandler);
                     stopwatchHNSW.Stop();
 
                     var embeddingHNSW = resultHNSW;
@@ -924,7 +924,7 @@ namespace PacMapDemo
                                                            metric: DistanceMetric.Euclidean,
                                                            hnswUseCase: HnswUseCase.Balanced,
                                                            forceExactKnn: false, autodetectHnswParams: true,
-                                                           seed: 42, progressCallback: ProgressHandler);
+                                                           randomSeed: 42, progressCallback: ProgressHandler);
 
                     discoveryStopwatch.Stop();
                     var discoveryModelInfo = discoveryModel.ModelInfo;
@@ -1024,7 +1024,7 @@ namespace PacMapDemo
                                              metric: DistanceMetric.Euclidean,
                                              hnswUseCase: HnswUseCase.Balanced,
                                              forceExactKnn: forceKnn, autodetectHnswParams: false,
-                                             seed: 42, progressCallback: ProgressHandler);
+                                             randomSeed: 42, progressCallback: ProgressHandler);
 
                         stopwatch.Stop();
                         var embedding = result;
@@ -1080,7 +1080,7 @@ namespace PacMapDemo
                                              forceExactKnn: forceKnn,
                                              midNearRatio: midNearRatio,
                                              autodetectHnswParams: false,
-                                             seed: 42, progressCallback: ProgressHandler);
+                                             randomSeed: 42, progressCallback: ProgressHandler);
 
                         stopwatch.Stop();
                         var embedding = result;
@@ -1135,7 +1135,7 @@ namespace PacMapDemo
                                              forceExactKnn: forceKnn,
                                              farPairRatio: farPairRatio,
                                              autodetectHnswParams: false,
-                                             seed: 42, progressCallback: ProgressHandler);
+                                             randomSeed: 42, progressCallback: ProgressHandler);
 
                         stopwatch.Stop();
                         var embedding = result;
@@ -1347,7 +1347,7 @@ namespace PacMapDemo
                 Console.WriteLine();
 
                 // Sample 40K for exact KNN (deterministic GIFs, doubled from 20K)
-                var hairyMammothSample = DataLoaders.SampleRandomPoints(hairyMammothFull, 40000, seed: 42);
+                var hairyMammothSample = DataLoaders.SampleRandomPoints(hairyMammothFull, 40000, randomSeed: 42);
                 Console.WriteLine();
 
                 // Practical parameter arrays with bigger values (avoid small values that cause Rust panics)
@@ -1388,7 +1388,7 @@ namespace PacMapDemo
                                          metric: DistanceMetric.Euclidean,
                                          forceExactKnn: true,
                                          midNearRatio: midNearRatio,
-                                         seed: 42, progressCallback: ProgressHandler);
+                                         randomSeed: 42, progressCallback: ProgressHandler);
 
                     stopwatch.Stop();
                     var embedding = result;
@@ -1422,7 +1422,7 @@ namespace PacMapDemo
                                          metric: DistanceMetric.Euclidean,
                                          forceExactKnn: true,
                                          farPairRatio: farPairRatio,
-                                         seed: 42, progressCallback: ProgressHandler);
+                                         randomSeed: 42, progressCallback: ProgressHandler);
 
                     stopwatch.Stop();
                     var embedding = result;
@@ -1457,7 +1457,7 @@ namespace PacMapDemo
                                          normalization: NormalizationMode.ZScore,
                                          metric: DistanceMetric.Euclidean,
                                          forceExactKnn: true,
-                                         seed: 42, progressCallback: ProgressHandler);
+                                         randomSeed: 42, progressCallback: ProgressHandler);
 
                     stopwatch.Stop();
                     var embedding = result;

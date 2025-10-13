@@ -108,7 +108,7 @@ namespace PacMapDemo
 
                 // Test transform with new data
                 var newData = new double[10, data.GetLength(1)];
-                var random = new Random(123);
+                var random = new Random(42);
                 for (int i = 0; i < 10; i++)
                     for (int j = 0; j < data.GetLength(1); j++)
                         newData[i, j] = random.NextDouble();

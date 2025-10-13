@@ -11,7 +11,7 @@ typedef void (*pacmap_progress_callback_internal)(const char* phase, int current
 extern std::tuple<float, float, float> get_weights(int current_iter, int total_iters);
 
 // 🔬 PHASE 4: Enhanced phase transition debugging with phase information
-extern std::tuple<float, float, float, const char*> get_weights_with_phase_info(int current_iter, int total_iters);
+extern std::tuple<float, float, float, std::string> get_weights_with_phase_info(int current_iter, int total_iters);
 
 // Double precision gradient computation for numerical stability (Python matching)
 extern void compute_gradients(const std::vector<double>& embedding, const std::vector<Triplet>& triplets,
@@ -49,8 +49,11 @@ extern double get_gradient_computation_time();
 extern size_t get_gradient_memory_usage(int n_samples, int n_components);
 
 // Double precision debug utilities
-extern void print_gradient_stats(const std::vector<double>& gradients);
-extern void validate_gradients(const std::vector<double>& gradients, const std::vector<double>& embedding);
+extern void print_gradient_stats(int processed_neighbors, int processed_midnear, int processed_further,
+                                int skipped_nan, int skipped_zero_distance, int skipped_triplets,
+                                const std::string& current_phase_name, int current_iter, int total_iters,
+                                float w_n, float w_mn, float w_f);
+extern bool validate_gradients(const std::vector<double>& gradients, const std::string& context);
 
 // Double precision advanced gradient features
 extern void compute_second_order_info(const std::vector<double>& embedding, const std::vector<Triplet>& triplets,

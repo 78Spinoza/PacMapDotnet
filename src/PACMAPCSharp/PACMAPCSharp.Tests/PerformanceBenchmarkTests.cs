@@ -235,7 +235,7 @@ namespace PACMAPCSharp.Tests
         #region Helper Methods
 
         private static (double timeSeconds, long memoryBytes) BenchmarkFitOperation(
-            Func<float[,]> operation, string operationName)
+            Func<double[,]> operation, string operationName)
         {
             // Force GC before benchmark
             GC.Collect();
@@ -261,9 +261,9 @@ namespace PACMAPCSharp.Tests
             return (timeSeconds, memoryUsed);
         }
 
-        private static float[,] GenerateLargeTestData(int nSamples, int nFeatures, int seed = 42)
+        private static double[,] GenerateLargeTestData(int nSamples, int nFeatures, int seed = 42)
         {
-            var data = new float[nSamples, nFeatures];
+            var data = new double[nSamples, nFeatures];
             var random = new Random(seed);
 
             // Generate more structured data with multiple clusters for realistic benchmark
@@ -282,17 +282,17 @@ namespace PACMAPCSharp.Tests
                                          Math.Sin(2.0 * Math.PI * u2);
 
                     // Add cluster structure
-                    data[i, j] = (float)(cluster * 2.0 + randStdNormal);
+                    data[i, j] = cluster * 2.0 + randStdNormal;
                 }
             }
 
             return data;
         }
 
-        private static float[,] ExtractRow(float[,] data, int rowIndex)
+        private static double[,] ExtractRow(double[,] data, int rowIndex)
         {
             int cols = data.GetLength(1);
-            var row = new float[1, cols];
+            var row = new double[1, cols];
 
             for (int j = 0; j < cols; j++)
             {
