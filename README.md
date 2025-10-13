@@ -4,15 +4,15 @@
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey)](https://github.com/78Spinoza/PacMapDotnet)
 [![C#](https://img.shields.io/badge/C%23-8.0+-blue)](https://github.com/78Spinoza/PacMapDotnet)
-[![Version](https://img.shields.io/badge/version-2.4.9--TEST-orange)](https://github.com/78Spinoza/PacMapDotnet)
+[![Version](https://img.shields.io/badge/version-2.8.16--WORKING-green)](https://github.com/78Spinoza/PacMapDotnet)
 
 **Technology invented 2021 available as production ready code!**
 
-## 🎉 **Project Status: Testing Phase**
+## 🎉 **Project Status: Working Solution Awaiting Optimization and Validation**
 
 This is a **high-performance** implementation of **PaCMAP** (Pairwise Controlled Manifold Approximation and Projection) in native C++ with C#/.NET bindings, designed for **production use cases**. It includes features like model save/load, faster approximate fitting using **HNSW (Hierarchical Navigable Small World)** for efficient nearest neighbor search, advanced quantization, and optimizations for **large datasets**.
 
-**⚠️ Testing Phase Notice**: We are currently in testing phase. Only Euclidean distance is partly working. Validation on the new implementation is on going.  Additional distance metrics and advanced features are under development.
+**✅ Working Solution**: We have a complete, functional implementation with Euclidean distance fully working. The solution includes comprehensive demo applications, parameter exploration with animations, and all core features implemented. Currently undergoing final optimization and validation testing before full production release.
 
 
 ---
@@ -116,6 +116,9 @@ Even UMAP, a later version, is very **sensitive** to hyperparameters as you can 
 
 ![Animation Examples](docs/Other/anim_min_dist_param.gif)
 *Hyperparameter exploration through animation - minimum distance variation*
+
+![Neighbor Experiments Animation](docs/Other/neighbor_experiments_animation_optimized.gif)
+*PaCMAP neighbor experiments animation showing the effect of n_neighbors parameter from 5 to 60 (300ms per frame)*
 
 
 
