@@ -219,15 +219,26 @@ void optimize_embedding(PacMapModel* model, double* embedding_out, pacmap_progre
 }
 
 void initialize_random_embedding_double(std::vector<double>& embedding, int n_samples, int n_components, std::mt19937& rng, float std_dev) {
-    // Python hybrid approach: Use double precision internally, initialize like Python
-    // Python: embedding = np.random.normal(0, 1e-4, (n_samples, n_components))
-    // But with double precision for numerical stability
+    // Legacy function - kept for compatibility but now uses NumPy RNG through model
+    // This function should not be used - prefer the version that takes NumpyRandom
     std::normal_distribution<double> normal_dist(0.0, static_cast<double>(std_dev));
 
     for (int i = 0; i < n_samples; ++i) {
         for (int d = 0; d < n_components; ++d) {
             size_t idx = static_cast<size_t>(i) * n_components + d;
             embedding[idx] = normal_dist(rng);
+        }
+    }
+}
+
+void initialize_random_embedding_double_numpy(std::vector<double>& embedding, int n_samples, int n_components, NumpyRandom& numpy_rng, float std_dev) {
+    // Python-identical initialization using NumPy-compatible RNG
+    // Python: embedding = np.random.normal(0, 1e-4, (n_samples, n_components))
+
+    for (int i = 0; i < n_samples; ++i) {
+        for (int d = 0; d < n_components; ++d) {
+            size_t idx = static_cast<size_t>(i) * n_components + d;
+            embedding[idx] = numpy_rng.normal(0.0, static_cast<double>(std_dev));
         }
     }
 }

@@ -160,8 +160,8 @@ struct PacMapModel {
     std::vector<uint8_t> pq_codes;
     std::vector<float> pq_centroids;
 
-    // RNG for deterministic behavior (review requirement)
-    std::mt19937 rng;
+    // NumPy-compatible RNG for identical random sequences
+    std::unique_ptr<NumpyRandom> numpy_rng;
 
     // Error handling (review addition)
     int last_error_code = 0;
@@ -176,7 +176,10 @@ struct PacMapModel {
     bool force_exact_knn = false; // Override flag to force brute-force k-NN
 
     // Constructor
-    PacMapModel() = default;
+    PacMapModel() {
+        // Initialize NumPy-compatible RNG
+        numpy_rng = std::make_unique<NumpyRandom>(random_seed >= 0 ? random_seed : 0);
+    }
 
     // Destructor
     ~PacMapModel() = default;

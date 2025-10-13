@@ -40,12 +40,20 @@ namespace transform_utils {
                     point[j] = new_data[idx];
                 }
 
-                // Normalize point using same preprocessing as training
+                // Normalize point using SAME preprocessing as training (min-max + mean centering)
+                // 🔧 CRITICAL FIX: Apply exact same min-max scaling + mean centering as fit process
+                // Python reference (pacmap.py lines 371-375):
+                //   X -= xmin          # Min offset
+                //   X /= xmax          # Scale to [0,1]
+                //   X -= xmean         # Mean centering AFTER scaling
+                //
+                // Previous transform used wrong z-score normalization, causing fit/transform inconsistency
                 std::vector<double> normalized_point = point;
-                if (!model->feature_means.empty() && !model->feature_stds.empty()) {
-                    for (int j = 0; j < n_dim; j++) {
-                        normalized_point[j] = (point[j] - model->feature_means[j]) / (model->feature_stds[j] + 1e-8f);
-                    }
+                for (int j = 0; j < n_dim; j++) {
+                    // Step 1: Min-max scaling to [0,1] range (same as fitting)
+                    normalized_point[j] = (point[j] - model->xmin) / model->xmax;
+                    // Step 2: Apply mean centering (same as fitting)
+                    normalized_point[j] -= model->feature_means[j];
                 }
 
                 // Find k-nearest neighbors in original space (HNSW or KNN direct mode)

@@ -302,6 +302,9 @@ namespace PacMapDemo
                 double xPadding = xRange * 0.1;
                 double yPadding = yRange * 0.1;
 
+                // Add extra space on the right for legend (+20 units)
+                double legendPadding = 20.0;
+
                 if (autoFitAxes)
                 {
                     // Auto-fit axes to data with padding
@@ -309,9 +312,9 @@ namespace PacMapDemo
                         Position = AxisPosition.Bottom,
                         Title = "X Coordinate (PacMAP Dimension 1)",
                         Minimum = minX - xPadding,
-                        Maximum = maxX + xPadding,
-                        MajorStep = CalculateNiceStep(xRange + 2 * xPadding),
-                        MinorStep = CalculateNiceStep(xRange + 2 * xPadding) / 2
+                        Maximum = maxX + xPadding + legendPadding,
+                        MajorStep = CalculateNiceStep(xRange + 2 * xPadding + legendPadding),
+                        MinorStep = CalculateNiceStep(xRange + 2 * xPadding + legendPadding) / 2
                     });
                     plotModel.Axes.Add(new LinearAxis {
                         Position = AxisPosition.Left,
@@ -322,7 +325,7 @@ namespace PacMapDemo
                         MinorStep = CalculateNiceStep(yRange + 2 * yPadding) / 2
                     });
 
-                    Console.WriteLine($"   Auto-fitted axes: X=[{minX - xPadding:F2}, {maxX + xPadding:F2}], Y=[{minY - yPadding:F2}, {maxY + yPadding:F2}]");
+                    Console.WriteLine($"   Auto-fitted axes: X=[{minX - xPadding:F2}, {maxX + xPadding + legendPadding:F2}], Y=[{minY - yPadding:F2}, {maxY + yPadding:F2}]");
                 }
                 else
                 {
@@ -331,7 +334,7 @@ namespace PacMapDemo
                         Position = AxisPosition.Bottom,
                         Title = "X Coordinate (PacMAP Dimension 1)",
                         Minimum = -25,
-                        Maximum = 40,
+                        Maximum = 40 + legendPadding,  // Add space for legend on the right
                         MajorStep = 10,
                         MinorStep = 5
                     });
@@ -396,7 +399,7 @@ namespace PacMapDemo
                     }
                 }
 
-                // Export - Smaller size like mammoth_original_3d_YZ_FrontView
+                // Export
                 var exporter = new OxyPlot.WindowsForms.PngExporter { Width = 800, Height = 600, Resolution = 300 };
                 using (var stream = File.Create(outputPath))
                 {

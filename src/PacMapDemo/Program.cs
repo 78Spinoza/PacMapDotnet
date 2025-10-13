@@ -42,21 +42,21 @@ namespace PacMapDemo
 
                 // Run core demonstrations
                 Run10kMammothDemo(data);
-                //CreateFlagship1MHairyMammoth();
+                // CreateFlagship1MHairyMammoth(); // DISABLED - testing exact KNN only
 
                 OpenResultsFolder();
 
                 // Run transform consistency tests
-                RunTransformConsistencyTests(data, labels);
+                // RunTransformConsistencyTests(data, labels); // DISABLED - testing exact KNN only
 
                 // Run hyperparameter experiments
-                RunHyperparameterExperiments(data, labels);
+                RunHyperparameterExperiments(data, labels); // DISABLED - testing exact KNN only
 
                 // Run advanced parameter tuning
-                DemoAdvancedParameterTuning(data, labels);
+                // DemoAdvancedParameterTuning(data, labels); // DISABLED - testing exact KNN only
 
                 // Run MNIST demo
-                RunMnistDemo();
+                // RunMnistDemo(); // DISABLED - testing exact KNN only
 
                 Console.WriteLine("🎉 ALL DEMONSTRATIONS AND EXPERIMENTS COMPLETED!");
                 Console.WriteLine($"📁 Check {ResultsDir} folder for visualizations.");
@@ -251,11 +251,11 @@ namespace PacMapDemo
 
 
         /// <summary>
-        /// Runs a demo on a 10K mammoth dataset using HNSW.
+        /// Runs a demo on a 10K mammoth dataset using Exact KNN.
         /// </summary>
         private static void Run10kMammothDemo(double[,] data)
         {
-            Console.WriteLine("🦣 Running 10K Mammoth HNSW Demo...");
+            Console.WriteLine("🦣 Running 10K Mammoth Exact KNN Demo...");
             var pacmap = new PacMapModel();
             var stopwatch = Stopwatch.StartNew();
             var embedding = pacmap.Fit(
@@ -266,8 +266,8 @@ namespace PacMapDemo
                 fpRatio: 2.0f,
                 learningRate: 1.0f,
                 numIters: (100, 100, 250),
-                forceExactKnn: false,
-                autoHNSWParam: true,
+                forceExactKnn: true,
+                autoHNSWParam: false,
                 randomSeed: 42,
                 progressCallback: UnifiedProgressCallbackLogger
             );

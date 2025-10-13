@@ -35,18 +35,24 @@ void sample_triplets(PacMapModel* model, double* data, pacmap_progress_callback_
     // Save normalized data for transform - NOW DOUBLE PRECISION
     model->training_data = normalized_data;
 
-    // Build HNSW index for efficient neighbor search
-    model->original_space_index = create_hnsw_index(normalized_data.data(),
-                                                    model->n_samples,
-                                                    model->n_features,
-                                                    model->metric,
-                                                    model->hnsw_m,
-                                                    model->hnsw_ef_construction,
-                                                    callback);
+    // Build HNSW index only if not using exact K-NN
+    if (!model->force_exact_knn) {
+        model->original_space_index = create_hnsw_index(normalized_data.data(),
+                                                        model->n_samples,
+                                                        model->n_features,
+                                                        model->metric,
+                                                        model->hnsw_m,
+                                                        model->hnsw_ef_construction,
+                                                        callback);
 
-    if (!model->original_space_index) {
-        if (callback) callback("Error", 0, 100, 0.0f, "Failed to create HNSW index");
-        return;
+        if (!model->original_space_index) {
+            if (callback) callback("Error", 0, 100, 0.0f, "Failed to create HNSW index");
+            return;
+        }
+    } else {
+        if (callback) {
+            callback("Exact KNN Mode", 100, 100, 100.0f, "Skipping HNSW index construction - using exact K-NN");
+        }
     }
 
     // Initialize RNG for deterministic behavior
@@ -86,11 +92,11 @@ void sample_triplets(PacMapModel* model, double* data, pacmap_progress_callback_
     model->triplets.insert(model->triplets.end(), mn_triplets.begin(), mn_triplets.end());
     model->triplets.insert(model->triplets.end(), fp_triplets.begin(), fp_triplets.end());
 
-    // OVAL FORMATION FIX: Shuffle triplets to break systematic type clustering
-    // PROBLEM: Grouped triplets (NEIGHBOR→MN→FURTHER) + OpenMP = perfect symmetry = ovals
-    // SOLUTION: Randomize triplet order so each thread processes mixed attractive/repulsive forces
-    printf("   🔀 SHUFFLING TRIPLETS: Breaking systematic type clustering to prevent oval formation\n");
-    std::shuffle(model->triplets.begin(), model->triplets.end(), model->rng);
+    // ✅ v2.8.9 FIX: DISABLED shuffling to match Python sequential processing
+    // PROBLEM: Shuffled order + OpenMP = mixed force application = fragmentation
+    // SOLUTION: Use Python's deterministic NEIGHBOR→MN→FURTHER sequential order
+    printf("   📋 PYTHON-MATCHING: Using sequential triplet processing (NEIGHBOR→MN→FURTHER) like Python\n");
+    // std::shuffle(model->triplets.begin(), model->triplets.end(), model->rng);  // DISABLED - v2.8.9
 
     // ERROR13 FIX: Add triplet deduplication and validation
     // Remove invalid triplets (self-pairs, out-of-bounds indices)
@@ -354,117 +360,115 @@ void sample_MN_pair(PacMapModel* model, const std::vector<double>& normalized_da
 
     if (callback) {
         callback("Sampling Mid-Near Pairs", 0, model->n_samples, 0.0f,
-                 "Finding mid-range neighbors for structure preservation");
+                 "Using Python 6-random sampling for global structure preservation");
     }
 
-    // ERROR11-FIX-DETERMINISTIC: Improved mid-near sampling with guaranteed pairs per point
-    // Supports both exact KNN (current) and HNSW (future speed optimization)
-    int extended_k = 3 * model->n_neighbors;  // e.g., 30 for n_neighbors=10
-    // ERROR13 FIX: Reserve correct amount - n_mn is already the total target count
+    // ✅ PYTHON MATCHING IMPLEMENTATION: 6-Random "Second-Closest" Sampling
+    // Replaces extended k-NN with Python's global random sampling strategy
+    // Python reference: sample_MN_pair in pacmap.py lines 146-168
+    printf("   🎯 PYTHON-MATCHING: Using 6-random mid-near sampling (2nd-closest of 6 random candidates)\n");
+
     mn_triplets.reserve(n_mn);
     std::unordered_set<long long> used_pairs;
-    int pairs_found = 0;
+    std::atomic<int> pairs_found = 0;
+    int report_interval = std::max(1, model->n_samples / 10);
 
-    // ERROR11-FIX-DETERMINISTIC: Initialize per-thread RNGs for deterministic parallel execution
-    std::vector<std::mt19937> rngs;
-    int max_threads = omp_get_max_threads();
+    // Calculate per-point target: n_mn is total, divide by n_samples
+    int per_point_target = std::max(1, n_mn / model->n_samples);
+
     #pragma omp parallel
     {
-        #pragma omp single
-        {
-            rngs.resize(max_threads);
-            unsigned int seed = model->random_seed >= 0 ? model->random_seed : 42;
-            for (int t = 0; t < max_threads; ++t) {
-                rngs[t].seed(seed + t);  // Unique seed per thread for deterministic results
+        // Thread-safe RNG with deterministic seeding
+        std::mt19937 rng = get_seeded_rng(model->random_seed + 2000 + omp_get_thread_num());
+        std::uniform_int_distribution<int> dist(0, model->n_samples - 1);
+
+        #pragma omp for
+        for (int i = 0; i < model->n_samples; ++i) {
+            // For each mid-near pair needed for this point
+            for (int pair_idx = 0; pair_idx < per_point_target; ++pair_idx) {
+                // ✅ STEP 1: Sample 6 random candidates globally (Python behavior)
+                std::vector<int> candidates;
+                candidates.reserve(6);
+
+                // Build exclusion set: self + existing pairs for this point
+                std::unordered_set<int> exclude_set = {i};
+
+                // Add existing MN pairs for this point to exclusion (Python's reject_ind parameter)
+                #pragma omp critical
+                {
+                    for (const auto& triplet : mn_triplets) {
+                        if (triplet.anchor == i) {
+                            exclude_set.insert(triplet.neighbor);
+                        }
+                    }
+                }
+
+                // Sample 6 unique random candidates (matching Python's sample_FP function)
+                while (candidates.size() < 6 && static_cast<int>(candidates.size()) < model->n_samples - 1) {
+                    int candidate = dist(rng);
+                    if (exclude_set.find(candidate) == exclude_set.end()) {
+                        candidates.push_back(candidate);
+                        exclude_set.insert(candidate);  // Ensure uniqueness within this batch
+                    }
+                }
+
+                // Skip if we couldn't find enough candidates (edge case for small datasets)
+                if (candidates.size() < 2) continue;
+
+                // ✅ STEP 2: Calculate distances to all 6 candidates (Python behavior)
+                std::vector<std::pair<double, int>> candidate_distances;
+                candidate_distances.reserve(candidates.size());
+
+                const double* point_i = normalized_data.data() + static_cast<size_t>(i) * model->n_features;
+
+                for (int candidate : candidates) {
+                    const double* point_j = normalized_data.data() + static_cast<size_t>(candidate) * model->n_features;
+                    double distance = distance_metrics::compute_distance(
+                        point_i, point_j, model->n_features, model->metric);
+                    candidate_distances.emplace_back(distance, candidate);
+                }
+
+                // ✅ STEP 3: Find closest candidate and DISCARD it (Python behavior)
+                std::sort(candidate_distances.begin(), candidate_distances.end());
+                if (candidate_distances.size() < 2) continue;  // Need at least 2 to pick 2nd closest
+
+                // ✅ STEP 4: Pick 2nd closest from remaining candidates (Python behavior)
+                int selected_candidate = candidate_distances[1].second;  // 2nd closest (index 1)
+
+                // ✅ STEP 5: Add to mid-near triplets with deduplication
+                long long pair_key = ((long long)std::min(i, selected_candidate) << 32) |
+                                   std::max(i, selected_candidate);
+
+                #pragma omp critical
+                {
+                    if (used_pairs.find(pair_key) == used_pairs.end()) {
+                        mn_triplets.emplace_back(Triplet{i, selected_candidate, MID_NEAR});
+                        used_pairs.insert(pair_key);
+                        pairs_found++;
+                    }
+                }
             }
-        }
-    }
 
-    #pragma omp parallel for reduction(+:pairs_found)
-    for (int i = 0; i < model->n_samples; ++i) {
-        std::vector<std::pair<float, int>> neighbors;
-
-        if (model->force_exact_knn) {
-            // Exact KNN case
-            distance_metrics::find_knn_exact(
-                normalized_data.data() + static_cast<size_t>(i) * model->n_features,
-                normalized_data.data(),
-                model->n_samples,
-                model->n_features,
-                model->metric,
-                extended_k,
-                neighbors,
-                i  // query_index to skip self
-            );
-        } else {
-            // HNSW case - convert double to float for HNSW interface
-            std::vector<float> query_point_float(model->n_features);
-            for (int d = 0; d < model->n_features; ++d) {
-                query_point_float[d] = static_cast<float>(normalized_data[static_cast<size_t>(i) * model->n_features + d]);
-            }
-            auto knn_results = model->original_space_index->searchKnn(
-                query_point_float.data(),
-                extended_k);
-
-            // Convert priority_queue to vector and reverse to get sorted order
-            while (!knn_results.empty()) {
-                auto pair = knn_results.top();
-                knn_results.pop();
-                // Convert squared distance to actual distance if L2 metric
-                float distance = (model->metric == PACMAP_METRIC_EUCLIDEAN) ?
-                               std::sqrt(std::max(0.0f, pair.first)) : pair.first;
-                neighbors.emplace_back(distance, static_cast<int>(pair.second));
-            }
-            std::reverse(neighbors.begin(), neighbors.end());
-        }
-
-        size_t actual_extended_k = neighbors.size();
-        int current_extended_k = extended_k;
-        if (actual_extended_k < static_cast<size_t>(extended_k)) {
-            // Note: Sampling adjustment debug output disabled for clean interface
-            current_extended_k = static_cast<int>(actual_extended_k);  // Adjust dynamically
-        }
-
-        // Collect mid-near candidates (beyond immediate neighbors)
-        std::vector<int> mn_candidates;
-        for (int j = model->n_neighbors; j < current_extended_k; ++j) {
-            if (j < static_cast<int>(neighbors.size())) {
-                mn_candidates.push_back(neighbors[j].second);
-            }
-        }
-
-        if (mn_candidates.empty()) {
-            // Note: Skip points without mid-near candidates - debug output disabled for clean interface
-            continue;  // Skip if no mid-near available
-        }
-
-        // ERROR11-FIX-DETERMINISTIC: Ensure at least n_mn pairs, cycle through candidates if needed
-        // ERROR13 FIX: n_mn is the TOTAL target, divide by n_samples for per-point target
-        int per_point_target = std::max(1, n_mn / model->n_samples);
-        int num_to_select = std::min(per_point_target, static_cast<int>(mn_candidates.size()));
-        int thread_id = omp_get_thread_num();
-        std::shuffle(mn_candidates.begin(), mn_candidates.end(), rngs[thread_id]);
-        std::sort(mn_candidates.begin(), mn_candidates.end()); // ERROR11-FIX-DETERMINISTIC: Enforce deterministic order
-
-        for (int s = 0; s < num_to_select; ++s) {
-            int j = mn_candidates[s % mn_candidates.size()];  // Cycle if fewer than n_mn
-            long long pair_key = ((long long)std::min(i, j) << 32) | std::max(i, j);
-            #pragma omp critical
-            {
-                if (used_pairs.find(pair_key) == used_pairs.end()) {
-                    mn_triplets.emplace_back(Triplet{i, j, MID_NEAR});
-                    used_pairs.insert(pair_key);
-                    pairs_found++;
+            // Progress reporting
+            int current = (i + 1);
+            if (callback && (current % report_interval == 0 || current == model->n_samples)) {
+                float percent = (float)current / model->n_samples * 100.0f;
+                #pragma omp critical
+                {
+                    callback("Sampling Mid-Near Pairs", current, model->n_samples, percent, nullptr);
                 }
             }
         }
     }
 
     if (callback) {
-        callback("Sampling Mid-Near Pairs", model->n_samples, model->n_samples, 100.0f,
-                 ("Found " + std::to_string(pairs_found) + " mid-near pairs").c_str());
+        char msg[256];
+        snprintf(msg, sizeof(msg), "Found %d mid-near pairs using Python 6-random sampling",
+                 static_cast<int>(mn_triplets.size()));
+        callback("Sampling Mid-Near Pairs", model->n_samples, model->n_samples, 100.0f, msg);
     }
 
+    printf("   ✅ PYTHON-MATCHING COMPLETE: Mid-near pairs now connect distant structures globally\n");
     }
 
 void sample_FP_pair(PacMapModel* model, const std::vector<double>& normalized_data,
