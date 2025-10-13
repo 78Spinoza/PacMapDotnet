@@ -93,6 +93,97 @@ namespace distance_metrics {
         }
     }
 
+    // Double precision distance functions
+    double euclidean_distance(const double* a, const double* b, int dim) {
+        double dist = 0.0;
+        for (int i = 0; i < dim; ++i) {
+            double diff = a[i] - b[i];
+            dist += diff * diff;
+        }
+        return std::sqrt(dist);
+    }
+
+    double cosine_distance(const double* a, const double* b, int dim) {
+        double dot = 0.0, norm_a = 0.0, norm_b = 0.0;
+
+        for (int i = 0; i < dim; ++i) {
+            dot += a[i] * b[i];
+            norm_a += a[i] * a[i];
+            norm_b += b[i] * b[i];
+        }
+
+        norm_a = std::sqrt(norm_a);
+        norm_b = std::sqrt(norm_b);
+
+        if (norm_a < 1e-10 || norm_b < 1e-10) return 1.0;
+
+        double cosine_sim = dot / (norm_a * norm_b);
+        cosine_sim = std::max(-1.0, std::min(1.0, cosine_sim));
+
+        return 1.0 - cosine_sim;
+    }
+
+    double manhattan_distance(const double* a, const double* b, int dim) {
+        double dist = 0.0;
+        for (int i = 0; i < dim; ++i) {
+            dist += std::abs(a[i] - b[i]);
+        }
+        return dist;
+    }
+
+    double correlation_distance(const double* a, const double* b, int dim) {
+        double mean_a = 0.0, mean_b = 0.0;
+        for (int i = 0; i < dim; ++i) {
+            mean_a += a[i];
+            mean_b += b[i];
+        }
+        mean_a /= static_cast<double>(dim);
+        mean_b /= static_cast<double>(dim);
+
+        double num = 0.0, den_a = 0.0, den_b = 0.0;
+        for (int i = 0; i < dim; ++i) {
+            double diff_a = a[i] - mean_a;
+            double diff_b = b[i] - mean_b;
+            num += diff_a * diff_b;
+            den_a += diff_a * diff_a;
+            den_b += diff_b * diff_b;
+        }
+
+        if (den_a < 1e-10 || den_b < 1e-10) return 1.0;
+
+        double correlation = num / std::sqrt(den_a * den_b);
+        correlation = std::max(-1.0, std::min(1.0, correlation));
+
+        return 1.0 - correlation;
+    }
+
+    double hamming_distance(const double* a, const double* b, int dim) {
+        int different = 0;
+        for (int i = 0; i < dim; ++i) {
+            if (std::abs(a[i] - b[i]) > 1e-6) {
+                different++;
+            }
+        }
+        return static_cast<double>(different) / static_cast<double>(dim);
+    }
+
+    double compute_distance(const double* a, const double* b, int dim, PacMapMetric metric) {
+        switch (metric) {
+        case PACMAP_METRIC_EUCLIDEAN:
+            return euclidean_distance(a, b, dim);
+        case PACMAP_METRIC_COSINE:
+            return cosine_distance(a, b, dim);
+        case PACMAP_METRIC_MANHATTAN:
+            return manhattan_distance(a, b, dim);
+        case PACMAP_METRIC_CORRELATION:
+            return correlation_distance(a, b, dim);
+        case PACMAP_METRIC_HAMMING:
+            return hamming_distance(a, b, dim);
+        default:
+            return euclidean_distance(a, b, dim);
+        }
+    }
+
     // Data validation functions for specific metrics
     bool validate_hamming_data(const float* data, int n_obs, int n_dim) {
         int non_binary_count = 0;
@@ -200,6 +291,42 @@ namespace distance_metrics {
 
             float dist = compute_distance(query_point, dataset + i * n_dim, n_dim, metric);
             all_distances.emplace_back(dist, i);
+        }
+
+        // Find k smallest distances using partial_sort for efficiency
+        int k_actual = std::min(k_neighbors, (int)all_distances.size());
+        if (k_actual > 0) {
+            std::partial_sort(all_distances.begin(), all_distances.begin() + k_actual, all_distances.end());
+
+            // Copy k smallest to output
+            neighbors_out.assign(all_distances.begin(), all_distances.begin() + k_actual);
+        }
+    }
+
+    // Double precision version of find_knn_exact
+    void find_knn_exact(const double* query_point, const double* dataset, int n_obs, int n_dim,
+                       PacMapMetric metric, int k_neighbors, std::vector<std::pair<float, int>>& neighbors_out,
+                       int query_index) {
+
+        neighbors_out.clear();
+        neighbors_out.reserve(k_neighbors);
+
+        // If query_index is provided, we need to skip the self-match
+        bool skip_self = (query_index >= 0);
+
+        // Use partial_sort to efficiently find k smallest distances
+        std::vector<std::pair<float, int>> all_distances;
+        all_distances.reserve(n_obs);
+
+        // Compute distances to all points
+        for (int i = 0; i < n_obs; ++i) {
+            // Skip self-match if query_index is provided
+            if (skip_self && i == query_index) {
+                continue;
+            }
+
+            double dist = compute_distance(query_point, dataset + i * n_dim, n_dim, metric);
+            all_distances.emplace_back(static_cast<float>(dist), i);  // Store as float for consistency
         }
 
         // Find k smallest distances using partial_sort for efficiency

@@ -107,7 +107,7 @@ namespace fit_utils {
     // Main PACMAP fitting function with proper PACMAP workflow (internal implementation)
     int internal_pacmap_fit_with_progress_v2(
         PacMapModel* model,
-        float* data,
+        double* data,
         int n_obs,
         int n_dim,
         int embedding_dim,
@@ -120,7 +120,7 @@ namespace fit_utils {
         int phase2_iters,
         int phase3_iters,
         PacMapMetric metric,
-        float* embedding,
+        double* embedding,
         pacmap_progress_callback_v2 progress_callback,
         int force_exact_knn,
         int M,

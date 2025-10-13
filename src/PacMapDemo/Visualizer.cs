@@ -250,15 +250,15 @@ namespace PacMapDemo
         /// <summary>
         /// Create PacMAP 2D embedding visualization with anatomical part coloring
         /// </summary>
-        public static void PlotMammothPacMAP(float[,] embedding, double[,] originalData, string title, string outputPath)
+        public static void PlotMammothPacMAP(double[,] embedding, double[,] originalData, string title, string outputPath)
         {
-            PlotMammothPacMAP(embedding, originalData, title, outputPath, null);
+            PlotMammothPacMAP(embedding, originalData, title, outputPath, null, true);
         }
 
         /// <summary>
         /// Create PacMAP 2D embedding visualization with anatomical part coloring and parameters
         /// </summary>
-        public static void PlotMammothPacMAP(float[,] embedding, double[,] originalData, string title, string outputPath, Dictionary<string, object>? paramInfo)
+        public static void PlotMammothPacMAP(double[,] embedding, double[,] originalData, string title, string outputPath, Dictionary<string, object>? paramInfo, bool autoFitAxes = true)
         {
             try
             {
@@ -284,23 +284,66 @@ namespace PacMapDemo
                     PlotAreaBorderColor = OxyColors.Black
                 };
 
-                // Add X-Y axes for 2D embedding with improved zoom range and label space
-                plotModel.Axes.Add(new LinearAxis {
-                    Position = AxisPosition.Bottom,
-                    Title = "X Coordinate (PacMAP Dimension 1)",
-                    Minimum = -25,
-                    Maximum = 40,
-                    MajorStep = 10,
-                    MinorStep = 5
-                });
-                plotModel.Axes.Add(new LinearAxis {
-                    Position = AxisPosition.Left,
-                    Title = "Y Coordinate (PacMAP Dimension 2)",
-                    Minimum = -30,
-                    Maximum = 30,
-                    MajorStep = 10,
-                    MinorStep = 5
-                });
+                // Calculate data bounds for auto-fitting
+                double minX = embedding[0, 0], maxX = embedding[0, 0];
+                double minY = embedding[0, 1], maxY = embedding[0, 1];
+
+                for (int i = 0; i < embedding.GetLength(0); i++)
+                {
+                    minX = Math.Min(minX, embedding[i, 0]);
+                    maxX = Math.Max(maxX, embedding[i, 0]);
+                    minY = Math.Min(minY, embedding[i, 1]);
+                    maxY = Math.Max(maxY, embedding[i, 1]);
+                }
+
+                // Add padding for better visualization (10% of data range)
+                double xRange = maxX - minX;
+                double yRange = maxY - minY;
+                double xPadding = xRange * 0.1;
+                double yPadding = yRange * 0.1;
+
+                if (autoFitAxes)
+                {
+                    // Auto-fit axes to data with padding
+                    plotModel.Axes.Add(new LinearAxis {
+                        Position = AxisPosition.Bottom,
+                        Title = "X Coordinate (PacMAP Dimension 1)",
+                        Minimum = minX - xPadding,
+                        Maximum = maxX + xPadding,
+                        MajorStep = CalculateNiceStep(xRange + 2 * xPadding),
+                        MinorStep = CalculateNiceStep(xRange + 2 * xPadding) / 2
+                    });
+                    plotModel.Axes.Add(new LinearAxis {
+                        Position = AxisPosition.Left,
+                        Title = "Y Coordinate (PacMAP Dimension 2)",
+                        Minimum = minY - yPadding,
+                        Maximum = maxY + yPadding,
+                        MajorStep = CalculateNiceStep(yRange + 2 * yPadding),
+                        MinorStep = CalculateNiceStep(yRange + 2 * yPadding) / 2
+                    });
+
+                    Console.WriteLine($"   Auto-fitted axes: X=[{minX - xPadding:F2}, {maxX + xPadding:F2}], Y=[{minY - yPadding:F2}, {maxY + yPadding:F2}]");
+                }
+                else
+                {
+                    // Use fixed ranges (original behavior)
+                    plotModel.Axes.Add(new LinearAxis {
+                        Position = AxisPosition.Bottom,
+                        Title = "X Coordinate (PacMAP Dimension 1)",
+                        Minimum = -25,
+                        Maximum = 40,
+                        MajorStep = 10,
+                        MinorStep = 5
+                    });
+                    plotModel.Axes.Add(new LinearAxis {
+                        Position = AxisPosition.Left,
+                        Title = "Y Coordinate (PacMAP Dimension 2)",
+                        Minimum = -30,
+                        Maximum = 30,
+                        MajorStep = 10,
+                        MinorStep = 5
+                    });
+                }
 
                 // Add legend with standard configuration
                 plotModel.Legends.Add(new Legend
@@ -372,7 +415,7 @@ namespace PacMapDemo
         /// <summary>
         /// Save embedding data as CSV
         /// </summary>
-        public static void SaveEmbeddingAsCSV(float[,] embedding, string[]? labels, string outputPath)
+        public static void SaveEmbeddingAsCSV(double[,] embedding, string[]? labels, string outputPath)
         {
             try
             {
@@ -495,7 +538,7 @@ namespace PacMapDemo
         /// <summary>
         /// Plot simple PACMAP embedding with black dots for parameter experiments
         /// </summary>
-        public static void PlotSimplePacMAP(float[,] embedding, string title, string outputPath, Dictionary<string, object>? paramInfo)
+        public static void PlotSimplePacMAP(double[,] embedding, string title, string outputPath, Dictionary<string, object>? paramInfo)
         {
             var plotModel = new PlotModel { Title = title, Background = OxyColors.White };
 
@@ -578,6 +621,34 @@ namespace PacMapDemo
                 "trunk" => OxyColors.Red,
                 _ => OxyColors.Gray
             };
+        }
+
+        /// <summary>
+        /// Calculate a nice step size for axis ticks based on data range
+        /// </summary>
+        private static double CalculateNiceStep(double range)
+        {
+            if (range <= 0) return 1.0;
+
+            // Target number of tick marks (approximately 5-10)
+            double targetTickCount = 8.0;
+            double roughStep = range / targetTickCount;
+
+            // Find nice round numbers (1, 2, 5, 10, 20, 50, etc.)
+            double exponent = Math.Floor(Math.Log10(roughStep));
+            double baseValue = Math.Pow(10, exponent);
+
+            double[] niceValues = { 1.0, 2.0, 5.0 };
+            double niceStep = niceValues.FirstOrDefault(v => v * baseValue >= roughStep, niceValues.Last()) * baseValue;
+
+            // Fallback if FirstOrDefault still fails
+            if (double.IsNaN(niceStep) || niceStep <= 0)
+            {
+                niceStep = 1.0;
+            }
+
+            // Ensure minimum step size to avoid too many ticks
+            return Math.Max(niceStep, 0.1);
         }
 
         }

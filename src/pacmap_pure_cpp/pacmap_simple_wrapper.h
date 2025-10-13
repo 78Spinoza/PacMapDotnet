@@ -33,7 +33,7 @@ extern "C" {
 #define PACMAP_ERROR_FITTING_FAILED -10
 
 // Version information
-#define PACMAP_WRAPPER_VERSION_STRING "2.4.9"
+#define PACMAP_WRAPPER_VERSION_STRING "2.8.7"
 
 // Distance metrics
     typedef enum {
@@ -86,7 +86,7 @@ extern "C" {
     
     
     PACMAP_API int pacmap_fit_with_progress_v2(PacMapModel* model,
-        float* data,
+        double* data,
         int n_obs,
         int n_dim,
         int embedding_dim,
@@ -99,7 +99,7 @@ extern "C" {
         int phase2_iters,
         int phase3_iters,
         PacMapMetric metric,
-        float* embedding,
+        double* embedding,
         pacmap_progress_callback_v2 progress_callback,
         int force_exact_knn = 0,
         int M = -1,
@@ -110,16 +110,17 @@ extern "C" {
         int autoHNSWParam = 1,
         float initialization_std_dev = 1e-4f);
 
+  
     // Global callback management functions
     PACMAP_API void pacmap_set_global_callback(pacmap_progress_callback_v2 callback);
     PACMAP_API void pacmap_clear_global_callback();
 
     // Transform functions
     PACMAP_API int pacmap_transform(PacMapModel* model,
-        float* new_data,
+        double* new_data,
         int n_new_obs,
         int n_dim,
-        float* embedding);
+        double* embedding);
 
     // Enhanced transform function with comprehensive safety analysis
     // Returns detailed information about nearest neighbors, confidence, and outlier detection
@@ -132,16 +133,16 @@ extern "C" {
     //   - percentile_rank: Output percentile ranks [n_new_obs] (0-100, can be NULL)
     //   - z_score: Output z-scores [n_new_obs] (standard deviations from mean, can be NULL)
     PACMAP_API int pacmap_transform_detailed(PacMapModel* model,
-        float* new_data,
+        double* new_data,
         int n_new_obs,
         int n_dim,
-        float* embedding,
+        double* embedding,
         int* nn_indices,
-        float* nn_distances,
-        float* confidence_score,
+        double* nn_distances,
+        double* confidence_score,
         int* outlier_level,
-        float* percentile_rank,
-        float* z_score);
+        double* percentile_rank,
+        double* z_score);
 
     // Model persistence
     PACMAP_API int pacmap_save_model(PacMapModel* model, const char* filename);
@@ -153,12 +154,12 @@ extern "C" {
         int* n_neighbors, float* mn_ratio, float* fp_ratio,
         PacMapMetric* metric, int* hnsw_M, int* hnsw_ef_construction, int* hnsw_ef_search,
         int* force_exact_knn, int* random_seed,
-        float* min_embedding_distance, float* p95_embedding_distance, float* p99_embedding_distance,
-        float* mild_embedding_outlier_threshold, float* extreme_embedding_outlier_threshold,
-        float* mean_embedding_distance, float* std_embedding_distance,
+        double* min_embedding_distance, double* p95_embedding_distance, double* p99_embedding_distance,
+        double* mild_embedding_outlier_threshold, double* extreme_embedding_outlier_threshold,
+        double* mean_embedding_distance, double* std_embedding_distance,
         uint32_t* original_space_crc, uint32_t* embedding_space_crc, uint32_t* model_version_crc,
         float* initialization_std_dev, int* always_save_embedding_data,
-        float* p25_distance, float* p75_distance, float* adam_eps);
+        double* p25_distance, double* p75_distance, float* adam_eps);
 
     
     PACMAP_API int pacmap_get_triplet_info(PacMapModel* model,
@@ -186,6 +187,7 @@ extern "C" {
     PACMAP_API int pacmap_set_learning_rate(PacMapModel* model, float learning_rate);
     PACMAP_API int pacmap_set_adam_beta1(PacMapModel* model, float beta1);
     PACMAP_API int pacmap_set_adam_beta2(PacMapModel* model, float beta2);
+    PACMAP_API int pacmap_use_simple_sgd(PacMapModel* model);
     PACMAP_API int pacmap_reset_model(PacMapModel* model);
     PACMAP_API int pacmap_copy_model(PacMapModel* source, PacMapModel** destination);
     PACMAP_API int pacmap_is_fitted(PacMapModel* model);

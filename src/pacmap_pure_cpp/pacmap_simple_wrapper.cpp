@@ -33,10 +33,10 @@ extern "C" {
     
     
     PACMAP_API int pacmap_fit_with_progress_v2(PacMapModel* model,
-        float* data, int n_obs, int n_dim, int embedding_dim,
+        double* data, int n_obs, int n_dim, int embedding_dim,
         int n_neighbors, float MN_ratio, float FP_ratio,
         float learning_rate, int n_iters, int phase1_iters, int phase2_iters, int phase3_iters,
-        PacMapMetric metric, float* embedding, pacmap_progress_callback_v2 progress_callback,
+        PacMapMetric metric, double* embedding, pacmap_progress_callback_v2 progress_callback,
         int force_exact_knn, int M, int ef_construction, int ef_search,
         int use_quantization, int random_seed, int autoHNSWParam, float initialization_std_dev) {
         try {
@@ -65,25 +65,25 @@ extern "C" {
     }
 
     PACMAP_API int pacmap_transform(PacMapModel* model,
-        float* new_data,
+        double* new_data,
         int n_new_obs,
         int n_dim,
-        float* embedding) {
+        double* embedding) {
         // Direct call to internal transform implementation
         return transform_utils::internal_pacmap_transform(model, new_data, n_new_obs, n_dim, embedding);
     }
 
     PACMAP_API int pacmap_transform_detailed(PacMapModel* model,
-        float* new_data,
+        double* new_data,
         int n_new_obs,
         int n_dim,
-        float* embedding,
+        double* embedding,
         int* nn_indices,
-        float* nn_distances,
-        float* confidence_score,
+        double* nn_distances,
+        double* confidence_score,
         int* outlier_level,
-        float* percentile_rank,
-        float* z_score) {
+        double* percentile_rank,
+        double* z_score) {
         // Direct call to internal detailed transform implementation
         return transform_utils::internal_pacmap_transform_detailed(model, new_data, n_new_obs, n_dim, embedding,
             nn_indices, nn_distances, confidence_score, outlier_level, percentile_rank, z_score);
@@ -105,20 +105,20 @@ extern "C" {
         int* hnsw_ef_search,
         int* force_exact_knn,
         int* random_seed,
-        float* min_embedding_distance,
-        float* p95_embedding_distance,
-        float* p99_embedding_distance,
-        float* mild_embedding_outlier_threshold,
-        float* extreme_embedding_outlier_threshold,
-        float* mean_embedding_distance,
-        float* std_embedding_distance,
+        double* min_embedding_distance,
+        double* p95_embedding_distance,
+        double* p99_embedding_distance,
+        double* mild_embedding_outlier_threshold,
+        double* extreme_embedding_outlier_threshold,
+        double* mean_embedding_distance,
+        double* std_embedding_distance,
         uint32_t* original_space_crc,
         uint32_t* embedding_space_crc,
         uint32_t* model_version_crc,
         float* initialization_std_dev,
         int* always_save_embedding_data,
-        float* p25_distance,
-        float* p75_distance,
+        double* p25_distance,
+        double* p75_distance,
         float* adam_eps) {
         // Direct access to model fields including all persistence fields
         if (!model) return PACMAP_ERROR_INVALID_PARAMS;
@@ -231,6 +231,15 @@ extern "C" {
         return PACMAP_SUCCESS;
     }
 
+    PACMAP_API int pacmap_use_simple_sgd(PacMapModel* model) {
+        // ERROR13 FIX: Switch to simple SGD to match Python reference exactly
+        // Sets adam_beta1=0 to disable Adam and use simple SGD: embedding -= lr * gradients
+        if (!model) return PACMAP_ERROR_INVALID_PARAMS;
+        model->adam_beta1 = 0.0f;  // Disables Adam, enables simple SGD
+        model->adam_beta2 = 0.0f;  // Not used in SGD mode
+        return PACMAP_SUCCESS;
+    }
+
     PACMAP_API int pacmap_save_model(PacMapModel* model, const char* filename) {
         return persistence_utils::save_model(model, filename);
     }
@@ -247,5 +256,4 @@ extern "C" {
         // No-op in minimal implementation
     }
 
-    
 } // extern "C"

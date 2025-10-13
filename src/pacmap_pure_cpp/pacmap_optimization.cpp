@@ -1,6 +1,7 @@
 #include "pacmap_optimization.h"
 #include "pacmap_gradient.h"
 #include "pacmap_triplet_sampling.h"
+#include "pacmap_distance.h"
 #include <random>
 #include <iostream>
 #include <iomanip>
@@ -8,12 +9,33 @@
 #include <cmath>
 #include <chrono>
 
-void optimize_embedding(PacMapModel* model, float* embedding_out, pacmap_progress_callback_internal callback) {
+void optimize_embedding(PacMapModel* model, double* embedding_out, pacmap_progress_callback_internal callback) {
 
-    std::vector<float> embedding(model->n_samples * model->n_components);
+    // Python hybrid approach: Use double precision internally for numerical stability
+    std::vector<double> embedding(model->n_samples * model->n_components);
 
     // Initialize embedding with proper random normal distribution using model's initialization_std_dev parameter
-    initialize_random_embedding(embedding, model->n_samples, model->n_components, model->rng, model->initialization_std_dev);
+    if (callback) {
+        char init_msg[256];
+        snprintf(init_msg, sizeof(init_msg), "INITIALIZATION: Using std_dev=%.6f for %d samples x %d components",
+                model->initialization_std_dev, model->n_samples, model->n_components);
+        callback("Initialization", 0, 0, 0.0f, init_msg);
+    }
+    initialize_random_embedding_double(embedding, model->n_samples, model->n_components, model->rng, model->initialization_std_dev);
+
+    // DEBUG: Show initial embedding range via callback
+    double init_min = embedding[0], init_max = embedding[0], init_absmax = 0.0;
+    for (const auto& val : embedding) {
+        init_min = std::min(init_min, val);
+        init_max = std::max(init_max, val);
+        init_absmax = std::max(init_absmax, std::abs(val));
+    }
+    if (callback) {
+        char range_msg[256];
+        snprintf(range_msg, sizeof(range_msg), "INITIAL EMBEDDING RANGE: [%.6f, %.6f], max|coord|=%.6f",
+                init_min, init_max, init_absmax);
+        callback("Initialization", 0, 0, 0.0f, range_msg);
+    }
 
     int total_iters = model->phase1_iters + model->phase2_iters + model->phase3_iters;
 
@@ -22,16 +44,16 @@ void optimize_embedding(PacMapModel* model, float* embedding_out, pacmap_progres
         return;
     }
 
-    // Initialize Adam optimizer state
-    std::vector<float> gradients(embedding.size());
+    // Initialize Adam optimizer state - use double precision for gradients to match embedding precision
+    std::vector<double> gradients(embedding.size());
 
     // Loss history for convergence monitoring
     std::vector<float> loss_history;
     loss_history.reserve(total_iters);
 
-    // Initialize Adam optimizer state in model
-    model->adam_m.assign(embedding.size(), 0.0f);
-    model->adam_v.assign(embedding.size(), 0.0f);
+    // Initialize Adam optimizer state in model - store as double precision internally
+    model->adam_m.assign(embedding.size(), 0.0);
+    model->adam_v.assign(embedding.size(), 0.0);
 
                 
     callback("Starting Optimization", 0, 0, 0.0f, nullptr);
@@ -40,48 +62,129 @@ void optimize_embedding(PacMapModel* model, float* embedding_out, pacmap_progres
 
     // Main optimization loop with three phases
     for (int iter = 0; iter < total_iters; ++iter) {
-        // Get three-phase weights for current iteration
-        auto [w_n, w_mn, w_f] = get_weights(iter, model->phase1_iters, model->phase1_iters + model->phase2_iters);
+        // ERROR13 FIX: Get three-phase weights for current iteration using Python-matching progress
+        auto [w_n, w_mn, w_f] = get_weights(iter, total_iters);
 
-        // Compute gradients for all triplets
+        // Compute gradients for all triplets - now using double precision embedding with callback
         compute_gradients(embedding, model->triplets, gradients,
-                         w_n, w_mn, w_f, model->n_components);
+                         w_n, w_mn, w_f, model->n_components, callback);
 
-        // CRITICAL FIX: Adam optimizer with proper gradient handling (FIXED GRADIENT CLIPPING ORDER)
-        // Adam optimizer with bias correction (matching Rust implementation)
-        float adam_lr = model->learning_rate *
-                       std::sqrt(1.0f - std::pow(model->adam_beta2, iter + 1)) /
-                       (1.0f - std::pow(model->adam_beta1, iter + 1));
+        // ERROR13 FIX: Choose optimizer based on Python reference vs Adam optimization
+        // Python reference uses simple SGD: embedding -= learning_rate * gradients
+        // Our implementation defaults to Adam but allows SGD for exact Python matching
 
-        
-        #pragma omp parallel for
-        for (int i = 0; i < static_cast<int>(embedding.size()); ++i) {
-            // Update biased first moment estimate with RAW gradients (critical!)
-            model->adam_m[i] = model->adam_beta1 * model->adam_m[i] +
-                              (1.0f - model->adam_beta1) * gradients[i];
+        if (iter == 0 && callback) {
+            char opt_msg[256];
+            snprintf(opt_msg, sizeof(opt_msg), "OPTIMIZER: Using %s optimizer (learning_rate=%.6f)",
+                    model->adam_beta1 > 0.0f ? "Adam" : "Simple SGD (Python reference)", model->learning_rate);
+            callback("Optimizer Setup", iter, total_iters, 0.0f, opt_msg);
+        }
 
-            // Update biased second moment estimate with RAW gradients (critical!)
-            model->adam_v[i] = model->adam_beta2 * model->adam_v[i] +
-                              (1.0f - model->adam_beta2) * gradients[i] * gradients[i];
+        if (model->adam_beta1 > 0.0f) {
+            // Adam optimizer (current default) - using double precision for numerical stability
+            double adam_lr = static_cast<double>(model->learning_rate) *
+                           std::sqrt(1.0 - std::pow(static_cast<double>(model->adam_beta2), iter + 1)) /
+                           (1.0 - std::pow(static_cast<double>(model->adam_beta1), iter + 1));
 
-            // Compute Adam update with bias correction
-            float adam_update = adam_lr * model->adam_m[i] / (std::sqrt(model->adam_v[i]) + model->adam_eps);
+            #pragma omp parallel for
+            for (int i = 0; i < static_cast<int>(embedding.size()); ++i) {
+                // ERROR13: NaN safety - skip non-finite gradients to prevent Adam state corruption
+                if (!std::isfinite(gradients[i])) {
+                    continue;
+                }
 
-            // CRITICAL FIX: Removed gradient clipping to match Rust implementation exactly
-            // Rust PACMAP does not apply gradient clipping - let Adam optimizer handle scale naturally
+                // Update biased first moment estimate with RAW gradients (pure double precision)
+                model->adam_m[i] = static_cast<double>(model->adam_beta1) * model->adam_m[i] +
+                                        (1.0 - static_cast<double>(model->adam_beta1)) * gradients[i];
 
-            // Update parameters
-            embedding[i] -= adam_update;
+                // Update biased second moment estimate with RAW gradients (pure double precision)
+                model->adam_v[i] = static_cast<double>(model->adam_beta2) * model->adam_v[i] +
+                                        (1.0 - static_cast<double>(model->adam_beta2)) * gradients[i] * gradients[i];
+
+                // ERROR13: Ensure adam_v stays non-negative (numerical safety check)
+                if (model->adam_v[i] < 0.0) {
+                    model->adam_v[i] = 0.0;
+                }
+
+                // Compute Adam update with bias correction (pure double precision)
+                double adam_update = adam_lr * model->adam_m[i] /
+                                    (std::sqrt(model->adam_v[i]) + static_cast<double>(model->adam_eps));
+
+                // ERROR13: Check if Adam update is finite before applying (prevents NaN spreading)
+                if (!std::isfinite(adam_update)) {
+                    continue;
+                }
+
+                // Update parameters (pure double precision)
+                embedding[i] -= adam_update;
+
+                // ERROR13: Final safety - reset embedding coordinate if it becomes non-finite
+                if (!std::isfinite(embedding[i])) {
+                    // Reset to small random value if it becomes non-finite
+                    embedding[i] = 0.01 * ((i % 2 == 0) ? 1.0 : -1.0);
+                }
+            }
+        } else {
+            // Simple SGD optimizer (exact Python reference match)
+            // Python line 351-352: embedding -= learning_rate * gradients
+            #pragma omp parallel for
+            for (int i = 0; i < static_cast<int>(embedding.size()); ++i) {
+                // NaN safety check
+                if (!std::isfinite(gradients[i])) {
+                    continue;
+                }
+
+                // Simple SGD update exactly like Python: embedding -= learning_rate * gradients
+                embedding[i] -= static_cast<double>(model->learning_rate) * gradients[i];
+
+                // Safety check for non-finite embedding values
+                if (!std::isfinite(embedding[i])) {
+                    embedding[i] = 0.01 * ((i % 2 == 0) ? 1.0 : -1.0);
+                }
+            }
         }
 
         // Monitor progress and compute loss
         if (iter % 10 == 0 || iter == total_iters - 1) {
-            float loss = compute_pacmap_loss(embedding, model->triplets,
-                                           w_n, w_mn, w_f, model->n_components);
-            loss_history.push_back(loss);
+            double loss = compute_pacmap_loss(embedding, model->triplets,
+                                                   w_n, w_mn, w_f, model->n_components);
+            loss_history.push_back(static_cast<float>(loss));
 
-            std::string phase = get_current_phase(iter, model->phase1_iters, model->phase2_iters);
-            monitor_optimization_progress(iter, total_iters, loss, phase, callback);
+            // DEBUG: Comprehensive embedding analysis for oval diagnosis
+            double emb_min = embedding[0], emb_max = embedding[0], emb_absmax = 0.0;
+            double emb_mean = 0.0, emb_absmean = 0.0;
+            for (const auto& val : embedding) {
+                emb_min = std::min(emb_min, val);
+                emb_max = std::max(emb_max, val);
+                emb_absmax = std::max(emb_absmax, std::abs(val));
+                emb_mean += val;
+                emb_absmean += std::abs(val);
+            }
+            emb_mean /= embedding.size();
+            emb_absmean /= embedding.size();
+
+            // Calculate embedding spread ratio (width/height) to detect oval formation
+            double width = emb_max - emb_min;
+            double spread_ratio = width / (emb_absmax > 0 ? emb_absmax * 2 : 1.0);
+
+            if (iter % 10 == 0 && callback) {  // Report every 10th iteration for detailed analysis
+                std::string phase = get_current_phase(iter, model->phase1_iters, model->phase2_iters);
+                char analysis_msg[512];
+                snprintf(analysis_msg, sizeof(analysis_msg),
+                        "EMBEDDING ANALYSIS: iter=%d, phase=%s | Range: [%.4f, %.4f], width=%.4f, max|coord|=%.4f | mean=%.6f, |mean|=%.6f, spread_ratio=%.3f | weights: w_n=%.2f, w_mn=%.3f, w_f=%.2f, loss=%.6f",
+                        iter, phase.c_str(), emb_min, emb_max, width, emb_absmax, emb_mean, emb_absmean, spread_ratio, w_n, w_mn, w_f, loss);
+
+                callback("Embedding Analysis", iter, total_iters, 0.0f, analysis_msg);
+
+                // Detect oval formation warning
+                if (spread_ratio > 0.7 && spread_ratio < 1.3 && emb_absmax > 5.0) {
+                    char warning_msg[256];
+                    snprintf(warning_msg, sizeof(warning_msg), "WARNING: Potential oval formation detected (ratio=%.3f)", spread_ratio);
+                    callback("Oval Detection", iter, total_iters, 0.0f, warning_msg);
+                }
+            }
+
+            monitor_optimization_progress(iter, total_iters, loss, get_current_phase(iter, model->phase1_iters, model->phase2_iters), callback);
 
             // Early termination check
             if (iter > 200 && should_terminate_early(loss_history)) {
@@ -101,23 +204,42 @@ void optimize_embedding(PacMapModel* model, float* embedding_out, pacmap_progres
     // Compute final safety statistics
     compute_safety_stats(model, embedding);
 
-    // Save embedding in model for transform operations
-    model->embedding = embedding;
+    // Save embedding in model for transform operations (convert to float for storage compatibility)
+    model->embedding.resize(embedding.size());
+    for (size_t i = 0; i < embedding.size(); ++i) {
+        model->embedding[i] = static_cast<float>(embedding[i]);
+    }
 
-    // Copy results to output
-    std::memcpy(embedding_out, embedding.data(), embedding.size() * sizeof(float));
+    // Copy results to output (keep as double precision)
+    for (size_t i = 0; i < embedding.size(); ++i) {
+        embedding_out[i] = embedding[i];
+    }
 
     callback("Optimization Complete", total_iters, total_iters, 100.0f, nullptr);
 }
 
-void initialize_random_embedding(std::vector<float>& embedding, int n_samples, int n_components, std::mt19937& rng, float std_dev) {
-    // CRITICAL FIX: Use provided initialization_std_dev parameter instead of hardcoded large value
-    // The previous value of 10.0f / sqrt(n_components) ≈ 5.77 was too large and caused fragmentation
-    // Now using the parameter provided through the API (default 0.1f) for proper initialization
-    std::normal_distribution<float> normal_dist(0.0f, std_dev);
+void initialize_random_embedding_double(std::vector<double>& embedding, int n_samples, int n_components, std::mt19937& rng, float std_dev) {
+    // Python hybrid approach: Use double precision internally, initialize like Python
+    // Python: embedding = np.random.normal(0, 1e-4, (n_samples, n_components))
+    // But with double precision for numerical stability
+    std::normal_distribution<double> normal_dist(0.0, static_cast<double>(std_dev));
 
-    for (auto& val : embedding) {
-        val = normal_dist(rng);
+    for (int i = 0; i < n_samples; ++i) {
+        for (int d = 0; d < n_components; ++d) {
+            size_t idx = static_cast<size_t>(i) * n_components + d;
+            embedding[idx] = normal_dist(rng);
+        }
+    }
+}
+
+void initialize_random_embedding(std::vector<float>& embedding, int n_samples, int n_components, std::mt19937& rng, float std_dev) {
+    // Legacy function for compatibility - now forwards to double precision version
+    std::vector<double> embedding_double(n_samples * n_components);
+    initialize_random_embedding_double(embedding_double, n_samples, n_components, rng, std_dev);
+
+    // Convert back to float32 for compatibility
+    for (size_t i = 0; i < embedding_double.size(); ++i) {
+        embedding[i] = static_cast<float>(embedding_double[i]);
     }
 }
 
@@ -141,19 +263,20 @@ std::vector<OptimizationPhase> get_optimization_phases(int phase1_iters, int pha
     return phases;
 }
 
-void compute_safety_stats(PacMapModel* model, const std::vector<float>& embedding) {
-    // Compute pairwise embedding distances for safety analysis
+void compute_safety_stats(PacMapModel* model, const std::vector<double>& embedding) {
+    // Compute pairwise embedding distances for safety analysis (double precision)
     std::vector<float> embedding_distances;
 
     // Sample distances for efficiency (similar to UMAP approach)
     int sample_size = std::min(model->n_samples, 1000);
     for (int i = 0; i < sample_size; ++i) {
         for (int j = i + 1; j < sample_size; ++j) {
-            // FIXED: Use Euclidean metric consistently (error analysis #4)
-            float dist = compute_sampling_distance(embedding.data() + i * model->n_components,
-                                                 embedding.data() + j * model->n_components,
-                                                 model->n_components, PACMAP_METRIC_EUCLIDEAN);
-            embedding_distances.push_back(dist);
+            // Compute distance in double precision, store as float for stats
+            double dist_double = distance_metrics::compute_distance(
+                embedding.data() + i * model->n_components,
+                embedding.data() + j * model->n_components,
+                model->n_components, PACMAP_METRIC_EUCLIDEAN);
+            embedding_distances.push_back(static_cast<float>(dist_double));
         }
     }
 
@@ -296,20 +419,33 @@ OptimizationDiagnostics run_optimization_with_diagnostics(PacMapModel* model,
 
     auto start_time = std::chrono::high_resolution_clock::now();
 
-    // Store initial loss
-    auto [w_n, w_mn, w_f] = get_weights(0, model->phase1_iters, model->phase1_iters + model->phase2_iters);
-    diagnostics.initial_loss = compute_pacmap_loss(embedding, model->triplets,
-                                                  w_n, w_mn, w_f, model->n_components);
+    // Convert float embedding to double for computation
+    std::vector<double> embedding_double(embedding.size());
+    for (size_t i = 0; i < embedding.size(); i++) {
+        embedding_double[i] = static_cast<double>(embedding[i]);
+    }
 
-    // Run optimization with detailed monitoring
-    optimize_embedding(model, embedding.data(), callback);
+    // Store initial loss
+    // ERROR13 FIX: Use corrected weight function signature
+    int total_iters = model->phase1_iters + model->phase2_iters + model->phase3_iters;
+    auto [w_n, w_mn, w_f] = get_weights(0, total_iters);
+    diagnostics.initial_loss = static_cast<float>(compute_pacmap_loss(embedding_double, model->triplets,
+                                                  w_n, w_mn, w_f, model->n_components));
+
+    // Run optimization with detailed monitoring (using double precision)
+    optimize_embedding(model, embedding_double.data(), callback);
+
+    // Convert result back to float for output
+    for (size_t i = 0; i < embedding.size(); i++) {
+        embedding[i] = static_cast<float>(embedding_double[i]);
+    }
 
     auto end_time = std::chrono::high_resolution_clock::now();
     diagnostics.optimization_time_ms = std::chrono::duration<double, std::milli>(end_time - start_time).count();
 
     // Store final loss and compute reduction
-    diagnostics.final_loss = compute_pacmap_loss(embedding, model->triplets,
-                                                w_n, w_mn, w_f, model->n_components);
+    diagnostics.final_loss = static_cast<float>(compute_pacmap_loss(embedding_double, model->triplets,
+                                                w_n, w_mn, w_f, model->n_components));
     diagnostics.loss_reduction = diagnostics.initial_loss - diagnostics.final_loss;
 
     return diagnostics;

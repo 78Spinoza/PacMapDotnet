@@ -5,23 +5,24 @@
 #include <random>
 
 // Core triplet sampling functions
-extern void sample_triplets(PacMapModel* model, float* data, pacmap_progress_callback_internal callback);
-extern void sample_neighbors_pair(PacMapModel* model, const std::vector<float>& normalized_data,
+extern void sample_triplets(PacMapModel* model, double* data, pacmap_progress_callback_internal callback);
+extern void sample_neighbors_pair(PacMapModel* model, const std::vector<double>& normalized_data,
                                  std::vector<Triplet>& neighbor_triplets, pacmap_progress_callback_internal callback = nullptr);
-extern void sample_MN_pair(PacMapModel* model, const std::vector<float>& normalized_data,
+extern void sample_MN_pair(PacMapModel* model, const std::vector<double>& normalized_data,
                          std::vector<Triplet>& mn_triplets, int n_mn, pacmap_progress_callback_internal callback = nullptr);
-extern void sample_FP_pair(PacMapModel* model, const std::vector<float>& normalized_data,
+extern void sample_FP_pair(PacMapModel* model, const std::vector<double>& normalized_data,
+                         const std::vector<Triplet>& neighbor_triplets,
                          std::vector<Triplet>& fp_triplets, int n_fp, pacmap_progress_callback_internal callback = nullptr);
 
 // Distance-based sampling helpers
-extern void distance_based_sampling(PacMapModel* model, const std::vector<float>& data,
+extern void distance_based_sampling(PacMapModel* model, const std::vector<double>& data,
                                    int oversample_factor, int target_pairs, float min_dist, float max_dist,
                                    std::vector<Triplet>& triplets, TripletType type);
 extern std::vector<float> compute_distance_percentiles(const std::vector<float>& data, int n_samples, int n_features, PacMapMetric metric);
 
 // HNSW optimization for triplet sampling
 extern std::unique_ptr<hnswlib::HierarchicalNSW<float>> create_hnsw_index(
-    const float* data, int n_samples, int n_features, PacMapMetric metric,
+    const double* data, int n_samples, int n_features, PacMapMetric metric,
     int M, int ef_construction, pacmap_progress_callback_internal callback = nullptr);
 
 // Triplet validation and filtering

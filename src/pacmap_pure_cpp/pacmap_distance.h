@@ -8,15 +8,23 @@
 // Distance metric implementations for UMAP
 namespace distance_metrics {
 
-    // Individual distance metric functions
+    // Individual distance metric functions (float)
     float euclidean_distance(const float* a, const float* b, int dim);
     float cosine_distance(const float* a, const float* b, int dim);
     float manhattan_distance(const float* a, const float* b, int dim);
     float correlation_distance(const float* a, const float* b, int dim);
     float hamming_distance(const float* a, const float* b, int dim);
 
+    // Individual distance metric functions (double)
+    double euclidean_distance(const double* a, const double* b, int dim);
+    double cosine_distance(const double* a, const double* b, int dim);
+    double manhattan_distance(const double* a, const double* b, int dim);
+    double correlation_distance(const double* a, const double* b, int dim);
+    double hamming_distance(const double* a, const double* b, int dim);
+
     // Unified distance computation based on metric type
     float compute_distance(const float* a, const float* b, int dim, PacMapMetric metric);
+    double compute_distance(const double* a, const double* b, int dim, PacMapMetric metric);
 
     // Data validation for metric-specific requirements
     void validate_metric_data(const float* data, int n_obs, int n_dim, PacMapMetric metric);
@@ -28,6 +36,9 @@ namespace distance_metrics {
 
     // Find k nearest neighbors from a query point to all dataset points (exact search)
     void find_knn_exact(const float* query_point, const float* dataset, int n_obs, int n_dim,
+                       PacMapMetric metric, int k_neighbors, std::vector<std::pair<float, int>>& neighbors_out,
+                       int query_index = -1);
+    void find_knn_exact(const double* query_point, const double* dataset, int n_obs, int n_dim,
                        PacMapMetric metric, int k_neighbors, std::vector<std::pair<float, int>>& neighbors_out,
                        int query_index = -1);
 

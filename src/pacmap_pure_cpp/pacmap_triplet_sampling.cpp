@@ -13,7 +13,7 @@
 #define MAX_VECTOR_SIZE (1ULL << 30)  // 1 billion elements max
 
 
-void sample_triplets(PacMapModel* model, float* data, pacmap_progress_callback_internal callback) {
+void sample_triplets(PacMapModel* model, double* data, pacmap_progress_callback_internal callback) {
 
     // CRITICAL DEBUG: Add more detailed triplet analysis
 
@@ -23,8 +23,8 @@ void sample_triplets(PacMapModel* model, float* data, pacmap_progress_callback_i
         return;
     }
 
-    // Normalize/quantize data (reuse UMAP infrastructure)
-    std::vector<float> normalized_data;
+    // Normalize/quantize data (reuse UMAP infrastructure) - NOW DOUBLE PRECISION
+    std::vector<double> normalized_data;
     normalized_data.assign(data, data + model->n_samples * model->n_features);
 
     if (model->use_quantization) {
@@ -32,7 +32,7 @@ void sample_triplets(PacMapModel* model, float* data, pacmap_progress_callback_i
         // quantize_data(normalized_data, model->n_features);
     }
 
-    // Save normalized data for transform
+    // Save normalized data for transform - NOW DOUBLE PRECISION
     model->training_data = normalized_data;
 
     // Build HNSW index for efficient neighbor search
@@ -58,17 +58,23 @@ void sample_triplets(PacMapModel* model, float* data, pacmap_progress_callback_i
     // Neighbor pairs using HNSW
     sample_neighbors_pair(model, normalized_data, neighbor_triplets, callback);
 
-    // Mid-near pairs with improved sampling (ERROR11-FIX)
-    int n_mn = static_cast<int>(model->n_neighbors * model->mn_ratio + 0.5); // ERROR11-FIX: Proper rounding
-    // ERROR12 Priority 3: Cap triplet counts to prevent infeasible targets with arbitrary ratios
-    n_mn = std::min(n_mn, static_cast<int>(static_cast<size_t>(model->n_samples) * (model->n_samples - 1) / 2));
+    // FIX13: CRITICAL FIX - Correct triplet count calculation to match Python reference exactly
+    // Python reference (lines 169-174): n_MN = int(self.n_neighbors * self.MN_ratio)  // PER POINT, not total
+    // Previous BUG: Was multiplying by n_samples creating orders of magnitude too many triplets
+    int n_mn_per_point = static_cast<int>(model->n_neighbors * model->mn_ratio);
+    int n_mn = n_mn_per_point * model->n_samples;  // Total = per_point * n_samples
+    // Cap to prevent infeasible targets (max possible pairs)
+    size_t max_possible_pairs = static_cast<size_t>(model->n_samples) * (model->n_samples - 1) / 2;
+    n_mn = std::min(n_mn, static_cast<int>(max_possible_pairs));
     sample_MN_pair(model, normalized_data, mn_triplets, n_mn, callback);
 
-    // Far pairs for uniform distribution
-    int n_fp = static_cast<int>(model->n_neighbors * model->fp_ratio);
-    // ERROR12 Priority 3: Cap triplet counts to prevent infeasible targets with arbitrary ratios
-    n_fp = std::min(n_fp, static_cast<int>(static_cast<size_t>(model->n_samples) * (model->n_samples - 1) / 2));
-    sample_FP_pair(model, normalized_data, fp_triplets, n_fp, callback);
+    // FIX13: CRITICAL FIX - Correct far pair count calculation to match Python reference exactly
+    // Python reference (lines 173-174): n_FP = int(self.n_neighbors * self.FP_ratio)  // PER POINT, not total
+    int n_fp_per_point = static_cast<int>(model->n_neighbors * model->fp_ratio);
+    int n_fp = n_fp_per_point * model->n_samples;  // Total = per_point * n_samples
+    // Cap to prevent infeasible targets
+    n_fp = std::min(n_fp, static_cast<int>(max_possible_pairs));
+    sample_FP_pair(model, normalized_data, neighbor_triplets, fp_triplets, n_fp, callback);
 
     // Combine all triplets (review-optimized: single vector)
     model->triplets.clear();
@@ -79,6 +85,35 @@ void sample_triplets(PacMapModel* model, float* data, pacmap_progress_callback_i
     model->triplets.insert(model->triplets.end(), neighbor_triplets.begin(), neighbor_triplets.end());
     model->triplets.insert(model->triplets.end(), mn_triplets.begin(), mn_triplets.end());
     model->triplets.insert(model->triplets.end(), fp_triplets.begin(), fp_triplets.end());
+
+    // OVAL FORMATION FIX: Shuffle triplets to break systematic type clustering
+    // PROBLEM: Grouped triplets (NEIGHBOR→MN→FURTHER) + OpenMP = perfect symmetry = ovals
+    // SOLUTION: Randomize triplet order so each thread processes mixed attractive/repulsive forces
+    printf("   🔀 SHUFFLING TRIPLETS: Breaking systematic type clustering to prevent oval formation\n");
+    std::shuffle(model->triplets.begin(), model->triplets.end(), model->rng);
+
+    // ERROR13 FIX: Add triplet deduplication and validation
+    // Remove invalid triplets (self-pairs, out-of-bounds indices)
+    size_t before_filter = model->triplets.size();
+    filter_invalid_triplets(model->triplets, model->n_samples);
+
+    // FIX v2.5.9: CRITICAL - Python reference does NOT deduplicate directional pairs!
+    // Python creates n_samples × n_neighbors directional neighbor triplets and uses ALL of them
+    // Deduplicating (i,j) and (j,i) as the same pair was removing ~44K neighbor triplets
+    // This caused severe underrepresentation of local attractive forces → oval formation
+    //
+    // DISABLE deduplication to match Python's behavior:
+    printf("   ⚠️  DEDUPLICATION DISABLED: Keeping directional pairs to match Python reference\n");
+
+    // Keep this for reference - shows what deduplication was doing:
+    // deduplicate_triplets(model->triplets);  // ← COMMENTED OUT - was removing 44K neighbor triplets!
+
+    if (callback && before_filter != model->triplets.size()) {
+        char msg[256];
+        snprintf(msg, sizeof(msg), "Filtered %zu invalid triplets",
+                 before_filter - model->triplets.size());
+        callback("Triplet Validation", 100, 100, 100.0f, msg);
+    }
 
               
     // CRITICAL DEBUG: Analyze triplet quality
@@ -108,10 +143,11 @@ void sample_triplets(PacMapModel* model, float* data, pacmap_progress_callback_i
             for (const auto& t : model->triplets) {
                 if (t.type != type) continue;
 
-                float dist = compute_sampling_distance(
+                double dist_double = distance_metrics::compute_distance(
                     normalized_data.data() + t.anchor * model->n_features,
                     normalized_data.data() + t.neighbor * model->n_features,
                     model->n_features, model->metric);
+                float dist = static_cast<float>(dist_double);
 
                 min_dist = std::min(min_dist, dist);
                 max_dist = std::max(max_dist, dist);
@@ -133,7 +169,7 @@ void sample_triplets(PacMapModel* model, float* data, pacmap_progress_callback_i
     callback("Sampling Triplets", 100, 100, 100.0f, nullptr);
 }
 
-void sample_neighbors_pair(PacMapModel* model, const std::vector<float>& normalized_data,
+void sample_neighbors_pair(PacMapModel* model, const std::vector<double>& normalized_data,
                          std::vector<Triplet>& neighbor_triplets, pacmap_progress_callback_internal callback) {
 
     neighbor_triplets.clear();
@@ -194,8 +230,13 @@ void sample_neighbors_pair(PacMapModel* model, const std::vector<float>& normali
 
         #pragma omp parallel for if(model->n_samples > 1000)
         for (int i = 0; i < model->n_samples; ++i) {
+            // Convert double to float for HNSW interface
+            std::vector<float> query_point_float(model->n_features);
+            for (int d = 0; d < model->n_features; ++d) {
+                query_point_float[d] = static_cast<float>(normalized_data[i * model->n_features + d]);
+            }
             auto knn_results = model->original_space_index->searchKnn(
-                normalized_data.data() + i * model->n_features,
+                query_point_float.data(),
                 model->n_neighbors + 1);  // k_neighbors + 1 (includes self, like Python)
 
             // Convert priority_queue to vector and reverse to get sorted order
@@ -259,9 +300,13 @@ void sample_neighbors_pair(PacMapModel* model, const std::vector<float>& normali
                     sample_idx
                 );
 
-                // Get HNSW KNN
+                // Get HNSW KNN - convert double to float for HNSW interface
+                std::vector<float> query_point_float(model->n_features);
+                for (int d = 0; d < model->n_features; ++d) {
+                    query_point_float[d] = static_cast<float>(normalized_data[sample_idx * model->n_features + d]);
+                }
                 auto hnsw_results = model->original_space_index->searchKnn(
-                    normalized_data.data() + sample_idx * model->n_features,
+                    query_point_float.data(),
                     model->n_neighbors + 1);
 
                 std::vector<int> hnsw_indices;
@@ -302,7 +347,7 @@ void sample_neighbors_pair(PacMapModel* model, const std::vector<float>& normali
 
    }
 
-void sample_MN_pair(PacMapModel* model, const std::vector<float>& normalized_data,
+void sample_MN_pair(PacMapModel* model, const std::vector<double>& normalized_data,
                    std::vector<Triplet>& mn_triplets, int n_mn, pacmap_progress_callback_internal callback) {
 
     mn_triplets.clear();
@@ -315,7 +360,8 @@ void sample_MN_pair(PacMapModel* model, const std::vector<float>& normalized_dat
     // ERROR11-FIX-DETERMINISTIC: Improved mid-near sampling with guaranteed pairs per point
     // Supports both exact KNN (current) and HNSW (future speed optimization)
     int extended_k = 3 * model->n_neighbors;  // e.g., 30 for n_neighbors=10
-    mn_triplets.reserve(model->n_samples * n_mn);
+    // ERROR13 FIX: Reserve correct amount - n_mn is already the total target count
+    mn_triplets.reserve(n_mn);
     std::unordered_set<long long> used_pairs;
     int pairs_found = 0;
 
@@ -351,9 +397,13 @@ void sample_MN_pair(PacMapModel* model, const std::vector<float>& normalized_dat
                 i  // query_index to skip self
             );
         } else {
-            // HNSW case (for future use)
+            // HNSW case - convert double to float for HNSW interface
+            std::vector<float> query_point_float(model->n_features);
+            for (int d = 0; d < model->n_features; ++d) {
+                query_point_float[d] = static_cast<float>(normalized_data[static_cast<size_t>(i) * model->n_features + d]);
+            }
             auto knn_results = model->original_space_index->searchKnn(
-                normalized_data.data() + static_cast<size_t>(i) * model->n_features,
+                query_point_float.data(),
                 extended_k);
 
             // Convert priority_queue to vector and reverse to get sorted order
@@ -389,7 +439,9 @@ void sample_MN_pair(PacMapModel* model, const std::vector<float>& normalized_dat
         }
 
         // ERROR11-FIX-DETERMINISTIC: Ensure at least n_mn pairs, cycle through candidates if needed
-        int num_to_select = std::min(n_mn, static_cast<int>(mn_candidates.size()));
+        // ERROR13 FIX: n_mn is the TOTAL target, divide by n_samples for per-point target
+        int per_point_target = std::max(1, n_mn / model->n_samples);
+        int num_to_select = std::min(per_point_target, static_cast<int>(mn_candidates.size()));
         int thread_id = omp_get_thread_num();
         std::shuffle(mn_candidates.begin(), mn_candidates.end(), rngs[thread_id]);
         std::sort(mn_candidates.begin(), mn_candidates.end()); // ERROR11-FIX-DETERMINISTIC: Enforce deterministic order
@@ -415,7 +467,8 @@ void sample_MN_pair(PacMapModel* model, const std::vector<float>& normalized_dat
 
     }
 
-void sample_FP_pair(PacMapModel* model, const std::vector<float>& normalized_data,
+void sample_FP_pair(PacMapModel* model, const std::vector<double>& normalized_data,
+                   const std::vector<Triplet>& neighbor_triplets,
                    std::vector<Triplet>& fp_triplets, int n_fp, pacmap_progress_callback_internal callback) {
 
     fp_triplets.clear();
@@ -427,16 +480,28 @@ void sample_FP_pair(PacMapModel* model, const std::vector<float>& normalized_dat
 
     // CRITICAL FIX: Switch to pure random sampling (matching Rust sampling.rs)
     // Sample random points excluding neighbors and self, no distance filtering
-    fp_triplets.reserve(model->n_samples * n_fp);
+    // ERROR13 FIX: Reserve correct amount - n_fp is already the total target count
+    fp_triplets.reserve(n_fp);
     std::unordered_set<long long> used_pairs;
 
-    // Get neighbor indices for exclusion
+    // FIX v2.5.9: Build neighbor exclusion set from neighbor_triplets parameter
+    // BUG FIX: Previous code read from model->triplets which was cleared before this function was called!
+    // This caused empty neighbor_sets, allowing far pairs to include neighbor pairs,
+    // leading to deduplication removing legitimate neighbor triplets (~45K missing)
     std::vector<std::unordered_set<int>> neighbor_sets(model->n_samples);
-    for (const auto& t : model->triplets) {
-        if (t.type == NEIGHBOR) {
-            neighbor_sets[t.anchor].insert(t.neighbor);
-        }
+    for (const auto& t : neighbor_triplets) {
+        neighbor_sets[t.anchor].insert(t.neighbor);
+        // Make it bidirectional to catch both (i,j) and (j,i)
+        neighbor_sets[t.neighbor].insert(t.anchor);
     }
+
+    // DEBUG: Verify neighbor_sets are populated
+    int total_exclusions = 0;
+    for (const auto& s : neighbor_sets) {
+        total_exclusions += s.size();
+    }
+    printf("   🔍 DEBUG: Built neighbor exclusion sets: %d total neighbor relationships from %zu neighbor triplets\n",
+           total_exclusions, neighbor_triplets.size());
 
     std::atomic<int> completed(0);
     int report_interval = std::max(1, model->n_samples / 10);
@@ -450,8 +515,9 @@ void sample_FP_pair(PacMapModel* model, const std::vector<float>& normalized_dat
         for (int i = 0; i < model->n_samples; ++i) {
             std::unordered_set<int> sampled_indices;
             int found = 0;
-            int target = n_fp;
-            int early_exit_threshold = static_cast<int>(n_fp * 0.9);  // ERROR12 Priority 6: 90% early exit
+            // ERROR13 FIX: n_fp is the TOTAL target, divide by n_samples for per-point target
+            int target = std::max(1, n_fp / model->n_samples);
+            int early_exit_threshold = static_cast<int>(target * 0.9);  // ERROR12 Priority 6: 90% early exit
 
             while (found < target) {
                 int j = dist(rng);
@@ -493,7 +559,7 @@ void sample_FP_pair(PacMapModel* model, const std::vector<float>& normalized_dat
 
     }
 
-void distance_based_sampling(PacMapModel* model, const std::vector<float>& data,
+void distance_based_sampling(PacMapModel* model, const std::vector<double>& data,
                            int oversample_factor, int target_pairs, float min_dist, float max_dist,
                            std::vector<Triplet>& triplets, TripletType type) {
 
@@ -516,9 +582,10 @@ void distance_based_sampling(PacMapModel* model, const std::vector<float>& data,
         if (used_pairs.find(pair_key) != used_pairs.end()) continue;
 
         // Compute distance with early termination for efficiency
-        float distance = compute_sampling_distance(data.data() + i * model->n_features,
+        double dist_double = distance_metrics::compute_distance(data.data() + i * model->n_features,
                                                  data.data() + j * model->n_features,
                                                  model->n_features, model->metric);
+        float distance = static_cast<float>(dist_double);
 
         if (distance >= min_dist && distance <= max_dist) {
             triplets.emplace_back(Triplet{i, j, type});
@@ -556,11 +623,17 @@ std::vector<float> compute_distance_percentiles(const std::vector<float>& data, 
 }
 
 std::unique_ptr<hnswlib::HierarchicalNSW<float>> create_hnsw_index(
-    const float* data, int n_samples, int n_features, PacMapMetric metric,
+    const double* data, int n_samples, int n_features, PacMapMetric metric,
     int M, int ef_construction, pacmap_progress_callback_internal callback) {
 
     if (callback) {
         callback("Building HNSW Index", 0, n_samples, 0.0f, "Initializing HNSW structure");
+    }
+
+    // Convert double data to float for HNSW (HNSW only supports float*)
+    std::vector<float> data_float(n_samples * n_features);
+    for (size_t i = 0; i < n_samples * n_features; ++i) {
+        data_float[i] = static_cast<float>(data[i]);
     }
 
     // Create appropriate space based on metric
@@ -591,7 +664,7 @@ std::unique_ptr<hnswlib::HierarchicalNSW<float>> create_hnsw_index(
         #pragma omp parallel for schedule(dynamic, 100)
 #endif
         for (int i = 0; i < n_samples; ++i) {
-            index->addPoint(data + i * n_features, i);
+            index->addPoint(data_float.data() + i * n_features, i);
 
             // Progress reporting with atomic counter
             int count = ++completed;
@@ -603,7 +676,7 @@ std::unique_ptr<hnswlib::HierarchicalNSW<float>> create_hnsw_index(
     } else {
         // Sequential addition for smaller datasets to avoid OpenMP overhead
         for (int i = 0; i < n_samples; ++i) {
-            index->addPoint(data + i * n_features, i);
+            index->addPoint(data_float.data() + i * n_features, i);
 
             if (callback && (i % report_interval == 0 || i == n_samples - 1)) {
                 float percent = (float)(i + 1) / n_samples * 100.0f;
@@ -652,6 +725,7 @@ void deduplicate_triplets(std::vector<Triplet>& triplets) {
     );
 }
 
+// Legacy wrapper - kept for compatibility
 float compute_sampling_distance(const float* x, const float* y, int n_features, PacMapMetric metric) {
     return distance_metrics::compute_distance(x, y, n_features, metric);
 }

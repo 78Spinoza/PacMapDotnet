@@ -241,6 +241,50 @@ namespace persistence_utils {
         }
     }
 
+    static void save_vector(std::ostream& stream, uint32_t& crc, const std::vector<double>& vec, const char* name, bool compress) {
+        uint64_t vec_size = static_cast<uint64_t>(vec.size());
+        endian_utils::write_value(stream, crc, vec_size, (std::string(name) + "_size").c_str());
+        if (vec_size > MAX_VECTOR_SIZE) {
+            throw std::runtime_error(std::string("Vector ") + name + " size exceeds limit: " + std::to_string(vec_size));
+        }
+        if (vec_size == 0) return;
+
+        if (compress) {
+            size_t uncompressed_bytes = vec_size * sizeof(double);
+            int max_compressed_size = LZ4_compressBound(static_cast<int>(uncompressed_bytes));
+            std::vector<char> compressed_data(max_compressed_size);
+            int compressed_bytes = LZ4_compress_default(
+                reinterpret_cast<const char*>(vec.data()),
+                compressed_data.data(),
+                static_cast<int>(uncompressed_bytes),
+                max_compressed_size);
+            if (compressed_bytes > 0) {
+                uint64_t uncompressed_size = static_cast<uint64_t>(uncompressed_bytes);
+                uint64_t comp_size = static_cast<uint64_t>(compressed_bytes);
+                log_debug("[SAVE] Writing %s (double): uncompressed=%llu, compressed=%llu", name, uncompressed_size, comp_size);
+                endian_utils::write_value(stream, crc, uncompressed_size, (std::string(name) + "_uncompressed_size").c_str());
+                endian_utils::write_value(stream, crc, comp_size, (std::string(name) + "_compressed_size").c_str());
+                stream.write(compressed_data.data(), compressed_bytes);
+                crc = crc_utils::update_crc32(crc, compressed_data.data(), compressed_bytes);
+            }
+            else {
+                uint64_t uncompressed_size = static_cast<uint64_t>(uncompressed_bytes);
+                uint64_t comp_size = 0;
+                log_debug("[SAVE] %s compression failed, writing uncompressed", name);
+                endian_utils::write_value(stream, crc, uncompressed_size, (std::string(name) + "_uncompressed_size").c_str());
+                endian_utils::write_value(stream, crc, comp_size, (std::string(name) + "_compressed_size").c_str());
+                for (size_t i = 0; i < vec_size; i++) {
+                    endian_utils::write_value(stream, crc, vec[i], (std::string(name) + "[" + std::to_string(i) + "]").c_str());
+                }
+            }
+        }
+        else {
+            for (size_t i = 0; i < vec_size; i++) {
+                endian_utils::write_value(stream, crc, vec[i], (std::string(name) + "[" + std::to_string(i) + "]").c_str());
+            }
+        }
+    }
+
     static void save_vector(std::ostream& stream, uint32_t& crc, const std::vector<int>& vec, const char* name, bool compress) {
         uint64_t vec_size = static_cast<uint64_t>(vec.size());
         endian_utils::write_value(stream, crc, vec_size, (std::string(name) + "_size").c_str());
@@ -617,6 +661,68 @@ namespace persistence_utils {
                 throw std::runtime_error("Failed to read " + std::string(name) + " compression headers from file: " + std::string(filename));
             }
             if (uncompressed_size > MAX_VECTOR_SIZE * sizeof(float) || compressed_size > MAX_VECTOR_SIZE) {
+                throw std::runtime_error("Invalid " + std::string(name) + " compression sizes: uncompressed=" +
+                    std::to_string(uncompressed_size) + ", compressed=" + std::to_string(compressed_size));
+            }
+            if (compressed_size > 0) {
+                std::vector<char> compressed_data(compressed_size);
+                for (size_t i = 0; i < compressed_size; i += CHUNK_SIZE) {
+                    size_t chunk = std::min(CHUNK_SIZE, compressed_size - i);
+                    stream.read(compressed_data.data() + i, chunk);
+                    if (!stream.good() || stream.gcount() != static_cast<std::streamsize>(chunk)) {
+                        throw std::runtime_error("Failed to read compressed " + std::string(name) + " data from file: " + std::string(filename));
+                    }
+                }
+                int decompressed_size = LZ4_decompress_safe(
+                    compressed_data.data(),
+                    reinterpret_cast<char*>(vec.data()),
+                    static_cast<int>(compressed_size),
+                    static_cast<int>(uncompressed_size));
+                if (decompressed_size != static_cast<int>(uncompressed_size)) {
+                    throw std::runtime_error("LZ4 decompression failed for " + std::string(name) + ": got " +
+                        std::to_string(decompressed_size) + ", expected " + std::to_string(uncompressed_size));
+                }
+            }
+            else {
+                for (size_t i = 0; i < vec_size; i++) {
+                    if (!endian_utils::read_value(stream, vec[i], (std::string(name) + "[" + std::to_string(i) + "]").c_str())) {
+                        throw std::runtime_error("Failed to read " + std::string(name) + " data from file: " + std::string(filename));
+                    }
+                }
+            }
+        }
+        else {
+            for (size_t i = 0; i < vec_size; i++) {
+                if (!endian_utils::read_value(stream, vec[i], (std::string(name) + "[" + std::to_string(i) + "]").c_str())) {
+                    throw std::runtime_error("Failed to read " + std::string(name) + " data from file: " + std::string(filename));
+                }
+            }
+        }
+    }
+
+    static void load_vector(std::istream& stream, std::vector<double>& vec, const char* name, const char* filename, bool compressed) {
+        uint64_t vec_size;
+        if (!endian_utils::read_value(stream, vec_size, (std::string(name) + "_size").c_str())) {
+            throw std::runtime_error("Failed to read " + std::string(name) + " size from file: " + std::string(filename));
+        }
+        if (vec_size > MAX_VECTOR_SIZE) {
+            throw std::runtime_error(std::string(name) + " size exceeds limit: " + std::to_string(vec_size));
+        }
+        try {
+            vec.resize(vec_size);
+        }
+        catch (const std::exception& e) {
+            throw std::runtime_error("Failed to allocate " + std::string(name) + " vector: " + e.what());
+        }
+        if (vec_size == 0) return;
+
+        if (compressed) {
+            uint64_t uncompressed_size, compressed_size;
+            if (!endian_utils::read_value(stream, uncompressed_size, (std::string(name) + "_uncompressed_size").c_str()) ||
+                !endian_utils::read_value(stream, compressed_size, (std::string(name) + "_compressed_size").c_str())) {
+                throw std::runtime_error("Failed to read " + std::string(name) + " compression headers from file: " + std::string(filename));
+            }
+            if (uncompressed_size > MAX_VECTOR_SIZE * sizeof(double) || compressed_size > MAX_VECTOR_SIZE) {
                 throw std::runtime_error("Invalid " + std::string(name) + " compression sizes: uncompressed=" +
                     std::to_string(uncompressed_size) + ", compressed=" + std::to_string(compressed_size));
             }

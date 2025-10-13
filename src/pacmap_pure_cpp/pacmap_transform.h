@@ -69,20 +69,20 @@ extern void validate_embedding_statistics(const float* embedding, int n_samples,
 // Internal implementation functions (called by wrapper)
 namespace transform_utils {
     int internal_pacmap_transform(PacMapModel* model,
-        float* new_data,
+        double* new_data,
         int n_new_obs,
         int n_dim,
-        float* embedding);
+        double* embedding);
 
     int internal_pacmap_transform_detailed(PacMapModel* model,
-        float* new_data,
+        double* new_data,
         int n_new_obs,
         int n_dim,
-        float* embedding,
+        double* embedding,
         int* nn_indices,
-        float* nn_distances,
-        float* confidence_score,
+        double* nn_distances,
+        double* confidence_score,
         int* outlier_level,
-        float* percentile_rank,
-        float* z_score);
+        double* percentile_rank,
+        double* z_score);
 }

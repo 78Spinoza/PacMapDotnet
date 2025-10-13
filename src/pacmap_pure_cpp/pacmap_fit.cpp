@@ -14,7 +14,7 @@ namespace fit_utils {
 
     // Auto-tune HNSW parameters using subsample (ERROR12 Priority 1)
     // Tests different M/ef_construction combinations to find optimal balance of speed and recall
-    int autoTuneHNSWParams(PacMapModel* model, const float* data, int n_obs, int n_dim,
+    int autoTuneHNSWParams(PacMapModel* model, const double* data, int n_obs, int n_dim,
                            pacmap_progress_callback_internal callback) {
         // Cap subsample at 30,000 points for efficiency (ERROR12 recommendation)
         int subsample_size = std::min(30000, n_obs / 10);
@@ -168,7 +168,7 @@ namespace fit_utils {
 
     // Main PACMAP fitting function with proper PACMAP workflow (internal implementation)
     int internal_pacmap_fit_with_progress_v2(PacMapModel* model,
-        float* data,
+        double* data,
         int n_obs,
         int n_dim,
         int embedding_dim,
@@ -181,7 +181,7 @@ namespace fit_utils {
         int phase2_iters,
         int phase3_iters,
         PacMapMetric metric,
-        float* embedding,
+        double* embedding,
         pacmap_progress_callback_internal progress_callback,
         int force_exact_knn,
         int M,
@@ -246,41 +246,65 @@ namespace fit_utils {
             }
 
             // Convert input data to vector format and store in model for KNN direct mode
-            std::vector<float> input_data(data, data + (static_cast<size_t>(n_obs) * static_cast<size_t>(n_dim)));
+            // Convert double input to float for internal storage (API boundary conversion)
+            std::vector<double> input_data(data, data + (static_cast<size_t>(n_obs) * static_cast<size_t>(n_dim)));
             model->training_data = input_data; // Store training data for KNN direct mode persistence
 
-            // Compute normalization parameters
-            model->feature_means.resize(n_dim, 0.0f);
-            model->feature_stds.resize(n_dim, 1.0f);
+            // 🔧 CRITICAL FIX v2.8.4: Match Python preprocessing exactly - min-max + mean centering
+            // Python reference (pacmap.py lines 371-375):
+            //   xmin, xmax = (np.min(X), np.max(X))
+            //   X -= xmin          # Min offset
+            //   X /= xmax          # Scale to [0,1]
+            //   xmean = np.mean(X, axis=0)
+            //   X -= xmean         # Mean centering AFTER scaling
+            //
+            // Previous C++ implementation used z-score normalization which creates different data scaling
+            // This affected distance calculations and force dynamics, contributing to oval formation
 
-            // Calculate feature means
-            for (int j = 0; j < n_dim; j++) {
-                float sum = 0.0f;
-                for (int i = 0; i < n_obs; i++) {
-                    sum += input_data[static_cast<size_t>(i) * static_cast<size_t>(n_dim) + static_cast<size_t>(j)];
-                }
-                model->feature_means[j] = sum / static_cast<float>(n_obs);
-            }
-
-            // Calculate feature standard deviations
-            for (int j = 0; j < n_dim; j++) {
-                float sum_sq = 0.0f;
-                for (int i = 0; i < n_obs; i++) {
-                    float diff = input_data[static_cast<size_t>(i) * static_cast<size_t>(n_dim) + static_cast<size_t>(j)] - model->feature_means[j];
-                    sum_sq += diff * diff;
-                }
-                model->feature_stds[j] = std::sqrt(sum_sq / static_cast<float>(n_obs - 1));
-                if (model->feature_stds[j] < 1e-8f) model->feature_stds[j] = 1.0f; // Prevent division by zero
-            }
-
-            // Normalize data
-            std::vector<float> normalized_data = input_data;
+            // Step 1: Find global min and max values across entire dataset - double precision
+            double xmin = std::numeric_limits<double>::max();
+            double xmax = std::numeric_limits<double>::lowest();
             for (int i = 0; i < n_obs; i++) {
                 for (int j = 0; j < n_dim; j++) {
                     size_t idx = static_cast<size_t>(i) * static_cast<size_t>(n_dim) + static_cast<size_t>(j);
-                    normalized_data[idx] = (input_data[idx] - model->feature_means[j]) / model->feature_stds[j];
+                    xmin = std::min(xmin, input_data[idx]);
+                    xmax = std::max(xmax, input_data[idx]);
                 }
             }
+
+            // Step 2: Apply min-max scaling to [0,1] range - double precision
+            std::vector<double> normalized_data = input_data;
+            for (int i = 0; i < n_obs; i++) {
+                for (int j = 0; j < n_dim; j++) {
+                    size_t idx = static_cast<size_t>(i) * static_cast<size_t>(n_dim) + static_cast<size_t>(j);
+                    normalized_data[idx] = (input_data[idx] - xmin) / xmax;  // Scale to [0,1]
+                }
+            }
+
+            // Step 3: Calculate column-wise means AFTER scaling (matching Python exactly) - double precision
+            model->feature_means.resize(n_dim, 0.0);
+            model->feature_stds.resize(n_dim, 1.0);  // Keep for compatibility but not used in new normalization
+
+            for (int j = 0; j < n_dim; j++) {
+                double sum = 0.0;
+                for (int i = 0; i < n_obs; i++) {
+                    size_t idx = static_cast<size_t>(i) * static_cast<size_t>(n_dim) + static_cast<size_t>(j);
+                    sum += normalized_data[idx];  // Use scaled data for mean calculation
+                }
+                model->feature_means[j] = sum / static_cast<double>(n_obs);
+            }
+
+            // Step 4: Apply mean centering AFTER min-max scaling (matching Python exactly) - double precision
+            for (int i = 0; i < n_obs; i++) {
+                for (int j = 0; j < n_dim; j++) {
+                    size_t idx = static_cast<size_t>(i) * static_cast<size_t>(n_dim) + static_cast<size_t>(j);
+                    normalized_data[idx] -= model->feature_means[j];  // Mean centering
+                }
+            }
+
+            // Store preprocessing parameters for transform consistency - double precision
+            model->xmin = xmin;
+            model->xmax = xmax;
 
 
             if (progress_callback) {
@@ -397,8 +421,13 @@ namespace fit_utils {
                 model->embedding_space_index->setEf(model->hnsw_ef_search);
 
                 // Add all embedding points to the embedding space HNSW index
+                // Convert double to float for HNSW (which only accepts float*)
+                std::vector<float> embedding_float(model->embedding.size());
+                for (size_t i = 0; i < model->embedding.size(); ++i) {
+                    embedding_float[i] = static_cast<float>(model->embedding[i]);
+                }
                 for (int i = 0; i < model->n_samples; i++) {
-                    const float* embedding_point = &model->embedding[static_cast<size_t>(i) * static_cast<size_t>(model->n_components)];
+                    const float* embedding_point = &embedding_float[static_cast<size_t>(i) * static_cast<size_t>(model->n_components)];
                     model->embedding_space_index->addPoint(embedding_point, static_cast<size_t>(i));
                 }
 

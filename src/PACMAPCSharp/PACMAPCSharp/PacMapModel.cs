@@ -79,7 +79,7 @@ namespace PacMapSharp
         /// <summary>
         /// Gets the projected coordinates in the embedding space (1-50D)
         /// </summary>
-        public float[] ProjectionCoordinates { get; }
+        public double[] ProjectionCoordinates { get; }
 
         /// <summary>
         /// Gets the indices of nearest neighbors in the original training data
@@ -89,13 +89,13 @@ namespace PacMapSharp
         /// <summary>
         /// Gets the distances to nearest neighbors in the original feature space
         /// </summary>
-        public float[] NearestNeighborDistances { get; }
+        public double[] NearestNeighborDistances { get; }
 
         /// <summary>
         /// Gets the confidence score for the projection (0.0 - 1.0)
         /// Higher values indicate the point is similar to training data
         /// </summary>
-        public float ConfidenceScore { get; }
+        public double ConfidenceScore { get; }
 
         /// <summary>
         /// Gets the outlier severity level based on distance from training data
@@ -106,13 +106,13 @@ namespace PacMapSharp
         /// Gets the percentile rank of the point's distance (0-100)
         /// Lower percentiles indicate similarity to training data
         /// </summary>
-        public float PercentileRank { get; }
+        public double PercentileRank { get; }
 
         /// <summary>
         /// Gets the Z-score relative to training data neighbor distances
         /// Values beyond ±2.5 indicate potential outliers
         /// </summary>
-        public float ZScore { get; }
+        public double ZScore { get; }
 
         /// <summary>
         /// Gets the dimensionality of the projection coordinates
@@ -128,7 +128,7 @@ namespace PacMapSharp
         /// Gets whether the projection is considered reliable for production use
         /// Based on comprehensive safety analysis
         /// </summary>
-        public bool IsReliable => Severity <= OutlierLevel.Unusual && ConfidenceScore >= 0.3f;
+        public bool IsReliable => Severity <= OutlierLevel.Unusual && ConfidenceScore >= 0.3;
 
         /// <summary>
         /// Gets a human-readable interpretation of the result quality
@@ -143,20 +143,20 @@ namespace PacMapSharp
             _ => "Unknown"
         };
 
-        internal TransformResult(float[] projectionCoordinates,
+        internal TransformResult(double[] projectionCoordinates,
                                int[] nearestNeighborIndices,
-                               float[] nearestNeighborDistances,
-                               float confidenceScore,
+                               double[] nearestNeighborDistances,
+                               double confidenceScore,
                                OutlierLevel severity,
-                               float percentileRank,
-                               float zScore)
+                               double percentileRank,
+                               double zScore)
         {
             ProjectionCoordinates = projectionCoordinates ?? throw new ArgumentNullException(nameof(projectionCoordinates));
             NearestNeighborIndices = nearestNeighborIndices ?? throw new ArgumentNullException(nameof(nearestNeighborIndices));
             NearestNeighborDistances = nearestNeighborDistances ?? throw new ArgumentNullException(nameof(nearestNeighborDistances));
-            ConfidenceScore = Math.Max(0f, Math.Min(1f, confidenceScore)); // Clamp to [0,1]
+            ConfidenceScore = Math.Max(0.0, Math.Min(1.0, confidenceScore)); // Clamp to [0,1]
             Severity = severity;
-            PercentileRank = Math.Max(0f, Math.Min(100f, percentileRank)); // Clamp to [0,100]
+            PercentileRank = Math.Max(0.0, Math.Min(100.0, percentileRank)); // Clamp to [0,100]
             ZScore = zScore;
         }
 
@@ -220,19 +220,19 @@ namespace PacMapSharp
         private static extern IntPtr WindowsCreate();
 
         [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_fit_with_progress_v2")]
-        private static extern int WindowsFitWithProgressV2(IntPtr model, float[,] data, int nObs, int nDim, int embeddingDim,
+        private static extern int WindowsFitWithProgressV2(IntPtr model, double[,] data, int nObs, int nDim, int embeddingDim,
                                                           int nNeighbors, float mnRatio, float fpRatio,
                                                           float learningRate, int nIters, int phase1Iters, int phase2Iters, int phase3Iters,
-                                                          DistanceMetric metric, float[,] embedding, NativeProgressCallbackV2 progressCallback,
+                                                          DistanceMetric metric, double[,] embedding, NativeProgressCallbackV2 progressCallback,
                                                           int forceExactKnn, int M, int efConstruction, int efSearch,
                                                           int useQuantization, int randomSeed = -1, int autoHNSWParam = 1,
                                                           float initializationStdDev = 0.1f);
 
         [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_transform_detailed")]
-        private static extern int WindowsTransformDetailed(IntPtr model, float[,] newData, int nNewObs, int nDim,
-                                                        float[,] embedding, int[] nnIndices, float[] nnDistances,
-                                                        float[] confidenceScore, int[] outlierLevel,
-                                                        float[] percentileRank, float[] zScore);
+        private static extern int WindowsTransformDetailed(IntPtr model, double[,] newData, int nNewObs, int nDim,
+                                                        double[,] embedding, int[] nnIndices, double[] nnDistances,
+                                                        double[] confidenceScore, int[] outlierLevel,
+                                                        double[] percentileRank, double[] zScore);
 
         [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_save_model")]
         private static extern int WindowsSaveModel(IntPtr model, [MarshalAs(UnmanagedType.LPStr)] string filename);
@@ -269,19 +269,19 @@ namespace PacMapSharp
         private static extern IntPtr LinuxCreate();
 
         [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_fit_with_progress_v2")]
-        private static extern int LinuxFitWithProgressV2(IntPtr model, float[,] data, int nObs, int nDim, int embeddingDim,
+        private static extern int LinuxFitWithProgressV2(IntPtr model, double[,] data, int nObs, int nDim, int embeddingDim,
                                                          int nNeighbors, float mnRatio, float fpRatio,
                                                          float learningRate, int nIters, int phase1Iters, int phase2Iters, int phase3Iters,
-                                                         DistanceMetric metric, float[,] embedding, NativeProgressCallbackV2 progressCallback,
+                                                         DistanceMetric metric, double[,] embedding, NativeProgressCallbackV2 progressCallback,
                                                          int forceExactKnn, int M, int efConstruction, int efSearch,
                                                          int useQuantization, int randomSeed = -1, int autoHNSWParam = 1,
                                                          float initializationStdDev = 0.1f);
 
         [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_transform_detailed")]
-        private static extern int LinuxTransformDetailed(IntPtr model, float[,] newData, int nNewObs, int nDim,
-                                                      float[,] embedding, int[] nnIndices, float[] nnDistances,
-                                                      float[] confidenceScore, int[] outlierLevel,
-                                                      float[] percentileRank, float[] zScore);
+        private static extern int LinuxTransformDetailed(IntPtr model, double[,] newData, int nNewObs, int nDim,
+                                                      double[,] embedding, int[] nnIndices, double[] nnDistances,
+                                                      double[] confidenceScore, int[] outlierLevel,
+                                                      double[] percentileRank, double[] zScore);
 
         [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_save_model")]
         private static extern int LinuxSaveModel(IntPtr model, [MarshalAs(UnmanagedType.LPStr)] string filename);
@@ -318,7 +318,7 @@ namespace PacMapSharp
         #region Constants
 
         // Expected DLL version - must match C++ PACMAP_WRAPPER_VERSION_STRING
-        private const string EXPECTED_DLL_VERSION = "2.4.9";
+        private const string EXPECTED_DLL_VERSION = "2.8.7";
 
         #endregion
 
@@ -531,7 +531,7 @@ namespace PacMapSharp
         /// <returns>Embedding coordinates [samples, embeddingDimension]</returns>
         /// <exception cref="ArgumentNullException">Thrown when data is null</exception>
         /// <exception cref="ArgumentException">Thrown when parameters are invalid</exception>
-        public float[,] Fit(float[,] data,
+        public double[,] Fit(double[,] data,
                             int embeddingDimension = 2,
                             int nNeighbors = 10,
                             float mnRatio = 0.5f,
@@ -581,7 +581,7 @@ namespace PacMapSharp
         /// <exception cref="ArgumentException">Thrown when parameters are invalid</exception>
         /// <remarks>This method is provided for backward compatibility. Consider using the unified Fit method instead.</remarks>
         [Obsolete("Use the unified Fit method with optional progressCallback parameter instead.")]
-        public float[,] FitWithProgress(float[,] data,
+        public double[,] FitWithProgress(double[,] data,
                                        ProgressCallback progressCallback,
                                        int embeddingDimension = 2,
                                        int nNeighbors = 10,
@@ -614,7 +614,7 @@ namespace PacMapSharp
         /// <exception cref="ArgumentNullException">Thrown when newData is null</exception>
         /// <exception cref="InvalidOperationException">Thrown when model is not fitted</exception>
         /// <exception cref="ArgumentException">Thrown when feature dimensions don't match training data</exception>
-        public float[,] Transform(float[,] newData)
+        public double[,] Transform(double[,] newData)
         {
             if (newData == null)
                 throw new ArgumentNullException(nameof(newData));
@@ -634,7 +634,7 @@ namespace PacMapSharp
                 throw new ArgumentException($"Feature dimension mismatch. Expected {modelInfo.InputDimension}, got {nFeatures}");
 
             // Prepare output array
-            var embedding = new float[nNewSamples, modelInfo.OutputDimension];
+            var embedding = new double[nNewSamples, modelInfo.OutputDimension];
 
             // Call native function
             var result = CallTransformDetailed(_nativeModel, newData, nNewSamples, nFeatures,
@@ -659,7 +659,7 @@ namespace PacMapSharp
         /// <exception cref="ArgumentNullException">Thrown when newData is null</exception>
         /// <exception cref="InvalidOperationException">Thrown when model is not fitted</exception>
         /// <exception cref="ArgumentException">Thrown when feature dimensions don't match training data</exception>
-        public TransformResult[] TransformWithSafety(float[,] newData)
+        public TransformResult[] TransformWithSafety(double[,] newData)
         {
             if (newData == null)
                 throw new ArgumentNullException(nameof(newData));
@@ -679,13 +679,13 @@ namespace PacMapSharp
                 throw new ArgumentException($"Feature dimension mismatch. Expected {modelInfo.InputDimension}, got {nFeatures}");
 
             // Prepare output arrays
-            var embedding = new float[nNewSamples, modelInfo.OutputDimension];
+            var embedding = new double[nNewSamples, modelInfo.OutputDimension];
             var nnIndices = new int[nNewSamples * modelInfo.Neighbors];
-            var nnDistances = new float[nNewSamples * modelInfo.Neighbors];
-            var confidenceScores = new float[nNewSamples];
+            var nnDistances = new double[nNewSamples * modelInfo.Neighbors];
+            var confidenceScores = new double[nNewSamples];
             var outlierLevels = new int[nNewSamples];
-            var percentileRanks = new float[nNewSamples];
-            var zScores = new float[nNewSamples];
+            var percentileRanks = new double[nNewSamples];
+            var zScores = new double[nNewSamples];
 
             // Call enhanced native function
             var result = CallTransformDetailed(_nativeModel, newData, nNewSamples, nFeatures,
@@ -704,7 +704,7 @@ namespace PacMapSharp
             for (int i = 0; i < nNewSamples; i++)
             {
                 // Extract embedding coordinates for this sample
-                var projectionCoords = new float[modelInfo.OutputDimension];
+                var projectionCoords = new double[modelInfo.OutputDimension];
                 for (int j = 0; j < modelInfo.OutputDimension; j++)
                 {
                     projectionCoords[j] = embedding[i, j];
@@ -712,7 +712,7 @@ namespace PacMapSharp
 
                 // Extract neighbor indices and distances for this sample
                 var nearestIndices = new int[modelInfo.Neighbors];
-                var nearestDistances = new float[modelInfo.Neighbors];
+                var nearestDistances = new double[modelInfo.Neighbors];
                 for (int k = 0; k < modelInfo.Neighbors; k++)
                 {
                     nearestIndices[k] = nnIndices[i * modelInfo.Neighbors + k];
@@ -761,7 +761,7 @@ namespace PacMapSharp
 
         #region Private Methods
 
-        private float[,] FitInternal(float[,] data,
+        private double[,] FitInternal(double[,] data,
                                    int embeddingDimension,
                                    int nNeighbors,
                                    float mnRatio,
@@ -803,7 +803,7 @@ namespace PacMapSharp
                 throw new ArgumentException("All phase iteration counts must be positive");
 
             // Prepare output array
-            var embedding = new float[nSamples, embeddingDimension];
+            var embedding = new double[nSamples, embeddingDimension];
 
             // Call appropriate native function
             int result;
@@ -863,10 +863,10 @@ namespace PacMapSharp
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static int CallFitWithProgressV2(IntPtr model, float[,] data, int nObs, int nDim, int embeddingDim,
+        private static int CallFitWithProgressV2(IntPtr model, double[,] data, int nObs, int nDim, int embeddingDim,
                                                   int nNeighbors, float mnRatio, float fpRatio,
                                                   float learningRate, int nIters, int phase1Iters, int phase2Iters, int phase3Iters,
-                                                  DistanceMetric metric, float[,] embedding, NativeProgressCallbackV2? progressCallback,
+                                                  DistanceMetric metric, double[,] embedding, NativeProgressCallbackV2? progressCallback,
                                                   int forceExactKnn, int M, int efConstruction, int efSearch,
                                                   int useQuantization, int randomSeed = -1, int autoHNSWParam = 1,
                                                   float initializationStdDev = 0.1f)
@@ -883,10 +883,10 @@ namespace PacMapSharp
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static int CallTransformDetailed(IntPtr model, float[,] newData, int nNewObs, int nDim,
-                                                float[,] embedding, int[] nnIndices, float[] nnDistances,
-                                                float[] confidenceScore, int[] outlierLevel,
-                                                float[] percentileRank, float[] zScore)
+        private static int CallTransformDetailed(IntPtr model, double[,] newData, int nNewObs, int nDim,
+                                                double[,] embedding, int[] nnIndices, double[] nnDistances,
+                                                double[] confidenceScore, int[] outlierLevel,
+                                                double[] percentileRank, double[] zScore)
         {
             return IsWindows ? WindowsTransformDetailed(model, newData, nNewObs, nDim, embedding, nnIndices, nnDistances,
                                                        confidenceScore, outlierLevel, percentileRank, zScore)

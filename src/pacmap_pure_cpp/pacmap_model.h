@@ -89,20 +89,24 @@ struct PacMapModel {
     float hnsw_recall_percentage = 0.0f;
     bool always_save_embedding_data = false;
 
-    // Data preprocessing fields for transform consistency
-    std::vector<float> feature_means;
-    std::vector<float> feature_stds;
+    // Data preprocessing fields for transform consistency - now double precision
+    std::vector<double> feature_means;
+    std::vector<double> feature_stds;
 
-    // Distance percentiles for triplet filtering
-    float p25_distance = 0.0f;  // 25th percentile distance
-    float p75_distance = 0.0f;  // 75th percentile distance
+    // 🔧 CRITICAL FIX v2.8.4: Min-max normalization parameters (matching Python) - double precision
+    double xmin = 0.0;  // Global minimum value for min-max scaling
+    double xmax = 1.0;  // Global maximum value for min-max scaling
 
-    // Adam optimizer state
-    std::vector<float> adam_m;     // First moment vector (momentum)
-    std::vector<float> adam_v;     // Second moment vector (RMSprop-like)
-    float adam_beta1 = 0.9f;       // Adam beta1 parameter (momentum decay)
+    // Distance percentiles for triplet filtering - double precision
+    double p25_distance = 0.0;  // 25th percentile distance
+    double p75_distance = 0.0;  // 75th percentile distance
+
+    // Adam optimizer state - now double precision for numerical stability
+    std::vector<double> adam_m;     // First moment vector (momentum) - double precision
+    std::vector<double> adam_v;     // Second moment vector (RMSprop-like) - double precision
+    float adam_beta1 = 0.9f;        // FIXED: Set to 0.9 to use Adam (Python reference) instead of Simple SGD
     float adam_beta2 = 0.999f;     // Adam beta2 parameter (RMSprop decay)
-    float adam_eps = 1e-7f;        // Adam epsilon parameter for numerical stability (matches reference)
+    float adam_eps = 1e-7f;        // Adam epsilon parameter for numerical stability (PYTHON FIX: matches Python reference exactly)
 
     // Factory fields for HNSW space creation
     std::unique_ptr<hnswlib::SpaceInterface<float>> original_space_factory;
@@ -115,41 +119,41 @@ struct PacMapModel {
     // Unified triplet storage (review optimization)
     std::vector<Triplet> triplets;
 
-    // Data storage
-    std::vector<float> training_data;
-    std::vector<float> embedding;
+    // Data storage - now double precision
+    std::vector<double> training_data;
+    std::vector<double> embedding;
     std::unique_ptr<hnswlib::HierarchicalNSW<float>> original_space_index;
     std::unique_ptr<hnswlib::HierarchicalNSW<float>> embedding_space_index;
     float median_original_distance = 0.0f;
 
-    // Safety statistics (review addition)
-    float min_embedding_dist = 0.0f;
-    float p95_embedding_dist = 0.0f;
+    // Safety statistics (review addition) - double precision
+    double min_embedding_dist = 0.0;
+    double p95_embedding_dist = 0.0;
 
-    // Additional embedding statistics for safety analysis
-    float min_embedding_distance = 0.0f;
-    float p95_embedding_distance = 0.0f;
-    float p99_embedding_distance = 0.0f;
-    float mild_embedding_outlier_threshold = 0.0f;
-    float extreme_embedding_outlier_threshold = 0.0f;
-    float std_embedding_distance = 0.0f;
-    float mean_embedding_distance = 0.0f;
+    // Additional embedding statistics for safety analysis - double precision
+    double min_embedding_distance = 0.0;
+    double p95_embedding_distance = 0.0;
+    double p99_embedding_distance = 0.0;
+    double mild_embedding_outlier_threshold = 0.0;
+    double extreme_embedding_outlier_threshold = 0.0;
+    double std_embedding_distance = 0.0;
+    double mean_embedding_distance = 0.0;
 
-    // Original space distance statistics for persistence
-    float min_original_distance = 0.0f;
-    float mean_original_distance = 0.0f;
-    float std_original_distance = 0.0f;
-    float p95_original_distance = 0.0f;
-    float p99_original_distance = 0.0f;
-    float mild_original_outlier_threshold = 0.0f;
-    float extreme_original_outlier_threshold = 0.0f;
-    float exact_match_threshold = 0.0f;
+    // Original space distance statistics for persistence - double precision
+    double min_original_distance = 0.0;
+    double mean_original_distance = 0.0;
+    double std_original_distance = 0.0;
+    double p95_original_distance = 0.0;
+    double p99_original_distance = 0.0;
+    double mild_original_outlier_threshold = 0.0;
+    double extreme_original_outlier_threshold = 0.0;
+    double exact_match_threshold = 0.0;
 
-    // Additional persistence fields for transform data
+    // Additional persistence fields for transform data - double precision
     bool use_normalization = false;
     std::vector<int> nn_indices;
-    std::vector<float> nn_distances;
-    std::vector<float> nn_weights;
+    std::vector<double> nn_distances;
+    std::vector<double> nn_weights;
 
     // Quantization fields (PQ - Product Quantization)
     int pq_m = 0;

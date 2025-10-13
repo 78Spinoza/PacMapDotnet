@@ -46,10 +46,10 @@ namespace PacMapDemo
             Console.WriteLine("Demo completed successfully!");
         }
 
-        static (float[,] data, int[] labels) GenerateSampleData(int samples, int dimensions)
+        static (double[,] data, int[] labels) GenerateSampleData(int samples, int dimensions)
         {
             var random = new Random(42);
-            var data = new float[samples, dimensions];
+            var data = new double[samples, dimensions];
             var labels = new int[samples];
 
             // Generate 3 clusters of data
@@ -61,15 +61,15 @@ namespace PacMapDemo
                 for (int j = 0; j < dimensions; j++)
                 {
                     // Add cluster centers and some noise
-                    float center = cluster * 2.0f;
-                    data[i, j] = center + (float)(random.NextDouble() - 0.5) * 0.5f;
+                    double center = cluster * 2.0;
+                    data[i, j] = center + (random.NextDouble() - 0.5) * 0.5;
                 }
             }
 
             return (data, labels);
         }
 
-        static void TestPacMapEmbedding(float[,] data)
+        static void TestPacMapEmbedding(double[,] data)
         {
             using var model = new PacMapModel();
 
@@ -88,7 +88,7 @@ namespace PacMapDemo
             Console.WriteLine($"   📏 Model info: {model.ModelInfo}");
         }
 
-        static void TestModelPersistence(float[,] data)
+        static void TestModelPersistence(double[,] data)
         {
             string modelPath = "test_model.pmm";
 
@@ -107,11 +107,11 @@ namespace PacMapDemo
                 Console.WriteLine($"   📏 Loaded model info: {loadedModel.ModelInfo}");
 
                 // Test transform with new data
-                var newData = new float[10, data.GetLength(1)];
+                var newData = new double[10, data.GetLength(1)];
                 var random = new Random(123);
                 for (int i = 0; i < 10; i++)
                     for (int j = 0; j < data.GetLength(1); j++)
-                        newData[i, j] = (float)random.NextDouble();
+                        newData[i, j] = random.NextDouble();
 
                 var transformed = loadedModel.Transform(newData);
                 Console.WriteLine($"   ✅ Transformed {newData.GetLength(0)} new samples");
@@ -122,7 +122,7 @@ namespace PacMapDemo
                 System.IO.File.Delete(modelPath);
         }
 
-        static void TestDistanceMetrics(float[,] data)
+        static void TestDistanceMetrics(double[,] data)
         {
             var metrics = new DistanceMetric[]
             {
