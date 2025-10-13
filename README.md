@@ -51,7 +51,7 @@ This C++/C# version bridges these gaps, making PaCMAP **production-ready** for A
 **Dimensionality Reduction (DR)** is a technique used to reduce the number of variables or features in high-dimensional data while preserving as much critical information as possible. It transforms data from a high-dimensional space (e.g., thousands of features) into a lower-dimensional space (e.g., 2D or 3D) for easier **analysis**, **visualization**, and **processing**. Ideally, DR discovers linear and non-linear dependencies and unnecessary dimensions, reducing the data to a more informative dimensionality. DR is used to understand the underlying structure of the data.
 
 ![T-rex Render](docs/Other/T-rex_render.png)
-*Complex 3D structure showcasing the challenges of dimensionality reduction to 2D and difficulty of  UMAP initialization giving different result  
+*Complex 3D structure showcasing the challenges of dimensionality reduction to 2D and difficulty of UMAP initialization giving different results*  
 ![T-rex Animation](docs/Other/t-rex-random.gif)
 
 ### Why DR is Crucial for Data Filtering and AI
@@ -61,6 +61,7 @@ This C++/C# version bridges these gaps, making PaCMAP **production-ready** for A
 - **Facilitates Visualization**: Creates human-interpretable 2D/3D representations, aiding decision-making for data filtering and AI model validation.
 
 ![3D UMAP Rotation](docs/Other/rot3DUMAP_alltp_360.gif)
+
 
 ## Evolution of Dimensionality Reduction Methods
 
@@ -117,8 +118,19 @@ Even UMAP, a later version, is very **sensitive** to hyperparameters as you can 
 ![Animation Examples](docs/Other/anim_min_dist_param.gif)
 *Hyperparameter exploration through animation - minimum distance variation*
 
+
+# Results from our current library
+
+Below is the result of the library that varies the only hyperparameter of PACMAP, which is the **number of neighbors**
+
+![Mammoth Original XZ View](docs/Other/mammoth_original_3d_XZ_SideView.png)
+*XZ side view revealing the mammoth's body profile and trunk structure*
+
+![Mammoth Original YZ View](docs/Other/mammoth_original_3d_YZ_FrontView.png)
+*YZ front view displaying the mammoth's anatomical proportions and features*
+
 ![Neighbor Experiments Animation](docs/Other/neighbor_experiments_animation_optimized.gif)
-*PaCMAP neighbor experiments animation showing the effect of n_neighbors parameter from 5 to 60 (300ms per frame)*
+*PaCMAP neighbor experiments animation showing the effect of n_neighbors parameter from 5 to 60 (300ms per frame) using our implementation*
 
 
 
@@ -144,19 +156,6 @@ PaCMAP excels due to its balanced and efficient approach:
 # The Mammoth Test: Ultimate Challenge for Dimensionality Reduction
 
 Projecting complex 3D structures like a mammoth into 2D space while preserving **all anatomical details** represents one of the most challenging tests for dimensionality reduction algorithms. The algorithm must manage intricate non-linearities with minimal guidance - essentially just one hyperparameter.
-
-## The Original Challenge
-
-![Mammoth Original XY View](docs/Other/mammoth_original_3d_XY_TopView.png)
-*The original 3D mammoth point cloud - XY top view showing complex anatomical structure*
-
-![Mammoth Original XZ View](docs/Other/mammoth_original_3d_XZ_SideView.png)
-*XZ side view revealing the mammoth's body profile and trunk structure*
-
-![Mammoth Original YZ View](docs/Other/mammoth_original_3d_YZ_FrontView.png)
-*YZ front view displaying the mammoth's anatomical proportions and features*
-
-
 
 ## Cognitive Parallel: How Our Brain Works
 
@@ -360,7 +359,7 @@ PaCMAP Enhanced includes comprehensive progress reporting across all operations:
 - **Quantized models**: 50-80% size reduction
 - **Compressed saves**: Additional 60-80% reduction
 
-### Current Performance (v2.4.9)
+### Current Performance (v2.8.16)
 | Dataset Size | Traditional | HNSW Optimized | Speedup |
 |-------------|-------------|----------------|---------|
 | 1K samples | 2.3s | 0.08s | **29x** |
@@ -393,7 +392,7 @@ dotnet run
 - ✅ **Distance Metrics**: Euclidean distance (fully verified), others in development
 - ✅ **Progress Reporting**: Real-time progress tracking with phase-aware callbacks
 
-## Current Status (Testing Phase v2.4.9)
+## Current Status (Working Solution v2.8.16)
 
 ### ✅ **Working Features**
 - **Euclidean Distance**: Fully tested and verified
@@ -492,6 +491,6 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) file for
 
 
 
-*Currently in testing phase with Euclidean distance fully verified. Additional metrics and features under active development.*
+*Currently a working solution with Euclidean distance fully verified. Awaiting optimization and validation testing before full production release.*
 
 **⭐ Star this repository if you find it useful!**
