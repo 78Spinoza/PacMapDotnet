@@ -147,8 +147,14 @@ Projecting complex 3D structures like a mammoth into 2D space while preserving *
 
 ## The Original Challenge
 
-![Mammoth Original vs Enhanced](docs/Other/mamutOriginal.PNG)
-*The original 3D mammoth point cloud - a complex biological structure with intricate anatomical features*
+![Mammoth Original XY View](docs/Other/mammoth_original_3d_XY_TopView.png)
+*The original 3D mammoth point cloud - XY top view showing complex anatomical structure*
+
+![Mammoth Original XZ View](docs/Other/mammoth_original_3d_XZ_SideView.png)
+*XZ side view revealing the mammoth's body profile and trunk structure*
+
+![Mammoth Original YZ View](docs/Other/mammoth_original_3d_YZ_FrontView.png)
+*YZ front view displaying the mammoth's anatomical proportions and features*
 
 
 
