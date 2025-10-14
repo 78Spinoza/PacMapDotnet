@@ -197,6 +197,15 @@ Below are visualizations generated using this PaCMAP library implementation. As 
 ![MNIST 2D Transform](docs/Other/mnist_2d_transform.png)
 *All projections have misplaced letters, it's only more visible here since I use different color and dot type. This demonstrates the inherent challenges in dimensionality reduction where some data points naturally get positioned in suboptimal regions of the low-dimensional manifold.*
 
+### MNIST Parameter Optimization GIFs
+
+![MNIST Ratio Animation](docs/Other/MNSTMnRatio.gif)
+*Parameter optimization animation showing the effect of varying MN_ratio from 0.4 to 1.3 while maintaining FP_ratio = 4 × MN_ratio relationship. Each frame displays for 50 seconds for detailed analysis of how parameter changes affect the embedding structure.*
+
+![Neighbor MSTI Animation](docs/Other/neighborMNSTI.gif)
+*Neighbor sampling strategy animation demonstrating different approaches to selecting near, mid-near, and far pairs in the PaCMAP algorithm. This animation shows how the triplet sampling strategy affects the final embedding quality.*
+
+
 Below is a clean version where all the difficult letters are removed, making it easy for AI or any ML method to classify since they can be properly separated as seen with this powerful DR tool. 
 
 ![MNIST 2D Transform Clean](docs/Other/mnist_2d_transform_clean.png)
@@ -209,17 +218,12 @@ Below are the difficult letters identified, and we can understand why many of th
 *These are the difficult letters since they are misplaced in the dimension manifold. Understandably so if you look at some of them - these represent samples that are inherently ambiguous or lie in challenging regions of the 
 feature space where clear separation is difficult.*
 
-### MNIST Parameter Optimization GIFs
 
-![MNIST Ratio Animation](docs/Other/MNSTMnRatio.gif)
-*Parameter optimization animation showing the effect of varying MN_ratio from 0.4 to 1.3 while maintaining FP_ratio = 4 × MN_ratio relationship. Each frame displays for 50 seconds for detailed analysis of how parameter changes affect the embedding structure.*
-
-![Neighbor MSTI Animation](docs/Other/neighborMNSTI.gif)
-*Neighbor sampling strategy animation demonstrating different approaches to selecting near, mid-near, and far pairs in the PaCMAP algorithm. This animation shows how the triplet sampling strategy affects the final embedding quality.*
 
 ### Difficult Examples Recognized from the DR Manifold
 
 ![Bad Sample Examples](docs/Other/badsampel.gif)
+
 *Difficult examples recognized from the dimension reduction manifold. This animation shows samples that are challenging to classify correctly due to their position in the low-dimensional embedding space, highlighting the inherent complexity of high-dimensional data projection.*
 
 
