@@ -197,13 +197,16 @@ Below are visualizations generated using this PaCMAP library implementation. As 
 ![MNIST 2D Transform](docs/Other/mnist_2d_transform.png)
 *All projections have misplaced letters, it's only more visible here since I use different color and dot type. This demonstrates the inherent challenges in dimensionality reduction where some data points naturally get positioned in suboptimal regions of the low-dimensional manifold.*
 
+**Key Achievement**: Unlike t-SNE, the cluster sizes here actually reflect the balanced nature of MNIST classes, and the spatial relationships between digits (e.g., 4 and 9 being close, 8 and 3, etc ) make intuitive sense.
+
+
 ### MNIST Parameter Optimization GIFs
 
 ![MNIST Ratio Animation](docs/Other/MNSTMnRatio.gif)
-*Parameter optimization animation showing the effect of varying MN_ratio from 0.4 to 1.3 while maintaining FP_ratio = 4 × MN_ratio relationship. Each frame displays for 50 seconds for detailed analysis of how parameter changes affect the embedding structure.*
+*Parameter optimization animation showing the effect of varying MN_ratio from 0.4 to 1.3 while maintaining FP_ratio = 4 × MN_ratio relationship. This visualize how parameter changes affect the embedding structure.*
 
 ![Neighbor MSTI Animation](docs/Other/neighborMNSTI.gif)
-*Neighbor sampling strategy animation demonstrating different approaches to selecting near, mid-near, and far pairs in the PaCMAP algorithm. This animation shows how the triplet sampling strategy affects the final embedding quality.*
+*Neighbor sampling strategy animation demonstrating  hyperparams in the PaCMAP algorithm. This animation shows how the triplet sampling strategy affects the final embedding quality. As you can see its very forgiving and stable except the blobs jumping around. *
 
 
 Below is a clean version where all the difficult letters are removed, making it easy for AI or any ML method to classify since they can be properly separated as seen with this powerful DR tool. 
@@ -211,10 +214,10 @@ Below is a clean version where all the difficult letters are removed, making it 
 ![MNIST 2D Transform Clean](docs/Other/mnist_2d_transform_clean.png)
 *Here is the cleaned one using the library's SafeTransform method, which provides enhanced classification by filtering out difficult samples and using weighted nearest neighbor voting for improved robustness.*
 
-
 Below are the difficult letters identified, and we can understand why many of them are difficult to recognize even for the human eye. 
 
-![MNIST 2D Transform Difficult](docs/Other/mnist_2d_transform_difficult.png)
+                   ![MNIST 2D Transform Difficult](docs/Other/mnist_2d_transform_difficult.png)
+
 *These are the difficult letters since they are misplaced in the dimension manifold. Understandably so if you look at some of them - these represent samples that are inherently ambiguous or lie in challenging regions of the 
 feature space where clear separation is difficult.*
 
@@ -226,12 +229,6 @@ feature space where clear separation is difficult.*
 
 *Difficult examples recognized from the dimension reduction manifold. This animation shows samples that are challenging to classify correctly due to their position in the low-dimensional embedding space, highlighting the inherent complexity of high-dimensional data projection.*
 
-
-
-
-
-
-**Key Achievement**: Unlike t-SNE, the cluster sizes here actually reflect the balanced nature of MNIST classes, and the spatial relationships between digits (e.g., 6 and 9 being close) make intuitive sense.
 
 ### Topological Challenges: The S-Curve with Hole
 
@@ -345,22 +342,7 @@ Controls the ratio of further pairs to number of neighbors:
 
 ⚠️ **Parameter Validation**: The C++ implementation automatically validates all parameters (n_neighbors, MN_ratio, FP_ratio) and provides helpful warnings when they deviate from recommended ranges or relationships.
 
-### 📚 Recommended Citation
 
-If you use this implementation in your research, please cite the original PaCMAP paper:
-
-```bibtex
-@article{JMLR:v22:20-1061,
-  author  = {Yingfan Wang and Haiyang Huang and Cynthia Rudin and Yaron Shaposhnik},
-  title   = {Understanding How Dimension Reduction Tools Work: An Empirical Approach to Deciphering t-SNE, UMAP, TriMap, and PaCMAP for Data Visualization},
-  journal = {Journal of Machine Learning Research},
-  year    = {2021},
-  volume  = {22},
-  number  = {201},
-  pages   = {1-73},
-  url     = {http://jmlr.org/papers/v22/20-1061.html}
-}
-```
 
 ### 🔍 Parameter Tuning Guidelines
 
@@ -642,7 +624,22 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) file for
 - **HNSW Optimization**: [Yury Malkov & Dmitry Yashunin](https://github.com/nmslib/hnswlib)
 - **Base Architecture**: Inspiration from UMAPCSharp and other dimensionality reduction implementations
 
-## 📞 Support
+### 📚 Recommended Citation to honor the inventors. 
+
+If you use this implementation in your research, please cite the original PaCMAP paper:
+
+```bibtex
+@article{JMLR:v22:20-1061,
+  author  = {Yingfan Wang and Haiyang Huang and Cynthia Rudin and Yaron Shaposhnik},
+  title   = {Understanding How Dimension Reduction Tools Work: An Empirical Approach to Deciphering t-SNE, UMAP, TriMap, and PaCMAP for Data Visualization},
+  journal = {Journal of Machine Learning Research},
+  year    = {2021},
+  volume  = {22},
+  number  = {201},
+  pages   = {1-73},
+  url     = {http://jmlr.org/papers/v22/20-1061.html}
+}
+```
 
 - 🐛 [Report Issues](https://github.com/78Spinoza/PacMapDotnet/issues)
 - 💬 [Discussions](https://github.com/78Spinoza/PacMapDotnet/discussions)
