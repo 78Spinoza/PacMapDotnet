@@ -288,7 +288,8 @@ namespace PACMAPCSharp.Tests
                     var embedding = model1.Fit(_testData,
                         embeddingDimension: 2,
                         numIters: (30, 30, 75),
-                        forceExactKnn: false);
+                        forceExactKnn: false,
+                        autoHNSWParam: false);  // Disable auto-tuning for consistent results
 
                     Assert.IsTrue(model1.IsFitted);
 
@@ -374,7 +375,8 @@ namespace PACMAPCSharp.Tests
                     var embedding = model.Fit(_testData,
                         embeddingDimension: 2,
                         numIters: (30, 30, 75),
-                        forceExactKnn: false);
+                        forceExactKnn: false,
+                        autoHNSWParam: false);  // Disable auto-tuning for consistent results
 
                     Assert.IsTrue(model.IsFitted);
 
@@ -609,7 +611,8 @@ namespace PACMAPCSharp.Tests
                         nNeighbors: 19, // Same as C++ test
                         numIters: (50, 50, 125), // Same as C++ test (total 150 epochs)
                         metric: DistanceMetric.Euclidean,
-                        forceExactKnn: false); // Quantization removed from v3.5.0
+                        forceExactKnn: false,       // Use HNSW
+                        autoHNSWParam: false);      // Disable auto-tuning for consistent results
 
                     Assert.IsNotNull(trainingEmbeddings);
                     Assert.AreEqual(2000, trainingEmbeddings.GetLength(0)); // 2000 samples for proper HNSW testing

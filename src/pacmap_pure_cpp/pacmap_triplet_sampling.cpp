@@ -95,7 +95,7 @@ void sample_triplets(PacMapModel* model, double* data, pacmap_progress_callback_
     model->triplets.insert(model->triplets.end(), mn_triplets.begin(), mn_triplets.end());
     model->triplets.insert(model->triplets.end(), fp_triplets.begin(), fp_triplets.end());
 
-    // ✅ v2.8.9 FIX: DISABLED shuffling to match Python sequential processing
+    // [OK] v2.8.9 FIX: DISABLED shuffling to match Python sequential processing
     // PROBLEM: Shuffled order + OpenMP = mixed force application = fragmentation
     // SOLUTION: Use Python's deterministic NEIGHBOR→MN→FURTHER sequential order
         // std::shuffle(model->triplets.begin(), model->triplets.end(), model->rng);  // DISABLED - v2.8.9

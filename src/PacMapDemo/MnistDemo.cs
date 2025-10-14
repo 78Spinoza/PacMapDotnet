@@ -15,6 +15,42 @@ using PacMapSharp;
 namespace PacMapDemo
 {
     /// <summary>
+    /// Data structure for digit probability classification
+    /// </summary>
+    public struct DigitProbability
+    {
+        public int Digit { get; }
+        public double Probability { get; }
+
+        public DigitProbability(int digit, double probability)
+        {
+            Digit = digit;
+            Probability = probability;
+        }
+    }
+
+    /// <summary>
+    /// Complete classification result for a single digit
+    /// </summary>
+    public struct DigitClassificationResult
+    {
+        public int TrueLabel { get; }
+        public int PredictedLabel { get; }
+        public double[] Probabilities { get; }
+        public bool IsCorrect { get; }
+        public double Confidence { get; }
+
+        public DigitClassificationResult(int trueLabel, int predictedLabel, double[] probabilities, bool isCorrect, double confidence)
+        {
+            TrueLabel = trueLabel;
+            PredictedLabel = predictedLabel;
+            Probabilities = probabilities;
+            IsCorrect = isCorrect;
+            Confidence = confidence;
+        }
+    }
+
+    /// <summary>
     /// MNIST Demo Program
     /// Demonstrates loading and using MNIST data with the binary reader
     /// </summary>
@@ -158,8 +194,41 @@ namespace PacMapDemo
                 var (pacmapKNN, knnFitTime) = CreateMnistEmbeddingWithModel(doubleData, labels, nNeighbors: 30, mnRatio: 0.5f, fpRatio: 2.0f,
                     name: "mnist_2d_KNN_embedding", folderName: "", directKNN: true);
 
-                // Create Transform API experiments using previously fitted models
-                CreateTransformExperiments(doubleData, labels, pacmapHNSW, pacmapKNN, hnswFitTime, knnFitTime);
+                // NEW: Run TransformWithSafety with classification right after the two main embeddings
+                Console.WriteLine();
+                Console.WriteLine("🔄 Creating TransformWithSafety with Classification (HNSW only)...");
+                Console.WriteLine("===============================================");
+
+                // Transform using previously fitted HNSW model with TransformWithSafety
+                Console.WriteLine($"\n🎯 TransformWithSafety Experiment: HNSW (reusing fitted model)");
+                CreateMnistTransformEmbedding(
+                    data: doubleData,
+                    labels: labels,
+                    fittedModel: pacmapHNSW,
+                    originalFitTime: hnswFitTime,
+                    name: "mnist_2d_transform",
+                    folderName: ""
+                );
+
+                // Create Transform API experiments for DirectKNN (basic transform only)
+                Console.WriteLine($"\n🎯 Transform Experiment: DirectKNN (reusing fitted model)");
+                CreateMnistTransformEmbedding(
+                    data: doubleData,
+                    labels: labels,
+                    fittedModel: pacmapKNN,
+                    originalFitTime: knnFitTime,
+                    name: "mnist_2d_KNN_transform",
+                    folderName: ""
+                );
+
+                // Create neighborMNSTI folder with k=5 to 60 experiments (HNSW only)
+                CreateNeighborMNSTI_Experiments(doubleData, labels);
+
+                // Create MNSTMnRatio experiments with mnRatio from 0.5 to 2.0 (increments of 0.2)
+                CreateMNSTMnRatio_Experiments(doubleData, labels);
+
+                // Create MNSTfpRatio experiments with fpRatio from 0.5 to 4.0 (increments of 0.5)
+                CreateMNSTfpRatio_Experiments(doubleData, labels);
 
                 // Create neighborMNSTI folder with k=5 to 60 experiments (HNSW only)
                 CreateNeighborMNSTI_Experiments(doubleData, labels);
@@ -697,34 +766,216 @@ phases=({pacmap.NumIters.phase1}, {pacmap.NumIters.phase2}, {pacmap.NumIters.pha
         }
 
         /// <summary>
-        /// Helper function to create MNIST embedding using Transform API with pre-fitted model
+        /// Helper function to create MNIST embedding using Transform API with pre-fitted model (HNSW only)
         /// </summary>
         private static void CreateMnistTransformEmbedding(double[,] data, byte[] labels, PacMapModel fittedModel, double originalFitTime, string name, string folderName = "")
         {
-            Console.WriteLine($"🚀 Creating {name} transform (using pre-fitted model)...");
+            Console.WriteLine($"🚀 Creating {name} transform with classification (using pre-fitted HNSW model)...");
 
-            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            // Only use TransformWithSafety for HNSW model (not DirectKNN)
+            if (fittedModel.ModelInfo.ForceExactKnn)
+            {
+                Console.WriteLine($"   ⚠️ Skipping classification for DirectKNN model - using basic Transform...");
+                // Use basic transform for DirectKNN
+                var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+                var embedding = fittedModel.Transform(data);
+                stopwatch.Stop();
+                var basicTransformTime = stopwatch.Elapsed.TotalSeconds;
+                CreateTransformScatterPlot(embedding, labels, fittedModel, originalFitTime, basicTransformTime, name, folderName);
+                return;
+            }
 
-            Console.WriteLine($"   🔄 Transforming data using pre-fitted model...");
-            // Transform data using the already fitted model - no retraining!
-            var embedding = fittedModel.Transform(data);
+            // Use TransformWithSafety with classification for HNSW
+            var transformStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-            stopwatch.Stop();
-            var transformTime = stopwatch.Elapsed.TotalSeconds;
+            // Get TransformResults with safety information
+            var transformResults = GetTransformResults(fittedModel, data);
 
-            Console.WriteLine($"✅ {name} transform completed in {transformTime:F2}s");
-            Console.WriteLine($"   Shape: [{embedding.GetLength(0)}, {embedding.GetLength(1)}]");
+            transformStopwatch.Stop();
+            var transformTime = transformStopwatch.Elapsed.TotalSeconds;
+
+            Console.WriteLine($"✅ {name} TransformWithSafety completed in {transformTime:F2}s");
+            Console.WriteLine($"   Shape: [{transformResults.Length} samples with safety metrics]");
             Console.WriteLine($"   ⚡ Fast transform - no model training needed!");
             Console.WriteLine($"   📊 Original fit time: {originalFitTime:F2}s | Transform time: {transformTime:F2}s");
 
-            // Get the original embedding from the fitted model to compare with transform result
-                var originalEmbedding = fittedModel.GetEmbedding();
+            // Classify all samples using nearest neighbor voting
+            var classifications = ClassifyAllSamples(transformResults, labels);
 
-                // Compare transform vs original embeddings
-                bool embeddingsMatch = CompareEmbeddings(embedding, originalEmbedding, name);
+            // Get difficult samples (misclassified) with filtering rules
+            var (difficultSamples, filteredCounts) = GetDifficultSamples(classifications, transformResults);
 
-                // Create 2D visualization with colored labels and model info (shows both fit and transform times)
-                CreateTransformScatterPlot(embedding, labels, fittedModel, originalFitTime, transformTime, name, folderName, embeddingsMatch);
+            // Print classification statistics
+            PrintClassificationStatistics(classifications, difficultSamples, filteredCounts);
+
+            // Create bad samples visualization
+            if (difficultSamples.Count > 0)
+            {
+                CreateBadSamplesVisualization(difficultSamples, data, classifications, "badSamples_{0:D2}.png");
+            }
+
+            // Create clean transform plot (without difficult samples)
+            CreateCleanTransformPlot(transformResults, classifications, difficultSamples, originalFitTime, transformTime, fittedModel, name);
+
+            // Create difficult samples transform plot (only difficult samples)
+            if (difficultSamples.Count > 0)
+            {
+                CreateDifficultSamplesTransformPlot(transformResults, classifications, difficultSamples, originalFitTime, transformTime, fittedModel, name);
+            }
+
+            // Create regular transform scatter plot with all data
+            CreateTransformScatterPlotWithSafety(transformResults, labels, fittedModel, originalFitTime, transformTime, name, folderName, classifications);
+        }
+
+        /// <summary>
+        /// Creates 2D scatter plot for TransformWithSafety API with classification overlay
+        /// </summary>
+        private static void CreateTransformScatterPlotWithSafety(TransformResult[] transformResults, byte[] labels, PacMapModel fittedModel, double originalFitTime, double transformTime, string name, string folderName, DigitClassificationResult[] classifications)
+        {
+            Console.WriteLine("🎨 Creating 2D Transform Visualization with Classification...");
+
+            try
+            {
+                // Count labels for title
+                var labelCounts = new int[10];
+                for (int i = 0; i < labels.Length; i++)
+                {
+                    labelCounts[labels[i]]++;
+                }
+
+                // Build title with classification statistics
+                var modelInfo = fittedModel.ModelInfo;
+                var version = PacMapModel.GetVersion().Replace(" (Corrected Gradients)", "").Replace("-CLEAN-OUTPUT", "");
+                var knnMode = modelInfo.ForceExactKnn ? "Direct KNN" : "HNSW";
+                var correctSamples = classifications.Count(c => c.IsCorrect);
+                var accuracy = (correctSamples * 100.0) / classifications.Length;
+
+                var title = $@"MNIST 2D Transform with Classification (PACMAP)
+PACMAP v{version} | Sample: {transformResults.Length:N0} | {knnMode} | TRANSFORM
+Classification: {correctSamples:N0}/{classifications.Length:N0} ({accuracy:F1}% accuracy)
+k={modelInfo.Neighbors} | {modelInfo.Metric} | seed=42
+mn={modelInfo.MN_ratio:F2} | fp={modelInfo.FP_ratio:F2}
+Fit: {originalFitTime:F2}s | Transform: {transformTime:F2}s | Speedup: {(originalFitTime/transformTime):F1}x";
+
+                var plotModel = new PlotModel
+                {
+                    Title = title,
+                    Background = OxyColors.White
+                };
+
+                // Use the same digit configurations as regular plots
+                var digitConfigs = new[]
+                {
+                    new { Digit = 0, Color = OxyColors.Red, Marker = MarkerType.Triangle, Name = "0-Triangle" },
+                    new { Digit = 1, Color = OxyColors.Blue, Marker = MarkerType.Diamond, Name = "1-Diamond" },
+                    new { Digit = 2, Color = OxyColors.Green, Marker = MarkerType.Circle, Name = "2-Circle" },
+                    new { Digit = 3, Color = OxyColors.Orange, Marker = MarkerType.Square, Name = "3-Square" },
+                    new { Digit = 4, Color = OxyColors.Purple, Marker = MarkerType.Plus, Name = "4-Plus" },
+                    new { Digit = 5, Color = OxyColors.Cyan, Marker = MarkerType.Star, Name = "5-Star" },
+                    new { Digit = 6, Color = OxyColors.Magenta, Marker = MarkerType.Cross, Name = "6-Cross" },
+                    new { Digit = 7, Color = OxyColors.Brown, Marker = MarkerType.Diamond, Name = "7-Diamond" },
+                    new { Digit = 8, Color = OxyColors.Pink, Marker = MarkerType.Square, Name = "8-Square" },
+                    new { Digit = 9, Color = OxyColors.Gray, Marker = MarkerType.Square, Name = "9-Square" }
+                };
+
+                // Create scatter series for each digit
+                foreach (var config in digitConfigs)
+                {
+                    var scatterSeries = new ScatterSeries
+                    {
+                        Title = $"Digit {config.Digit} ({labelCounts[config.Digit]:D4}) - {config.Name}",
+                        MarkerType = config.Marker,
+                        MarkerSize = 4,
+                        MarkerFill = config.Color,
+                        MarkerStroke = config.Color,
+                        MarkerStrokeThickness = 0.5
+                    };
+
+                    // Add points for this digit
+                    for (int i = 0; i < transformResults.Length; i++)
+                    {
+                        if (labels[i] == config.Digit)
+                        {
+                            var coords = transformResults[i].ProjectionCoordinates;
+                            scatterSeries.Points.Add(new ScatterPoint(coords[0], coords[1], 4));
+                        }
+                    }
+
+                    if (scatterSeries.Points.Count > 0)
+                        plotModel.Series.Add(scatterSeries);
+                }
+
+                // Calculate bounds from TransformResults
+                var allCoords = transformResults.SelectMany(r => r.ProjectionCoordinates).ToArray();
+                var minX = allCoords[0];
+                var maxX = allCoords[0];
+                var minY = allCoords[1];
+                var maxY = allCoords[1];
+
+                for (int i = 2; i < allCoords.Length; i += 2)
+                {
+                    if (allCoords[i] < minX) minX = allCoords[i];
+                    if (allCoords[i] > maxX) maxX = allCoords[i];
+                    if (allCoords[i + 1] < minY) minY = allCoords[i + 1];
+                    if (allCoords[i + 1] > maxY) maxY = allCoords[i + 1];
+                }
+
+                // Add padding
+                double xPadding = (maxX - minX) * 0.2;
+
+                // Configure axes
+                plotModel.Axes.Add(new LinearAxis
+                {
+                    Position = AxisPosition.Bottom,
+                    Title = "X Coordinate",
+                    Minimum = minX,
+                    Maximum = maxX + xPadding
+                });
+                plotModel.Axes.Add(new LinearAxis
+                {
+                    Position = AxisPosition.Left,
+                    Title = "Y Coordinate",
+                    Minimum = minY,
+                    Maximum = maxY
+                });
+
+                // Add legend
+                plotModel.Legends.Add(new Legend { LegendPosition = LegendPosition.TopRight });
+
+                // Determine output path
+                string outputDir = string.IsNullOrEmpty(folderName) ? "Results" : Path.Combine("Results", folderName);
+                Directory.CreateDirectory(outputDir);
+                var outputPath = Path.Combine(outputDir, $"{name}.png");
+                var exporter = new PngExporter { Width = 1200, Height = 900, Resolution = 300 };
+                using var stream = File.Create(outputPath);
+                exporter.Export(plotModel, stream);
+
+                Console.WriteLine($"✅ 2D transform visualization with classification saved: {outputPath}");
+                Console.WriteLine($"   Resolution: 1200x900, Points: {transformResults.Length:N0}");
+                Console.WriteLine($"   Classification accuracy: {accuracy:F1}%");
+
+                // Auto-open only the HNSW transform visualization
+                if (name == "mnist_2d_transform")
+                {
+                    try
+                    {
+                        Process.Start(new ProcessStartInfo
+                        {
+                            FileName = Path.GetFullPath(outputPath),
+                            UseShellExecute = true
+                        });
+                        Console.WriteLine($"   📂 Opened {name} transform visualization");
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"   ⚠️ Could not open {name}: {ex.Message}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"❌ Error creating transform plot with classification: {ex.Message}");
+            }
         }
 
         /// <summary>
@@ -773,6 +1024,634 @@ phases=({pacmap.NumIters.phase1}, {pacmap.NumIters.phase2}, {pacmap.NumIters.pha
                 Console.WriteLine($"      Maximum difference: {maxDiff:E2}");
                 Console.WriteLine($"      This suggests the Transform API is not returning the same result as Fit!");
                 return false;
+            }
+        }
+
+        /// <summary>
+        /// Weighted classification algorithm using nearest neighbor voting
+        /// </summary>
+        private static DigitClassificationResult ClassifyDigit(TransformResult result, byte[] trainingLabels)
+        {
+            return ClassifyDigitWithLimitedNeighbors(
+                result.NearestNeighborIndices,
+                result.NearestNeighborDistances,
+                trainingLabels
+            );
+        }
+
+        /// <summary>
+        /// Weighted classification algorithm using specified nearest neighbor indices and distances
+        /// </summary>
+        private static DigitClassificationResult ClassifyDigitWithLimitedNeighbors(int[] neighborIndices, double[] neighborDistances, byte[] trainingLabels)
+        {
+            // Calculate distance weights (closer neighbors have more influence)
+            var maxDistance = neighborDistances.Max();
+            var labelVotes = new double[10]; // For digits 0-9
+
+            for (int i = 0; i < neighborIndices.Length; i++)
+            {
+                var neighborIndex = neighborIndices[i];
+                var neighborDistance = neighborDistances[i];
+                var neighborLabel = trainingLabels[neighborIndex];
+
+                // Weight by inverse distance (closer = more important)
+                var weight = CalculateDistanceWeight(neighborDistance, maxDistance);
+                labelVotes[neighborLabel] += weight;
+            }
+
+            // Convert to probabilities
+            var totalWeight = labelVotes.Sum();
+            var probabilities = labelVotes.Select(v => totalWeight > 0 ? v / totalWeight : 0.1).ToArray();
+
+            // Find the predicted label (highest probability)
+            var predictedLabel = probabilities
+                .Select((prob, index) => new { Digit = index, Probability = prob })
+                .OrderByDescending(x => x.Probability)
+                .First().Digit;
+
+            var confidence = probabilities[predictedLabel];
+            var isCorrect = predictedLabel == (int)result.Severity; // Will be updated later
+
+            return new DigitClassificationResult(0, predictedLabel, probabilities, isCorrect, confidence);
+        }
+
+        /// <summary>
+        /// Calculate weight for a neighbor based on distance (closer = higher weight)
+        /// </summary>
+        private static double CalculateDistanceWeight(double distance, double maxDistance)
+        {
+            if (maxDistance == 0) return 1.0;
+
+            // Inverse distance weighting with smoothing to avoid division by zero
+            var weight = 1.0 / (1.0 + (distance / maxDistance));
+            return weight;
+        }
+
+        /// <summary>
+        /// Get TransformResult array using TransformWithSafety
+        /// </summary>
+        private static TransformResult[] GetTransformResults(PacMapModel model, double[,] data)
+        {
+            Console.WriteLine($"   🔄 Getting TransformWithSafety results for {data.GetLength(0)} samples...");
+            return model.TransformWithSafety(data);
+        }
+
+        /// <summary>
+        /// Classify all samples using TransformWithSafety results
+        /// </summary>
+        private static DigitClassificationResult[] ClassifyAllSamples(TransformResult[] results, byte[] labels)
+        {
+            Console.WriteLine($"   🏷️ Classifying {results.Length} samples using nearest neighbor voting...");
+            var classifications = new DigitClassificationResult[results.Length];
+
+            for (int i = 0; i < results.Length; i++)
+            {
+                var result = results[i];
+                var classification = ClassifyDigit(result, labels);
+
+                // Update the true label and isCorrect status
+                var trueLabel = labels[i];
+                var isCorrect = classification.PredictedLabel == trueLabel;
+
+                classifications[i] = new DigitClassificationResult(
+                    trueLabel,
+                    classification.PredictedLabel,
+                    classification.Probabilities,
+                    isCorrect,
+                    classification.Confidence
+                );
+            }
+
+            return classifications;
+        }
+
+        /// <summary>
+        /// Get list of difficult samples (misclassified digits) with enhanced filtering rules
+        /// </summary>
+        private static (List<int> difficultSamples, int[] filteredCounts) GetDifficultSamples(DigitClassificationResult[] classifications, TransformResult[] transformResults)
+        {
+            var difficultSamples = new List<int>();
+            var filteredByRule1 = 0;
+            var filteredByRule2 = 0;
+            var filteredByRule3 = 0;
+
+            for (int i = 0; i < classifications.Length; i++)
+            {
+                if (!classifications[i].IsCorrect)
+                {
+                    var classification = classifications[i];
+                    var transformResult = transformResults[i];
+
+                    // Rule 1: Skip if number of neighbors <= 3 (insufficient evidence)
+                    if (transformResult.NearestNeighborIndices.Length <= 3)
+                    {
+                        filteredByRule1++;
+                        continue; // Don't add to difficult samples list
+                    }
+
+                    // Rule 3: If more than 15 neighbors, use only closest 15 for classification
+                    var neighborIndicesToUse = transformResult.NearestNeighborIndices;
+                    var neighborDistancesToUse = transformResult.NearestNeighborDistances;
+                    if (transformResult.NearestNeighborIndices.Length > 15)
+                    {
+                        // Sort by distance and take closest 15
+                        var indexedNeighbors = transformResult.NearestNeighborIndices
+                            .Select((idx, dist) => new { Index = idx, Distance = dist })
+                            .OrderBy(x => x.Distance)
+                            .Take(15)
+                            .ToArray();
+
+                        neighborIndicesToUse = indexedNeighbors.Select(x => x.Index).ToArray();
+                        neighborDistancesToUse = indexedNeighbors.Select(x => x.Distance).ToArray();
+                        filteredByRule3++;
+                    }
+
+                    // Recalculate classification with limited neighbors
+                    var limitedClassification = ClassifyDigitWithLimitedNeighbors(
+                        neighborIndicesToUse, neighborDistancesToUse, labels[i]);
+
+                    // Rule 2: Add if true label probability < 0.3 (border case)
+                    var trueLabelProbability = limitedClassification.Probabilities[classification.TrueLabel];
+                    if (trueLabelProbability < 0.3)
+                    {
+                        difficultSamples.Add(i);
+                    }
+                    else
+                    {
+                        filteredByRule2++;
+                    }
+                }
+            }
+
+            Console.WriteLine($"   📊 Filtering Results:");
+            Console.WriteLine($"      - Rule 1 (≤3 neighbors): Filtered {filteredByRule1:N0} samples");
+            Console.WriteLine($"      - Rule 2 (true label < 30%): Filtered {filteredByRule2:N0} samples");
+            Console.WriteLine($"      - Rule 3 (>15 neighbors, limited to 15): Filtered {filteredByRule3:N0} samples");
+            Console.WriteLine($"      - Remaining difficult samples: {difficultSamples.Count:N0}");
+
+            return (difficultSamples, new int[] { filteredByRule1, filteredByRule2, filteredByRule3 });
+        }
+
+        /// <summary>
+        /// Print classification statistics to console (Enhanced with filtering effects)
+        /// </summary>
+        private static void PrintClassificationStatistics(DigitClassificationResult[] classifications, List<int> difficultSamples, int[] filteredCounts)
+        {
+            Console.WriteLine();
+            Console.WriteLine("📊 ENHANCED CLASSIFICATION STATISTICS");
+            Console.WriteLine("========================================");
+            Console.WriteLine($"Total samples processed: {classifications.Length:N0}");
+            Console.WriteLine($"Correctly classified: {classifications.Count(c => c.IsCorrect):N0} ({(classifications.Count(c => c.IsCorrect) * 100.0 / classifications.Length):F1}%)");
+            Console.WriteLine($"Misclassified samples: {classifications.Count(c => !c.IsCorrect):N0} ({(classifications.Count(c => !c.IsCorrect) * 100.0 / classifications.Length):F1}%)");
+
+            Console.WriteLine($"\n🎯 FILTERING RULES IMPACT:");
+            Console.WriteLine($"   Rule 1 filtered (≤2 neighbors): {filteredCounts[0]:N0} samples removed");
+            Console.WriteLine($"   Rule 2 filtered (true prob <0.4): {filteredCounts[1]:N0} samples removed");
+            Console.WriteLine($"   Total filtered: {(filteredCounts[0] + filteredCounts[1]):N0} samples");
+            Console.WriteLine($"   Final difficult samples: {difficultSamples.Count:N0} samples");
+
+            var overallReduction = (filteredCounts[0] + filteredCounts[1]) * 100.0 / classifications.Length;
+            Console.WriteLine($"   Overall reduction: {overallReduction:F1}% of total dataset");
+
+            Console.WriteLine($"\n📈 CONFIDENCE ANALYSIS:");
+            var correctlyClassified = classifications.Where(c => c.IsCorrect).ToArray();
+            var misclassified = classifications.Where(c => !c.IsCorrect).ToArray();
+
+            if (correctlyClassified.Length > 0)
+            {
+                var avgConfidenceCorrect = correctlyClassified.Average(c => c.Confidence);
+                var highConfidenceCorrect = correctlyClassified.Count(c => c.Confidence > 0.8);
+                Console.WriteLine($"   Avg confidence (correct): {avgConfidenceCorrect:F3}");
+                Console.WriteLine($"   High confidence (>0.8): {highConfidenceCorrect:N0} ({(highConfidenceCorrect * 100.0 / correctlyClassified.Length):F1}%)");
+            }
+
+            if (misclassified.Length > 0)
+            {
+                var avgConfidenceIncorrect = misclassified.Average(c => c.Confidence);
+                var lowConfidenceIncorrect = misclassified.Count(c => c.Confidence < 0.6);
+                Console.WriteLine($"   Avg confidence (incorrect): {avgConfidenceIncorrect:F3}");
+                Console.WriteLine($"   Low confidence (<0.6): {lowConfidenceIncorrect:N0} ({(lowConfidenceIncorrect * 100.0 / misclassified.Length):F1}%)");
+            }
+
+            Console.WriteLine($"\n🔍 MOST CONFUSED DIGIT PAIRS:");
+            var confusions = misclassified
+                .GroupBy(c => $"{c.TrueLabel} → {c.PredictedLabel}")
+                .OrderByDescending(g => g.Count())
+                .Take(5);
+
+            foreach (var confusion in confusions)
+            {
+                var percentage = confusion.Count() * 100.0 / classifications.Length;
+                Console.WriteLine($"   {confusion.Key}: {confusion.Count():N0} samples ({percentage:F2}%)");
+            }
+
+            Console.WriteLine($"\n✅ Enhanced classification with filtering rules completed successfully!");
+        }
+
+          /// <summary>
+        /// Create visualization of bad (misclassified) samples with sorting by true label and enhanced labeling
+        /// </summary>
+        private static void CreateBadSamplesVisualization(List<int> difficultSamples, double[,] imageData, DigitClassificationResult[] classifications, string filenamePattern)
+        {
+            if (difficultSamples.Count == 0)
+            {
+                Console.WriteLine("   ✅ No difficult samples to visualize!");
+                return;
+            }
+
+            Console.WriteLine($"   🎨 Creating bad sample visualizations for {difficultSamples.Count:N0} samples...");
+
+            // Sort bad samples by true label (group all 3's, then 4's, etc.)
+            var sortedDifficultSamples = difficultSamples
+                .OrderBy(index => classifications[index].TrueLabel)
+                .ToList();
+
+            // Create bad samples folder
+            var badSamplesDir = Path.Combine("Results", "badsampel");
+            Directory.CreateDirectory(badSamplesDir);
+
+            const int samplesPerImage = 20; // 4x5 grid
+            const int gridCols = 5;
+            const int gridRows = 4;
+
+            var imageIndex = 1;
+            for (int startIdx = 0; startIdx < sortedDifficultSamples.Count; startIdx += samplesPerImage)
+            {
+                var endIndex = Math.Min(startIdx + samplesPerImage, sortedDifficultSamples.Count);
+                var currentBatch = sortedDifficultSamples.Skip(startIdx).Take(endIndex - startIdx).ToList();
+
+                if (currentBatch.Count == 0) break;
+
+                // Create plot model for this batch
+                var plotModel = new PlotModel
+                {
+                    Title = $"Misclassified Digits - Batch {imageIndex} (Samples {startIdx + 1}-{endIndex})",
+                    Background = OxyColors.White
+                };
+
+                // Add each sample to the grid
+                for (int i = 0; i < currentBatch.Count; i++)
+                {
+                    var sampleIndex = currentBatch[i];
+                    var classification = classifications[sampleIndex];
+
+                    var row = i / gridCols;
+                    var col = i % gridCols;
+
+                    // Convert double image back to byte for visualization
+                    var imageBytes = new byte[28, 28];
+                    for (int h = 0; h < 28; h++)
+                    {
+                        for (int w = 0; w < 28; w++)
+                        {
+                            var pixelValue = imageData[sampleIndex, h * 28 + w];
+                            imageBytes[h, w] = (byte)Math.Max(0, Math.Min(255, pixelValue));
+                        }
+                    }
+
+                    // Create digit visualization
+                    CreateDigitPixelScatter(plotModel, imageBytes, classification.TrueLabel, col, gridRows - 1 - row);
+
+                    // Enhanced labeling: True→Pred, Index, and Confidence
+                    var labelAnnotation = new TextAnnotation
+                    {
+                        Text = $"True: {classification.TrueLabel} → Pred: {classification.PredictedLabel}",
+                        TextPosition = new DataPoint(col, -0.5 - row * 0.4),
+                        TextHorizontalAlignment = HorizontalAlignment.Center,
+                        TextVerticalAlignment = VerticalAlignment.Middle,
+                        FontSize = 10,
+                        FontWeight = FontWeights.Bold,
+                        TextColor = OxyColors.Red
+                    };
+                    plotModel.Annotations.Add(labelAnnotation);
+
+                    // Add index information
+                    var indexAnnotation = new TextAnnotation
+                    {
+                        Text = $"Index: {sampleIndex:D5}",
+                        TextPosition = new DataPoint(col, -0.7 - row * 0.4),
+                        TextHorizontalAlignment = HorizontalAlignment.Center,
+                        TextVerticalAlignment = VerticalAlignment.Middle,
+                        FontSize = 8,
+                        TextColor = OxyColors.DarkBlue
+                    };
+                    plotModel.Annotations.Add(indexAnnotation);
+
+                    // Add confidence
+                    var confidenceAnnotation = new TextAnnotation
+                    {
+                        Text = $"Conf: {classification.Confidence:F2}",
+                        TextPosition = new DataPoint(col, -0.9 - row * 0.4),
+                        TextHorizontalAlignment = HorizontalAlignment.Center,
+                        TextVerticalAlignment = VerticalAlignment.Middle,
+                        FontSize = 8,
+                        TextColor = OxyColors.Gray
+                    };
+                    plotModel.Annotations.Add(confidenceAnnotation);
+                }
+
+                // Configure axes
+                plotModel.Axes.Add(new LinearAxis { Position = AxisPosition.Bottom, Minimum = -0.5, Maximum = gridCols - 0.5, Title = "" });
+                plotModel.Axes.Add(new LinearAxis { Position = AxisPosition.Left, Minimum = -1.5, Maximum = gridRows - 0.5, Title = "" });
+
+                // Save to file
+                var filename = string.Format(filenamePattern, imageIndex);
+                var outputPath = Path.Combine(badSamplesDir, filename);
+                var exporter = new PngExporter { Width = 1200, Height = 800, Resolution = 300 };
+                using var stream = File.Create(outputPath);
+                exporter.Export(plotModel, stream);
+
+                Console.WriteLine($"   ✅ Bad samples batch {imageIndex} saved: {filename}");
+                imageIndex++;
+            }
+
+            Console.WriteLine($"   📁 All bad sample visualizations saved to: {Path.GetFullPath(badSamplesDir)}");
+        }
+
+        /// <summary>
+        /// Create clean transform plot without difficult samples
+        /// </summary>
+        private static void CreateCleanTransformPlot(TransformResult[] transformResults, DigitClassificationResult[] classifications, List<int> difficultSamples, double originalFitTime, double transformTime, PacMapModel model, string name)
+        {
+            Console.WriteLine($"   🎨 Creating clean transform plot (removing {difficultSamples.Count:N0} difficult samples)...");
+
+            try
+            {
+                // Create plot model
+                var plotModel = new PlotModel
+                {
+                    Title = $"MNIST 2D Transform - Clean (Difficult Samples Removed)",
+                    Background = OxyColors.White
+                };
+
+                // Build title with model info
+                var modelInfo = model.ModelInfo;
+                var version = PacMapModel.GetVersion().Replace(" (Corrected Gradients)", "").Replace("-CLEAN-OUTPUT", "");
+                var knnMode = modelInfo.ForceExactKnn ? "Direct KNN" : "HNSW";
+
+                var title = $@"MNIST 2D Transform - Clean (PACMAP)
+PACMAP v{version} | {transformResults.Length:N0} samples | {knnMode} | TRANSFORM
+Clean: {transformResults.Length - difficultSamples.Count:N0} samples ({(100.0 * (transformResults.Length - difficultSamples.Count) / transformResults.Length):F1}% retained)
+k={modelInfo.Neighbors} | mn={modelInfo.MN_ratio:F2} | fp={modelInfo.FP_ratio:F2}
+Fit: {originalFitTime:F2}s | Transform: {transformTime:F2}s";
+
+                plotModel.Title = title;
+
+                // Use the same digit configurations as regular plots
+                var digitConfigs = new[]
+                {
+                    new { Digit = 0, Color = OxyColors.Red, Marker = MarkerType.Triangle, Name = "0-Triangle" },
+                    new { Digit = 1, Color = OxyColors.Blue, Marker = MarkerType.Diamond, Name = "1-Diamond" },
+                    new { Digit = 2, Color = OxyColors.Green, Marker = MarkerType.Circle, Name = "2-Circle" },
+                    new { Digit = 3, Color = OxyColors.Orange, Marker = MarkerType.Square, Name = "3-Square" },
+                    new { Digit = 4, Color = OxyColors.Purple, Marker = MarkerType.Plus, Name = "4-Plus" },
+                    new { Digit = 5, Color = OxyColors.Cyan, Marker = MarkerType.Star, Name = "5-Star" },
+                    new { Digit = 6, Color = OxyColors.Magenta, Marker = MarkerType.Cross, Name = "6-Cross" },
+                    new { Digit = 7, Color = OxyColors.Brown, Marker = MarkerType.Diamond, Name = "7-Diamond" },
+                    new { Digit = 8, Color = OxyColors.Pink, Marker = MarkerType.Square, Name = "8-Square" },
+                    new { Digit = 9, Color = OxyColors.Gray, Marker = MarkerType.Square, Name = "9-Square" }
+                };
+
+                // Count clean samples per digit
+                var cleanLabelCounts = new int[10];
+                for (int i = 0; i < classifications.Length; i++)
+                {
+                    if (!difficultSamples.Contains(i))
+                    {
+                        cleanLabelCounts[classifications[i].TrueLabel]++;
+                    }
+                }
+
+                // Create scatter series for each digit (only clean samples)
+                foreach (var config in digitConfigs)
+                {
+                    var scatterSeries = new ScatterSeries
+                    {
+                        Title = $"Digit {config.Digit} ({cleanLabelCounts[config.Digit]:D4}) - {config.Name}",
+                        MarkerType = config.Marker,
+                        MarkerSize = 4,
+                        MarkerFill = config.Color,
+                        MarkerStroke = config.Color,
+                        MarkerStrokeThickness = 0.5
+                    };
+
+                    // Add clean points for this digit
+                    for (int i = 0; i < transformResults.Length; i++)
+                    {
+                        if (!difficultSamples.Contains(i) && classifications[i].TrueLabel == config.Digit)
+                        {
+                            var coords = transformResults[i].ProjectionCoordinates;
+                            scatterSeries.Points.Add(new ScatterPoint(coords[0], coords[1], 4));
+                        }
+                    }
+
+                    if (scatterSeries.Points.Count > 0)
+                        plotModel.Series.Add(scatterSeries);
+                }
+
+                // Calculate bounds for clean data only
+                var cleanCoords = transformResults
+                    .Where((r, i) => !difficultSamples.Contains(i))
+                    .SelectMany(r => r.ProjectionCoordinates)
+                    .ToArray();
+
+                if (cleanCoords.Length < 2)
+                {
+                    Console.WriteLine("   ⚠️ No clean data to plot!");
+                    return;
+                }
+
+                var minX = cleanCoords[0];
+                var maxX = cleanCoords[0];
+                var minY = cleanCoords[1];
+                var maxY = cleanCoords[1];
+
+                for (int i = 2; i < cleanCoords.Length; i += 2)
+                {
+                    if (cleanCoords[i] < minX) minX = cleanCoords[i];
+                    if (cleanCoords[i] > maxX) maxX = cleanCoords[i];
+                    if (cleanCoords[i + 1] < minY) minY = cleanCoords[i + 1];
+                    if (cleanCoords[i + 1] > maxY) maxY = cleanCoords[i + 1];
+                }
+
+                // Add padding
+                double xPadding = (maxX - minX) * 0.2;
+                double yPadding = (maxY - minY) * 0.2;
+
+                // Configure axes
+                plotModel.Axes.Add(new LinearAxis
+                {
+                    Position = AxisPosition.Bottom,
+                    Title = "X Coordinate",
+                    Minimum = minX - xPadding,
+                    Maximum = maxX + xPadding
+                });
+                plotModel.Axes.Add(new LinearAxis
+                {
+                    Position = AxisPosition.Left,
+                    Title = "Y Coordinate",
+                    Minimum = minY - yPadding,
+                    Maximum = maxY + yPadding
+                });
+
+                // Add legend
+                plotModel.Legends.Add(new Legend { LegendPosition = LegendPosition.TopRight });
+
+                // Save to file
+                var outputPath = Path.Combine("Results", $"{name}_clean.png");
+                var exporter = new PngExporter { Width = 1200, Height = 900, Resolution = 300 };
+                using var stream = File.Create(outputPath);
+                exporter.Export(plotModel, stream);
+
+                Console.WriteLine($"   ✅ Clean transform plot saved: {outputPath}");
+                Console.WriteLine($"   📊 Clean samples: {transformResults.Length - difficultSamples.Count:N0} / {transformResults.Length:N0}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"   ❌ Error creating clean transform plot: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Create transform plot with only difficult samples (misclassified samples)
+        /// </summary>
+        private static void CreateDifficultSamplesTransformPlot(TransformResult[] transformResults, DigitClassificationResult[] classifications, List<int> difficultSamples, double originalFitTime, double transformTime, PacMapModel model, string name)
+        {
+            Console.WriteLine($"   🎨 Creating difficult samples transform plot (only {difficultSamples.Count:N0} difficult samples)...");
+
+            try
+            {
+                // Create plot model
+                var plotModel = new PlotModel
+                {
+                    Title = $"MNIST 2D Transform - Difficult Samples Only",
+                    Background = OxyColors.White
+                };
+
+                // Build title with model info
+                var modelInfo = model.ModelInfo;
+                var version = PacMapModel.GetVersion().Replace(" (Corrected Gradients)", "").Replace("-CLEAN-OUTPUT", "");
+                var knnMode = modelInfo.ForceExactKnn ? "Direct KNN" : "HNSW";
+
+                var title = $@"MNIST 2D Transform - Difficult Samples (PACMAP)
+PACMAP v{version} | {transformResults.Length:N0} samples | {knnMode} | TRANSFORM
+Difficult: {difficultSamples.Count:N0} samples ({(100.0 * difficultSamples.Count / transformResults.Length):F1}% of total)
+k={modelInfo.Neighbors} | mn={modelInfo.MN_ratio:F2} | fp={modelInfo.FP_ratio:F2}
+Fit: {originalFitTime:F2}s | Transform: {transformTime:F2}s";
+
+                plotModel.Title = title;
+
+                // Use the same digit configurations as regular plots
+                var digitConfigs = new[]
+                {
+                    new { Digit = 0, Color = OxyColors.Red, Marker = MarkerType.Triangle, Name = "0-Triangle" },
+                    new { Digit = 1, Color = OxyColors.Blue, Marker = MarkerType.Diamond, Name = "1-Diamond" },
+                    new { Digit = 2, Color = OxyColors.Green, Marker = MarkerType.Circle, Name = "2-Circle" },
+                    new { Digit = 3, Color = OxyColors.Orange, Marker = MarkerType.Square, Name = "3-Square" },
+                    new { Digit = 4, Color = OxyColors.Purple, Marker = MarkerType.Plus, Name = "4-Plus" },
+                    new { Digit = 5, Color = OxyColors.Cyan, Marker = MarkerType.Star, Name = "5-Star" },
+                    new { Digit = 6, Color = OxyColors.Magenta, Marker = MarkerType.Cross, Name = "6-Cross" },
+                    new { Digit = 7, Color = OxyColors.Brown, Marker = MarkerType.Diamond, Name = "7-Diamond" },
+                    new { Digit = 8, Color = OxyColors.Pink, Marker = MarkerType.Square, Name = "8-Square" },
+                    new { Digit = 9, Color = OxyColors.Gray, Marker = MarkerType.Square, Name = "9-Square" }
+                };
+
+                // Count difficult samples per digit
+                var difficultLabelCounts = new int[10];
+                for (int i = 0; i < difficultSamples.Count; i++)
+                {
+                    var sampleIndex = difficultSamples[i];
+                    difficultLabelCounts[classifications[sampleIndex].TrueLabel]++;
+                }
+
+                // Create scatter series for each digit (only difficult samples)
+                foreach (var config in digitConfigs)
+                {
+                    var scatterSeries = new ScatterSeries
+                    {
+                        Title = $"Digit {config.Digit} ({difficultLabelCounts[config.Digit]:D4}) - {config.Name}",
+                        MarkerType = config.Marker,
+                        MarkerSize = 6, // Larger markers for difficult samples
+                        MarkerFill = config.Color,
+                        MarkerStroke = config.Color,
+                        MarkerStrokeThickness = 1.0
+                    };
+
+                    // Add difficult points for this digit
+                    for (int i = 0; i < difficultSamples.Count; i++)
+                    {
+                        var sampleIndex = difficultSamples[i];
+                        if (classifications[sampleIndex].TrueLabel == config.Digit)
+                        {
+                            var coords = transformResults[sampleIndex].ProjectionCoordinates;
+                            scatterSeries.Points.Add(new ScatterPoint(coords[0], coords[1], 6));
+                        }
+                    }
+
+                    if (scatterSeries.Points.Count > 0)
+                        plotModel.Series.Add(scatterSeries);
+                }
+
+                // Calculate bounds for difficult data only
+                var difficultCoords = difficultSamples
+                    .Select(i => transformResults[i].ProjectionCoordinates)
+                    .SelectMany(coords => coords)
+                    .ToArray();
+
+                if (difficultCoords.Length < 2)
+                {
+                    Console.WriteLine("   ⚠️ No difficult data to plot!");
+                    return;
+                }
+
+                var minX = difficultCoords[0];
+                var maxX = difficultCoords[0];
+                var minY = difficultCoords[1];
+                var maxY = difficultCoords[1];
+
+                for (int i = 2; i < difficultCoords.Length; i += 2)
+                {
+                    if (difficultCoords[i] < minX) minX = difficultCoords[i];
+                    if (difficultCoords[i] > maxX) maxX = difficultCoords[i];
+                    if (difficultCoords[i + 1] < minY) minY = difficultCoords[i + 1];
+                    if (difficultCoords[i + 1] > maxY) maxY = difficultCoords[i + 1];
+                }
+
+                // Add padding
+                double xPadding = (maxX - minX) * 0.2;
+                double yPadding = (maxY - minY) * 0.2;
+
+                // Configure axes
+                plotModel.Axes.Add(new LinearAxis
+                {
+                    Position = AxisPosition.Bottom,
+                    Title = "X Coordinate",
+                    Minimum = minX - xPadding,
+                    Maximum = maxX + xPadding
+                });
+                plotModel.Axes.Add(new LinearAxis
+                {
+                    Position = AxisPosition.Left,
+                    Title = "Y Coordinate",
+                    Minimum = minY - yPadding,
+                    Maximum = maxY + yPadding
+                });
+
+                // Add legend
+                plotModel.Legends.Add(new Legend { LegendPosition = LegendPosition.TopRight });
+
+                // Save to file
+                var outputPath = Path.Combine("Results", $"{name}_difficult.png");
+                var exporter = new PngExporter { Width = 1200, Height = 900, Resolution = 300 };
+                using var stream = File.Create(outputPath);
+                exporter.Export(plotModel, stream);
+
+                Console.WriteLine($"   ✅ Difficult samples transform plot saved: {outputPath}");
+                Console.WriteLine($"   📊 Difficult samples: {difficultSamples.Count:N0} / {transformResults.Length:N0}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"   ❌ Error creating difficult samples transform plot: {ex.Message}");
             }
         }
 

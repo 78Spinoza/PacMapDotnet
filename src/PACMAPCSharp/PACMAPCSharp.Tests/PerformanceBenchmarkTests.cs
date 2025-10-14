@@ -8,8 +8,8 @@ namespace PACMAPCSharp.Tests
     [TestClass]
     public class PerformanceBenchmarkTests
     {
-        private const int LargeSampleCount = 5000;   // Large enough to show HNSW benefit
-        private const int LargeFeatureCount = 50;    // High-dimensional
+        private const int LargeSampleCount = 10000;  // Large enough to show HNSW benefit
+        private const int LargeFeatureCount = 100;   // High-dimensional
         private const int BenchmarkEpochs = 50;      // Reasonable for timing
 
         /// <summary>
@@ -34,7 +34,8 @@ namespace PACMAPCSharp.Tests
                     embeddingDimension: 2,
                     numIters: (BenchmarkEpochs, BenchmarkEpochs, BenchmarkEpochs * 2),
                     metric: DistanceMetric.Euclidean,
-                    forceExactKnn: false); // HNSW mode
+                    forceExactKnn: false,     // HNSW mode
+                    autoHNSWParam: false);    // Don't auto-tune, use default HNSW params
             }, "HNSW");
 
             // Benchmark Exact Mode
@@ -66,12 +67,15 @@ namespace PACMAPCSharp.Tests
             Console.WriteLine();
 
             // Validation Assertions (account for system variance and measurement noise)
-            Assert.IsTrue(speedup >= 0.95, $"HNSW should be competitive with exact (speedup: {speedup:F2}x, allowing 5% variance)");
-
-            // For large datasets, expect reasonable speedup (realistic expectations accounting for system variance)
-            if (LargeSampleCount >= 2000)
+            // With larger datasets (10k+), HNSW should show clear benefits
+            if (LargeSampleCount >= 10000)
             {
-                Assert.IsTrue(speedup >= 1.05, $"HNSW should be faster for large datasets (speedup: {speedup:F2}x, expected ≥1.05x)");
+                Assert.IsTrue(speedup >= 1.2, $"HNSW should be faster for large datasets (speedup: {speedup:F2}x, expected ≥1.2x)");
+            }
+            else
+            {
+                // For smaller datasets, just ensure HNSW is competitive (within 20% of exact)
+                Assert.IsTrue(speedup >= 0.8, $"HNSW should be competitive with exact (speedup: {speedup:F2}x, allowing 20% variance for small datasets)");
             }
 
             // Memory usage should be better with HNSW (though measurement may vary)

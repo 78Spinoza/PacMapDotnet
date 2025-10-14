@@ -439,6 +439,10 @@ namespace persistence_utils {
             bool has_normalization = !model->feature_means.empty() && !model->feature_stds.empty();
             endian_utils::write_value(file, crc, has_normalization, "has_normalization");
             if (has_normalization) {
+                // Save min-max normalization parameters (v2.8.4+)
+                endian_utils::write_value(file, crc, model->xmin, "xmin");
+                endian_utils::write_value(file, crc, model->xmax, "xmax");
+
                 for (int i = 0; i < model->n_features; i++) {
                     endian_utils::write_value(file, crc, model->feature_means[i], ("feature_means[" + std::to_string(i) + "]").c_str());
                 }
@@ -1044,6 +1048,12 @@ namespace persistence_utils {
                 throw std::runtime_error("Failed to read normalization flag from file: " + std::string(filename));
             }
             if (has_normalization) {
+                // Load min-max normalization parameters (v2.8.4+)
+                if (!endian_utils::read_value(file, model->xmin, "xmin") ||
+                    !endian_utils::read_value(file, model->xmax, "xmax")) {
+                    throw std::runtime_error("Failed to read min-max normalization parameters from file: " + std::string(filename));
+                }
+
                 try {
                     model->feature_means.resize(model->n_features);
                     model->feature_stds.resize(model->n_features);

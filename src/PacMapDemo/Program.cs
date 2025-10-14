@@ -312,7 +312,7 @@ namespace PacMapDemo
             var embedding = pacmap.Fit(
                 data: data,
                 embeddingDimension: 2,
-                nNeighbors: 10,
+                nNeighbors: 40,
                 mnRatio: 0.5f,
                 fpRatio: 2.0f,
                 learningRate: 1.0f,

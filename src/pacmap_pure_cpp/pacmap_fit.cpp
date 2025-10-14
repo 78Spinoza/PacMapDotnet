@@ -9,8 +9,84 @@
 #include <limits>
 #include <random>
 #include <chrono>
+#include <cmath>
 
 namespace fit_utils {
+
+    // Validate n_neighbors parameter and issue warning for adaptive formula recommendation
+    void validate_n_neighbors_parameter(int n_neighbors, int n_samples, pacmap_progress_callback_internal progress_callback) {
+        if (n_samples >= 10000) {
+            // Calculate recommended n_neighbors using adaptive formula
+            // n_neighbors = 10 + 15 * (log10(n) - 4)
+            double log10_n = std::log10(static_cast<double>(n_samples));
+            int recommended_neighbors = static_cast<int>(10 + 15 * (log10_n - 4.0));
+
+            // Clamp to reasonable bounds
+            recommended_neighbors = std::max(10, std::min(100, recommended_neighbors));
+
+            if (n_neighbors != recommended_neighbors) {
+                std::string warning_msg = "Parameter Warning: n_neighbors=" + std::to_string(n_neighbors) +
+                                       " is not optimal for " + std::to_string(n_samples) + " samples. " +
+                                       "Recommended: n_neighbors=" + std::to_string(recommended_neighbors) +
+                                       " (using formula: 10 + 15 * (log10(" + std::to_string(n_samples) + ") - 4) = " +
+                                       std::to_string(recommended_neighbors) + ")";
+
+                if (progress_callback) {
+                    progress_callback("Parameter Warning", 0, 1, 0.0f, warning_msg.c_str());
+                }
+            }
+        }
+        else if (n_samples < 10000 && n_neighbors != 10) {
+            std::string warning_msg = std::string("Parameter Warning: For small datasets (<10,000 samples), recommended n_neighbors=10, ") +
+                                   "but you used n_neighbors=" + std::to_string(n_neighbors);
+
+            if (progress_callback) {
+                progress_callback("Parameter Warning", 0, 1, 0.0f, warning_msg.c_str());
+            }
+        }
+    }
+
+    // Validate MN_ratio and FP_ratio parameters and issue warning for incorrect relationship
+    void validate_ratio_parameters(float mn_ratio, float fp_ratio, pacmap_progress_callback_internal progress_callback) {
+        // Expected relationship: FP_ratio = 4 * MN_ratio (with defaults MN_ratio=0.5, FP_ratio=2.0)
+        float expected_fp_ratio = 4.0f * mn_ratio;
+        float tolerance = 0.01f; // Small tolerance for floating point comparison
+
+        if (std::abs(fp_ratio - expected_fp_ratio) > tolerance) {
+            std::string warning_msg = "Parameter Warning: MN_ratio=" + std::to_string(mn_ratio) +
+                                   " and FP_ratio=" + std::to_string(fp_ratio) +
+                                   " don't follow recommended relationship. " +
+                                   "Expected: FP_ratio=4*MN_ratio (FP_ratio=" +
+                                   std::to_string(expected_fp_ratio) + " for MN_ratio=" +
+                                   std::to_string(mn_ratio) + "). " +
+                                   "Default recommendation: MN_ratio=0.5, FP_ratio=2.0";
+
+            if (progress_callback) {
+                progress_callback("Parameter Warning", 0, 1, 0.0f, warning_msg.c_str());
+            }
+        }
+
+        // Additional warnings for extreme values
+        if (mn_ratio < 0.1f || mn_ratio > 2.0f) {
+            std::string warning_msg = "Parameter Warning: MN_ratio=" + std::to_string(mn_ratio) +
+                                   " is outside recommended range [0.1, 2.0]. " +
+                                   "Values outside this range may cause unstable optimization.";
+
+            if (progress_callback) {
+                progress_callback("Parameter Warning", 0, 1, 0.0f, warning_msg.c_str());
+            }
+        }
+
+        if (fp_ratio < 0.5f || fp_ratio > 5.0f) {
+            std::string warning_msg = "Parameter Warning: FP_ratio=" + std::to_string(fp_ratio) +
+                                   " is outside recommended range [0.5, 5.0]. " +
+                                   "Values outside this range may affect global structure preservation.";
+
+            if (progress_callback) {
+                progress_callback("Parameter Warning", 0, 1, 0.0f, warning_msg.c_str());
+            }
+        }
+    }
 
     // Auto-tune HNSW parameters using subsample (ERROR12 Priority 1)
     // Tests different M/ef_construction combinations to find optimal balance of speed and recall
@@ -207,6 +283,12 @@ namespace fit_utils {
             return PACMAP_ERROR_INVALID_PARAMS;
         }
 
+        // Validate n_neighbors parameter and issue adaptive formula warning
+        validate_n_neighbors_parameter(n_neighbors, n_obs, progress_callback);
+
+        // Validate MN_ratio and FP_ratio parameters and issue relationship warning
+        validate_ratio_parameters(mn_ratio, fp_ratio, progress_callback);
+
               try {
             // Initialize PACMAP model parameters
             model->n_samples = n_obs;
@@ -250,7 +332,7 @@ namespace fit_utils {
             std::vector<double> input_data(data, data + (static_cast<size_t>(n_obs) * static_cast<size_t>(n_dim)));
             model->training_data = input_data; // Store training data for KNN direct mode persistence
 
-            // 🔧 CRITICAL FIX v2.8.4: Match Python preprocessing exactly - min-max + mean centering
+            // CRITICAL FIX v2.8.4: Match Python preprocessing exactly - min-max + mean centering
             // Python reference (pacmap.py lines 371-375):
             //   xmin, xmax = (np.min(X), np.max(X))
             //   X -= xmin          # Min offset
@@ -411,10 +493,10 @@ namespace fit_utils {
             }
 
             try {
-                // ✅ Create persistent L2Space owned by the model (fixes AccessViolationException)
+                // Create persistent L2Space owned by the model (fixes AccessViolationException)
                 model->embedding_space = std::make_unique<hnswlib::L2Space>(model->n_components);
 
-                // ✅ Construct embedding space HNSW index with persistent metric space
+                // Construct embedding space HNSW index with persistent metric space
                 model->embedding_space_index = std::make_unique<hnswlib::HierarchicalNSW<float>>(
                     model->embedding_space.get(),
                     model->n_samples,

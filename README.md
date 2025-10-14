@@ -259,6 +259,73 @@ dotnet run
 
 **✅ Pre-built binaries included** - No C++ compilation required! The native PACMAP libraries for both Windows (`pacmap.dll`) and Linux (`libpacmap.so`) are included in this repository.
 
+## 🎛 Hyperparameters
+
+PaCMAP uses three main hyperparameters that control the balance between local and global structure preservation:
+
+### `n_neighbors` (Number of Neighbors)
+**Default: 10**
+The number of neighbors considered in the k-Nearest Neighbor graph. For optimal results, we recommend the adaptive formula:
+
+**For datasets with `n` samples:**
+- **Small datasets (n < 10,000)**: Use `n_neighbors = 10`
+- **Large datasets (n ≥ 10,000)**: Use `n_neighbors = 10 + 15 * (log₁₀(n) - 4)`
+
+**This adaptive formula is a very good rule of thumb** for optimizing PaCMAP performance across different dataset sizes. It automatically scales the neighborhood size to maintain the proper balance between local and global structure preservation as your dataset grows.
+
+**Examples:**
+- 1,000 samples → 10 neighbors
+- 10,000 samples → 10 neighbors
+- 100,000 samples → 25 neighbors
+- 1,000,000 samples → 40 neighbors
+
+⚠️ **Parameter Warning**: The C++ implementation will validate this parameter and issue warnings when inappropriate values are used.
+
+### `MN_ratio` (Mid-Near Pairs Ratio)
+**Default: 0.5**
+Controls the ratio of mid-near pairs to number of neighbors:
+`n_MN = ⌊n_neighbors × MN_ratio⌋`
+
+**Default recommendation**: 0.5 provides balanced local/global structure preservation.
+
+### `FP_ratio` (Further Pairs Ratio)
+**Default: 2.0**
+Controls the ratio of further pairs to number of neighbors:
+`n_FP = ⌊n_neighbors × FP_ratio⌋`
+
+**Default recommendation**: 2.0 maintains good global structure connectivity.
+
+**Rule of Thumb**: For optimal results, maintain the relationship `FP_ratio = 4 × MN_ratio`. The C++ implementation will validate this relationship and issue warnings when incorrect parameters are used.
+
+⚠️ **Parameter Validation**: The C++ implementation automatically validates all parameters (n_neighbors, MN_ratio, FP_ratio) and provides helpful warnings when they deviate from recommended ranges or relationships.
+
+### 📚 Recommended Citation
+
+If you use this implementation in your research, please cite the original PaCMAP paper:
+
+```bibtex
+@article{JMLR:v22:20-1061,
+  author  = {Yingfan Wang and Haiyang Huang and Cynthia Rudin and Yaron Shaposhnik},
+  title   = {Understanding How Dimension Reduction Tools Work: An Empirical Approach to Deciphering t-SNE, UMAP, TriMap, and PaCMAP for Data Visualization},
+  journal = {Journal of Machine Learning Research},
+  year    = {2021},
+  volume  = {22},
+  number  = {201},
+  pages   = {1-73},
+  url     = {http://jmlr.org/papers/v22/20-1061.html}
+}
+```
+
+### 🔍 Parameter Tuning Guidelines
+
+1. **Start with defaults** (n_neighbors=10, MN_ratio=0.5, FP_ratio=2.0)
+2. **For small datasets** (<1000 samples): Keep n_neighbors=10
+3. **For large datasets**: Use the adaptive formula above
+4. **MN_ratio**: Increase to 0.7-1.0 for more global structure
+5. **FP_ratio**: Adjust 1.5-3.0 for different global preservation levels
+
+The implementation includes automatic parameter validation and will provide helpful warnings when parameters are outside recommended ranges.
+
 ### Basic Usage (C#)
 
 ```csharp
