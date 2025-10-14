@@ -245,9 +245,12 @@ PacMapDotnet Enhanced
 ### Installation
 
 ```bash
-# Clone and build
-git clone https://github.com/78Spinoza/PacMapDotnet.git
+# Clone repository with submodules
+git clone --recurse-submodules https://github.com/78Spinoza/PacMapDotnet.git
 cd PacMapDotnet
+
+# If you already cloned without --recurse-submodules, initialize submodules:
+# git submodule update --init --recursive
 
 # Build C# solution
 dotnet build src/PACMAPCSharp.sln
@@ -258,6 +261,8 @@ dotnet run
 ```
 
 **✅ Pre-built binaries included** - No C++ compilation required! The native PACMAP libraries for both Windows (`pacmap.dll`) and Linux (`libpacmap.so`) are included in this repository.
+
+**📦 Eigen Library**: This project uses Eigen 3.4.0 (header-only) as a git submodule for SIMD optimizations. The submodule is automatically downloaded when you clone with `--recurse-submodules`. If building from source, Eigen headers are required.
 
 ## 🎛 Hyperparameters
 
@@ -525,9 +530,12 @@ dotnet run
 
 ### Quick Build
 ```bash
-# Clone repository
-git clone https://github.com/78Spinoza/PacMapDotnet.git
+# Clone repository with submodules
+git clone --recurse-submodules https://github.com/78Spinoza/PacMapDotnet.git
 cd PacMapDotnet
+
+# If you already cloned, initialize submodules:
+git submodule update --init --recursive
 
 # Build solution
 dotnet build src/PACMAPCSharp.sln --configuration Release
@@ -535,6 +543,26 @@ dotnet build src/PACMAPCSharp.sln --configuration Release
 # Run demo
 cd src/PacMapDemo
 dotnet run
+```
+
+### Building C++ from Source (Optional)
+
+If you need to rebuild the native library:
+
+```bash
+cd src/pacmap_pure_cpp
+
+# Initialize Eigen submodule if not done
+git submodule update --init --recursive
+
+# Configure with CMake
+cmake -B build_windows -S . -A x64
+
+# Build
+cmake --build build_windows --config Release
+
+# Copy DLL to C# project
+cp build_windows/bin/Release/pacmap.dll ../PACMAPCSharp/PACMAPCSharp/
 ```
 
 ### Pre-built Binaries
