@@ -190,6 +190,43 @@ PaCMAP excels with high-dimensional data. Here's the MNIST dataset projection wh
 ![PaCMAP Results](docs/Other/PACMAP%20and%20MNIST.PNG)
 *MNIST digits (0-9) projected to 2D space - notice the clear separation and meaningful clustering without size artifacts*
 
+### MNIST Transform Visualizations Generated Using the Library
+
+Below are visualizations generated using this PaCMAP library implementation. As you can see in the animation, the PaCMAP dimensionality reduction is very forgiving when varying hyperparameters - the clusters jump around but still maintain their shape and internal structure. Additionally, the "hard-to-classify" letters can be separated from the fold, and things that are supposed to be close remain close while those that should be apart remain apart.  
+
+![MNIST 2D Transform](docs/Other/mnist_2d_transform.png)
+*All projections have misplaced letters, it's only more visible here since I use different color and dot type. This demonstrates the inherent challenges in dimensionality reduction where some data points naturally get positioned in suboptimal regions of the low-dimensional manifold.*
+
+Below is a clean version where all the difficult letters are removed, making it easy for AI or any ML method to classify since they can be properly separated as seen with this powerful DR tool. 
+
+![MNIST 2D Transform Clean](docs/Other/mnist_2d_transform_clean.png)
+*Here is the cleaned one using the library's SafeTransform method, which provides enhanced classification by filtering out difficult samples and using weighted nearest neighbor voting for improved robustness.*
+
+
+Below are the difficult letters identified, and we can understand why many of them are difficult to recognize even for the human eye. 
+
+![MNIST 2D Transform Difficult](docs/Other/mnist_2d_transform_difficult.png)
+*These are the difficult letters since they are misplaced in the dimension manifold. Understandably so if you look at some of them - these represent samples that are inherently ambiguous or lie in challenging regions of the 
+feature space where clear separation is difficult.*
+
+### MNIST Parameter Optimization GIFs
+
+![MNIST Ratio Animation](docs/Other/MNSTMnRatio.gif)
+*Parameter optimization animation showing the effect of varying MN_ratio from 0.4 to 1.3 while maintaining FP_ratio = 4 × MN_ratio relationship. Each frame displays for 50 seconds for detailed analysis of how parameter changes affect the embedding structure.*
+
+![Neighbor MSTI Animation](docs/Other/neighborMNSTI.gif)
+*Neighbor sampling strategy animation demonstrating different approaches to selecting near, mid-near, and far pairs in the PaCMAP algorithm. This animation shows how the triplet sampling strategy affects the final embedding quality.*
+
+### Difficult Examples Recognized from the DR Manifold
+
+![Bad Sample Examples](docs/Other/badsampel.gif)
+*Difficult examples recognized from the dimension reduction manifold. This animation shows samples that are challenging to classify correctly due to their position in the low-dimensional embedding space, highlighting the inherent complexity of high-dimensional data projection.*
+
+
+
+
+
+
 **Key Achievement**: Unlike t-SNE, the cluster sizes here actually reflect the balanced nature of MNIST classes, and the spatial relationships between digits (e.g., 6 and 9 being close) make intuitive sense.
 
 ### Topological Challenges: The S-Curve with Hole
