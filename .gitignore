@@ -199,8 +199,12 @@ CLAUDE.md
 src/pacmap_pure_cpp/CMakeFiles/
 src/pacmap_pure_cpp/build-windows/
 src/pacmap_pure_cpp/build-linux/
+src/pacmap_pure_cpp/build_windows/
 src/pacmap_pure_cpp/test-build/
 src/pacmap_pure_cpp/tmp_backup/
+
+# External libraries (header-only, downloaded separately)
+src/pacmap_pure_cpp/eigen/
 
 # Error logs and temporary files
 src/error*.txt
