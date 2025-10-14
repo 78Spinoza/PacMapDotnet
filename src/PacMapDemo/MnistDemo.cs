@@ -187,11 +187,11 @@ namespace PacMapDemo
                 Console.WriteLine();
 
                 // Create 2D embedding using helper function (HNSW) and save model + timing for transform
-                var (pacmapHNSW, hnswFitTime) = CreateMnistEmbeddingWithModel(doubleData, labels, nNeighbors: 30, mnRatio: 0.5f, fpRatio: 2.0f,
+                var (pacmapHNSW, hnswFitTime) = CreateMnistEmbeddingWithModel(doubleData, labels, nNeighbors: 10, mnRatio: 0.5f, fpRatio: 2.0f,
                     name: "mnist_2d_embedding", folderName: "", directKNN: false);
 
                 // Create DirectKNN embedding for comparison and save model + timing for transform
-                var (pacmapKNN, knnFitTime) = CreateMnistEmbeddingWithModel(doubleData, labels, nNeighbors: 30, mnRatio: 0.5f, fpRatio: 2.0f,
+                var (pacmapKNN, knnFitTime) = CreateMnistEmbeddingWithModel(doubleData, labels, nNeighbors: 10, mnRatio: 0.5f, fpRatio: 2.0f,
                     name: "mnist_2d_KNN_embedding", folderName: "", directKNN: true);
 
                 // NEW: Run TransformWithSafety with classification right after the two main embeddings
@@ -224,20 +224,8 @@ namespace PacMapDemo
                 // Create neighborMNSTI folder with k=5 to 60 experiments (HNSW only)
                 CreateNeighborMNSTI_Experiments(doubleData, labels);
 
-                // Create MNSTMnRatio experiments with mnRatio from 0.5 to 2.0 (increments of 0.2)
+                // Create MNSTMnRatio experiments with mnRatio from 0.4 to 1.3 (increments of 0.1, auto-calculated FP_ratio)
                 CreateMNSTMnRatio_Experiments(doubleData, labels);
-
-                // Create MNSTfpRatio experiments with fpRatio from 0.5 to 4.0 (increments of 0.5)
-                CreateMNSTfpRatio_Experiments(doubleData, labels);
-
-                // Create neighborMNSTI folder with k=5 to 60 experiments (HNSW only)
-                CreateNeighborMNSTI_Experiments(doubleData, labels);
-
-                // Create MNSTMnRatio experiments with mnRatio from 0.5 to 2.0 (increments of 0.2)
-                CreateMNSTMnRatio_Experiments(doubleData, labels);
-
-                // Create MNSTfpRatio experiments with fpRatio from 0.5 to 4.0 (increments of 0.5)
-                CreateMNSTfpRatio_Experiments(doubleData, labels);
             }
             catch (Exception ex)
             {
@@ -803,7 +791,7 @@ phases=({pacmap.NumIters.phase1}, {pacmap.NumIters.phase2}, {pacmap.NumIters.pha
             var classifications = ClassifyAllSamples(transformResults, labels);
 
             // Get difficult samples (misclassified) with filtering rules
-            var (difficultSamples, filteredCounts) = GetDifficultSamples(classifications, transformResults);
+            var (difficultSamples, filteredCounts) = GetDifficultSamples(classifications, transformResults, labels);
 
             // Print classification statistics
             PrintClassificationStatistics(classifications, difficultSamples, filteredCounts);
@@ -1070,7 +1058,7 @@ Fit: {originalFitTime:F2}s | Transform: {transformTime:F2}s | Speedup: {(origina
                 .First().Digit;
 
             var confidence = probabilities[predictedLabel];
-            var isCorrect = predictedLabel == (int)result.Severity; // Will be updated later
+            var isCorrect = false; // Will be updated later
 
             return new DigitClassificationResult(0, predictedLabel, probabilities, isCorrect, confidence);
         }
@@ -1128,7 +1116,7 @@ Fit: {originalFitTime:F2}s | Transform: {transformTime:F2}s | Speedup: {(origina
         /// <summary>
         /// Get list of difficult samples (misclassified digits) with enhanced filtering rules
         /// </summary>
-        private static (List<int> difficultSamples, int[] filteredCounts) GetDifficultSamples(DigitClassificationResult[] classifications, TransformResult[] transformResults)
+        private static (List<int> difficultSamples, int[] filteredCounts) GetDifficultSamples(DigitClassificationResult[] classifications, TransformResult[] transformResults, byte[] trainingLabels)
         {
             var difficultSamples = new List<int>();
             var filteredByRule1 = 0;
@@ -1156,7 +1144,7 @@ Fit: {originalFitTime:F2}s | Transform: {transformTime:F2}s | Speedup: {(origina
                     {
                         // Sort by distance and take closest 15
                         var indexedNeighbors = transformResult.NearestNeighborIndices
-                            .Select((idx, dist) => new { Index = idx, Distance = dist })
+                            .Select((idx, index) => new { Index = idx, Distance = transformResult.NearestNeighborDistances[index] })
                             .OrderBy(x => x.Distance)
                             .Take(15)
                             .ToArray();
@@ -1168,7 +1156,7 @@ Fit: {originalFitTime:F2}s | Transform: {transformTime:F2}s | Speedup: {(origina
 
                     // Recalculate classification with limited neighbors
                     var limitedClassification = ClassifyDigitWithLimitedNeighbors(
-                        neighborIndicesToUse, neighborDistancesToUse, labels[i]);
+                        neighborIndicesToUse, neighborDistancesToUse, trainingLabels);
 
                     // Rule 2: Add if true label probability < 0.3 (border case)
                     var trueLabelProbability = limitedClassification.Probabilities[classification.TrueLabel];
@@ -1854,7 +1842,8 @@ phases=({pacmap.NumIters.phase1}, {pacmap.NumIters.phase2}, {pacmap.NumIters.pha
         }
 
         /// <summary>
-        /// Creates MNSTMnRatio experiments with mnRatio from 0.5 to 2.0 (increments of 0.2)
+        /// Creates MNSTMnRatio experiments with mnRatio from 0.4 to 1.3 (increments of 0.1)
+        /// Auto-calculates FP_ratio = Floor(4 × MN_ratio) and uses optimal n_neighbors for 10K samples
         /// </summary>
         private static void CreateMNSTMnRatio_Experiments(double[,] data, byte[] labels)
         {
@@ -1866,34 +1855,41 @@ phases=({pacmap.NumIters.phase1}, {pacmap.NumIters.phase2}, {pacmap.NumIters.pha
             {
                 var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
                 var experimentsCreated = 0;
+                var nNeighbors = 10; // Optimal for 10,000 samples per adaptive formula
 
-                for (float mnRatio = 0.5f; mnRatio <= 2.0f; mnRatio += 0.2f)
+                Console.WriteLine($"   Using n_neighbors = {nNeighbors} (optimal for {data.GetLength(0):N0} samples)");
+                Console.WriteLine($"   Testing MN_ratio: 0.4 to 1.3 in 0.1 increments");
+                Console.WriteLine($"   Auto-calculating FP_ratio = Floor(4 × MN_ratio)");
+                Console.WriteLine();
+
+                for (float mnRatio = 0.4f; mnRatio <= 1.3f; mnRatio += 0.1f)
                 {
-                    Console.WriteLine($"\n🎯 MnRatio Experiment {experimentsCreated + 1}/8: mn={mnRatio:F1}");
+                    var fpRatio = (float)Math.Floor(4.0 * mnRatio);
+                    Console.WriteLine($"\n🎯 MnRatio Experiment {experimentsCreated + 1}/10: mn={mnRatio:F1}, fp={fpRatio:F1} (ratio = {fpRatio/mnRatio:F1})");
 
-                    // Create HNSW embedding with fixed k=30 and varying mnRatio
+                    // Create HNSW embedding with optimal k and auto-calculated ratios
                     CreateMnistEmbedding(
                         data: data,
                         labels: labels,
-                        nNeighbors: 30,
+                        nNeighbors: nNeighbors,
                         mnRatio: mnRatio,
-                        fpRatio: 2.0f,
-                        name: $"mn_{mnRatio:F1}",
+                        fpRatio: fpRatio,
+                        name: $"mn_{mnRatio:F1}_fp_{fpRatio:F1}",
                         folderName: "MNSTMnRatio",
                         directKNN: false
                     );
                     experimentsCreated++;
 
                     // Show progress
-                    var percentComplete = (experimentsCreated * 100.0) / 8;
-                    Console.WriteLine($"   Progress: {experimentsCreated}/8 ({percentComplete:F1}%)");
+                    var percentComplete = (experimentsCreated * 100.0) / 10;
+                    Console.WriteLine($"   Progress: {experimentsCreated}/10 ({percentComplete:F1}%)");
                 }
 
                 totalStopwatch.Stop();
 
                 Console.WriteLine();
                 Console.WriteLine($"✅ All MNSTMnRatio experiments completed!");
-                Console.WriteLine($"   Total experiments: {experimentsCreated} (8 mnRatio values, k=30 fixed)");
+                Console.WriteLine($"   Total experiments: {experimentsCreated} (10 mnRatio values from 0.4-1.3, k={nNeighbors} fixed)");
                 Console.WriteLine($"   Total time: {totalStopwatch.Elapsed.TotalMinutes:F1} minutes");
                 Console.WriteLine($"   Average time per experiment: {totalStopwatch.Elapsed.TotalSeconds / experimentsCreated:F1}s");
                 Console.WriteLine($"   📁 Results saved to: {Path.GetFullPath(Path.Combine("Results", "MNSTMnRatio"))}");
@@ -1904,55 +1900,5 @@ phases=({pacmap.NumIters.phase1}, {pacmap.NumIters.phase2}, {pacmap.NumIters.pha
             }
         }
 
-        /// <summary>
-        /// Creates MNSTfpRatio experiments with fpRatio from 0.5 to 4.0 (increments of 0.5)
-        /// </summary>
-        private static void CreateMNSTfpRatio_Experiments(double[,] data, byte[] labels)
-        {
-            Console.WriteLine();
-            Console.WriteLine("🔄 Creating MNSTfpRatio Experiments...");
-            Console.WriteLine("=====================================");
-
-            try
-            {
-                var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
-                var experimentsCreated = 0;
-
-                for (float fpRatio = 0.5f; fpRatio <= 4.0f; fpRatio += 0.5f)
-                {
-                    Console.WriteLine($"\n🎯 FpRatio Experiment {experimentsCreated + 1}/8: fp={fpRatio:F1}");
-
-                    // Create HNSW embedding with fixed k=30 and varying fpRatio
-                    CreateMnistEmbedding(
-                        data: data,
-                        labels: labels,
-                        nNeighbors: 30,
-                        mnRatio: 0.5f,
-                        fpRatio: fpRatio,
-                        name: $"fp_{fpRatio:F1}",
-                        folderName: "MNSTfpRatio",
-                        directKNN: false
-                    );
-                    experimentsCreated++;
-
-                    // Show progress
-                    var percentComplete = (experimentsCreated * 100.0) / 8;
-                    Console.WriteLine($"   Progress: {experimentsCreated}/8 ({percentComplete:F1}%)");
-                }
-
-                totalStopwatch.Stop();
-
-                Console.WriteLine();
-                Console.WriteLine($"✅ All MNSTfpRatio experiments completed!");
-                Console.WriteLine($"   Total experiments: {experimentsCreated} (8 fpRatio values, k=30 fixed)");
-                Console.WriteLine($"   Total time: {totalStopwatch.Elapsed.TotalMinutes:F1} minutes");
-                Console.WriteLine($"   Average time per experiment: {totalStopwatch.Elapsed.TotalSeconds / experimentsCreated:F1}s");
-                Console.WriteLine($"   📁 Results saved to: {Path.GetFullPath(Path.Combine("Results", "MNSTfpRatio"))}");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"❌ Error in MNSTfpRatio experiments: {ex.Message}");
-            }
-        }
-    }
+      }
 }

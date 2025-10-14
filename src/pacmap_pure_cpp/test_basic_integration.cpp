@@ -30,13 +30,14 @@ int main() {
     const int n_features = 5;
     const int embedding_dim = 2;
 
-    std::vector<float> data(n_samples * n_features);
-    std::vector<float> embedding(n_samples * embedding_dim);
+    // v2.8.6+: Use double precision instead of float
+    std::vector<double> data(n_samples * n_features);
+    std::vector<double> embedding(n_samples * embedding_dim);
 
     // Generate simple test data
     for (int i = 0; i < n_samples; i++) {
         for (int j = 0; j < n_features; j++) {
-            data[i * n_features + j] = static_cast<float>(i * j) * 0.1f;
+            data[i * n_features + j] = static_cast<double>(i * j) * 0.1;
         }
     }
 
@@ -51,8 +52,8 @@ int main() {
         n_features,
         embedding_dim,
         10,  // n_neighbors
-        2.0f, // MN_ratio
-        1.0f, // FP_ratio
+        0.5f, // MN_ratio (default)
+        2.0f, // FP_ratio (default, follows relationship: FP_ratio = 4 * MN_ratio)
         1.0f, // learning_rate
         50,   // n_iters
         10,   // phase1_iters
@@ -61,13 +62,13 @@ int main() {
         PACMAP_METRIC_EUCLIDEAN,
         embedding.data(),
         nullptr, // progress_callback
-        0,      // force_exact_knn
+        1,      // force_exact_knn (use exact for small dataset to avoid HNSW overhead)
         -1,     // M
         -1,     // ef_construction
         -1,     // ef_search
         0,      // use_quantization
         42,     // random_seed
-        1       // autoHNSWParam
+        0       // autoHNSWParam (disable for small dataset)
     );
 
     if (result != PACMAP_SUCCESS) {

@@ -33,6 +33,9 @@ namespace PacMapDemo
 
             try
             {
+
+                OpenResultsFolder();
+
                 // Initialize results directory and clean previous results
                 InitializeResultsDirectory();
 
@@ -56,11 +59,11 @@ namespace PacMapDemo
                // CreateFlagship1MHairyMammoth();
 
                 // Run advanced parameter tuning
-                //DemoAdvancedParameterTuning(data, labels); 
+               // DemoAdvancedParameterTuning(data, labels); 
 
                 // Run MNIST demo
                 RunMnistDemo(); // DISABLED - testing exact KNN only
-                OpenResultsFolder();
+              
                 Console.WriteLine("🎉 ALL DEMONSTRATIONS AND EXPERIMENTS COMPLETED!");
                 Console.WriteLine($"📁 Check {ResultsDir} folder for visualizations.");
             }
@@ -731,73 +734,75 @@ phases=({model.NumIters.phase1}, {model.NumIters.phase2}, {model.NumIters.phase3
      
 
         /// <summary>
-        /// Runs advanced parameter tuning experiments.
+        /// Runs advanced parameter tuning experiments focused on MN_ratio with auto-calculated FP_ratio.
         /// </summary>
         private static void DemoAdvancedParameterTuning(double[,] data, int[] labels)
         {
-            Console.WriteLine("🔬 Running Advanced Parameter Tuning Experiments...");
-            var testConfigs = new[]
-            {
-                new { MNRatio = 0.5f, FPRatio = 2.0f, LearningRate = 1.0f, Name = "Default" },
-                new { MNRatio = 0.1f, FPRatio = 1.0f, LearningRate = 0.5f, Name = "Conservative" },
-                new { MNRatio = 1.0f, FPRatio = 4.0f, LearningRate = 2.0f, Name = "Aggressive" }
-            };
+            Console.WriteLine("🔬 Running MN Ratio Parameter Experiments...");
+            Console.WriteLine("   Testing MN_ratio from 0.4 to 1.3 in 0.1 increments");
+            Console.WriteLine("   FP_ratio automatically calculated as Floor(4 × MN_ratio)");
+            Console.WriteLine("   Using n_neighbors=10 for 10,000 samples (per adaptive formula)");
 
-            var optimalHNSWParams = AutoDiscoverHNSWParameters(data);
-            var results = new List<(string name, double[,] embedding, double time, double quality)>();
+            // Test MN_ratio values from 0.4 to 1.3 in 0.1 increments
+            var mnRatioTests = new[] { 0.4f, 0.5f, 0.6f, 0.7f, 0.8f, 0.9f, 1.0f, 1.1f, 1.2f, 1.3f };
+            var results = new List<(float mnRatio, float fpRatio, double[,] embedding, double time, double quality)>();
 
-            foreach (var config in testConfigs)
+            foreach (var mnRatio in mnRatioTests)
             {
-                Console.WriteLine($"   📊 Testing {config.Name} configuration (mn={config.MNRatio}, fp={config.FPRatio}, lr={config.LearningRate})...");
+                // Auto-calculate FP_ratio as Floor(4 × MN_ratio)
+                float fpRatio = (float)Math.Floor(4.0 * mnRatio);
+
+                Console.WriteLine($"   📊 Testing MN_ratio = {mnRatio:F1}, FP_ratio = {fpRatio} (auto-calculated)...");
                 var model = new PacMapModel(
-                    mnRatio: config.MNRatio,
-                    fpRatio: config.FPRatio,
-                    learningRate: config.LearningRate,
+                    mnRatio: mnRatio,
+                    fpRatio: fpRatio,
+                    learningRate: 1.0f,
                     initializationStdDev: 1e-4f,
                     numIters: (100, 100, 250)
                 );
+
                 var stopwatch = Stopwatch.StartNew();
                 var embedding = model.Fit(
                     data: data,
                     embeddingDimension: 2,
-                    nNeighbors: 10,
-                    learningRate: config.LearningRate,
-                    mnRatio: config.MNRatio,
-                    fpRatio: config.FPRatio,
+                    nNeighbors: 10,  // Optimal for 10,000 samples: 10 + 15 * (log10(10000) - 4) = 10
+                    learningRate: 1.0f,
+                    mnRatio: mnRatio,
+                    fpRatio: fpRatio,
                     numIters: (100, 100, 250),
                     metric: DistanceMetric.Euclidean,
                     forceExactKnn: false,
-                    hnswM: optimalHNSWParams.M,
-                    hnswEfConstruction: optimalHNSWParams.EfConstruction,
-                    hnswEfSearch: optimalHNSWParams.EfSearch,
-                    autoHNSWParam: false,
+                    autoHNSWParam: true,
                     randomSeed: 42,
-                    progressCallback: CreatePrefixedCallback(config.Name)
+                    progressCallback: CreatePrefixedCallback($"MN={mnRatio:F1}")
                 );
                 stopwatch.Stop();
                 Console.WriteLine();
                 double quality = CalculateEmbeddingQuality(embedding, labels);
-                results.Add((config.Name, embedding, stopwatch.Elapsed.TotalSeconds, quality));
-                Console.WriteLine($"   ✅ {config.Name}: quality={quality:F4}, time={stopwatch.Elapsed.TotalSeconds:F2}s");
+                results.Add((mnRatio, fpRatio, embedding, stopwatch.Elapsed.TotalSeconds, quality));
+                Console.WriteLine($"   ✅ MN={mnRatio:F1}, FP={fpRatio}: quality={quality:F4}, time={stopwatch.Elapsed.TotalSeconds:F2}s");
 
-                var paramInfo = CreateFitParamInfo(model, stopwatch.Elapsed.TotalSeconds, "Advanced_Parameter_Tuning");
-                paramInfo["configuration"] = config.Name;
+                var paramInfo = CreateFitParamInfo(model, stopwatch.Elapsed.TotalSeconds, "MN_Ratio_Experiments");
+                paramInfo["mn_ratio"] = mnRatio.ToString("F1");
+                paramInfo["fp_ratio"] = fpRatio.ToString("F1");
+                paramInfo["fp_calculation"] = $"Floor(4 × {mnRatio:F1}) = {fpRatio}";
                 paramInfo["embedding_quality"] = quality.ToString("F4");
 
-                var experimentDir = Path.Combine(ResultsDir, "advanced_param_experiments");
+                var experimentDir = Path.Combine(ResultsDir, "mn_ratio_experiments");
                 Directory.CreateDirectory(experimentDir);
-                var imageNumber = Array.IndexOf(testConfigs, config) + 1;
-                var outputPath = Path.Combine(experimentDir, $"{imageNumber:D4}_{config.Name}.png");
-                var title = $"Advanced Param Experiment: {config.Name}\n" + BuildVisualizationTitle(model, "Advanced Parameter Tuning Experiment");
+                var imageNumber = Array.IndexOf(mnRatioTests, mnRatio) + 1;
+                var outputPath = Path.Combine(experimentDir, $"{imageNumber:D2}_MN_{mnRatio:F1}.png");
+                var title = $"MN Ratio Experiment: MN={mnRatio:F1}, FP={fpRatio}\n" + BuildVisualizationTitle(model, "MN Ratio Experiment");
                 Visualizer.PlotMammothPacMAP(embedding, data, title, outputPath, paramInfo);
                 Console.WriteLine($"   📈 Saved: {Path.GetFileName(outputPath)}");
             }
 
-            Console.WriteLine("📊 Advanced Parameter Tuning Summary");
+            Console.WriteLine("📊 MN Ratio Experiments Summary");
             Console.WriteLine(new string('=', 60));
             var bestResult = results.OrderBy(r => r.quality).First();
-            Console.WriteLine($"🏆 Best configuration: {bestResult.name} (quality: {bestResult.quality:F4})");
+            Console.WriteLine($"🏆 Best MN_ratio: {bestResult.mnRatio:F1} (FP_ratio={bestResult.fpRatio}, quality: {bestResult.quality:F4})");
             Console.WriteLine($"⏱️ Execution times: {results.Min(r => r.time):F2}s to {results.Max(r => r.time):F2}s");
+            Console.WriteLine($"📊 All tested ratios maintain FP_ratio = Floor(4 × MN_ratio) relationship");
         }
 
         /// <summary>

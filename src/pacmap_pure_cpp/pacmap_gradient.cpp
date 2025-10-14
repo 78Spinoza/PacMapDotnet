@@ -117,7 +117,12 @@ void compute_gradients(const std::vector<double>& embedding, const std::vector<T
                        std::vector<double>& gradients, float w_n, float w_mn, float w_f, int n_components,
                        pacmap_progress_callback_internal callback) {
 
+    // ERROR14 Step 2: Reserve memory to avoid reallocations
     gradients.assign(embedding.size(), 0.0);
+
+    // ERROR14 Step 2: Triplet batching for better cache locality
+    // Batch size tuned for L2/L3 cache (10k triplets = ~240KB with doubles)
+    const size_t batch_size = 10000;
 
     // PHASE 2 FIX: CRITICAL - Match Python sequential processing order exactly!
     // Python reference processes ALL triplets by type sequentially:
@@ -137,10 +142,13 @@ void compute_gradients(const std::vector<double>& embedding, const std::vector<T
     int phase_transition_count = 0;
 
     // PHASE 1: Process ALL NEIGHBOR triplets (matches Python lines 268-279)
-    #pragma omp parallel for schedule(dynamic, 1000) reduction(+:processed_neighbors,skipped_nan,skipped_zero_distance)
-    for (int idx = 0; idx < static_cast<int>(triplets.size()); ++idx) {
-        const auto& t = triplets[idx];
-        if (t.type != NEIGHBOR) continue;  // Skip non-neighbor triplets in this phase
+    // ERROR14 Step 2: Use static schedule for determinism and batch for cache locality
+    #pragma omp parallel for schedule(static) reduction(+:processed_neighbors,skipped_nan,skipped_zero_distance)
+    for (size_t batch_start = 0; batch_start < triplets.size(); batch_start += batch_size) {
+        size_t batch_end = std::min(batch_start + batch_size, triplets.size());
+        for (size_t idx = batch_start; idx < batch_end; ++idx) {
+            const auto& t = triplets[idx];
+            if (t.type != NEIGHBOR) continue;  // Skip non-neighbor triplets in this phase
 
         size_t idx_a = static_cast<size_t>(t.anchor) * n_components;
         size_t idx_n = static_cast<size_t>(t.neighbor) * n_components;
@@ -185,13 +193,17 @@ void compute_gradients(const std::vector<double>& embedding, const std::vector<T
         }
 
         processed_neighbors++;
-    }
+        }  // End inner batch loop
+    }  // End outer parallel batch loop
 
     // PHASE 2: Process ALL MID_NEAR triplets (matches Python lines 281-292)
-    #pragma omp parallel for schedule(dynamic, 1000) reduction(+:processed_midnear,skipped_nan,skipped_zero_distance,skipped_triplets)
-    for (int idx = 0; idx < static_cast<int>(triplets.size()); ++idx) {
-        const auto& t = triplets[idx];
-        if (t.type != MID_NEAR) continue;  // Skip non-mid-near triplets in this phase
+    // ERROR14 Step 2: Use static schedule for determinism and batch for cache locality
+    #pragma omp parallel for schedule(static) reduction(+:processed_midnear,skipped_nan,skipped_zero_distance,skipped_triplets)
+    for (size_t batch_start = 0; batch_start < triplets.size(); batch_start += batch_size) {
+        size_t batch_end = std::min(batch_start + batch_size, triplets.size());
+        for (size_t idx = batch_start; idx < batch_end; ++idx) {
+            const auto& t = triplets[idx];
+            if (t.type != MID_NEAR) continue;  // Skip non-mid-near triplets in this phase
 
         size_t idx_a = static_cast<size_t>(t.anchor) * n_components;
         size_t idx_n = static_cast<size_t>(t.neighbor) * n_components;
@@ -235,13 +247,17 @@ void compute_gradients(const std::vector<double>& embedding, const std::vector<T
         }
 
         processed_midnear++;
-    }
+        }  // End inner batch loop
+    }  // End outer parallel batch loop
 
     // PHASE 3: Process ALL FURTHER triplets (matches Python lines 294-305)
-    #pragma omp parallel for schedule(dynamic, 1000) reduction(+:processed_further,skipped_nan,skipped_zero_distance,skipped_triplets)
-    for (int idx = 0; idx < static_cast<int>(triplets.size()); ++idx) {
-        const auto& t = triplets[idx];
-        if (t.type != FURTHER) continue;  // Skip non-further triplets in this phase
+    // ERROR14 Step 2: Use static schedule for determinism and batch for cache locality
+    #pragma omp parallel for schedule(static) reduction(+:processed_further,skipped_nan,skipped_zero_distance,skipped_triplets)
+    for (size_t batch_start = 0; batch_start < triplets.size(); batch_start += batch_size) {
+        size_t batch_end = std::min(batch_start + batch_size, triplets.size());
+        for (size_t idx = batch_start; idx < batch_end; ++idx) {
+            const auto& t = triplets[idx];
+            if (t.type != FURTHER) continue;  // Skip non-further triplets in this phase
 
         size_t idx_a = static_cast<size_t>(t.anchor) * n_components;
         size_t idx_n = static_cast<size_t>(t.neighbor) * n_components;
@@ -280,9 +296,10 @@ void compute_gradients(const std::vector<double>& embedding, const std::vector<T
         }
 
         processed_further++;
-    }
+        }  // End inner batch loop
+    }  // End outer parallel batch loop
 
-  
+
     // ERROR13 FIX: COMMENTED OUT gradient clipping - may interfere with natural force balance
     // Python reference doesn't use gradient clipping - lets gradients flow naturally
     // The clipping was causing artificial constraints that prevent proper embedding formation

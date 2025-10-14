@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.15)
-project(pacmap VERSION 2.8.16 LANGUAGES CXX)
+project(pacmap VERSION 2.8.17 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -131,16 +131,17 @@ endif()
 # CRITICAL FIX: Removed test_adam_gaussian - file was deleted during repository cleanup
 # This test is no longer needed as the Adam optimizer has been verified and fixed
 
-# add_executable(test_basic_integration
-#     test_basic_integration.cpp
-# )
-# target_link_libraries(test_basic_integration pacmap)
-# if(WIN32)
-#     target_compile_definitions(test_basic_integration PRIVATE _CRT_SECURE_NO_WARNINGS)
-# endif()
-# set_target_properties(test_basic_integration PROPERTIES
-#     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
-# )
+# C++ Integration Tests - Updated for v2.8.6 double precision
+add_executable(test_basic_integration
+    test_basic_integration.cpp
+)
+target_link_libraries(test_basic_integration pacmap)
+if(WIN32)
+    target_compile_definitions(test_basic_integration PRIVATE _CRT_SECURE_NO_WARNINGS)
+endif()
+set_target_properties(test_basic_integration PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+)
 
 # add_executable(test_mathematical_correctness
 #     test_mathematical_correctness.cpp

@@ -74,7 +74,8 @@ void optimize_embedding(PacMapModel* model, double* embedding_out, pacmap_progre
                            std::sqrt(1.0 - std::pow(static_cast<double>(model->adam_beta2), iter + 1)) /
                            (1.0 - std::pow(static_cast<double>(model->adam_beta1), iter + 1));
 
-            #pragma omp parallel for
+            // ERROR14 Step 1: Use schedule(static) for deterministic loop partitioning across runs
+            #pragma omp parallel for schedule(static)
             for (int i = 0; i < static_cast<int>(embedding.size()); ++i) {
                 // ERROR13: NaN safety - skip non-finite gradients to prevent Adam state corruption
                 if (!std::isfinite(gradients[i])) {
@@ -115,7 +116,8 @@ void optimize_embedding(PacMapModel* model, double* embedding_out, pacmap_progre
         } else {
             // Simple SGD optimizer (exact Python reference match)
             // Python line 351-352: embedding -= learning_rate * gradients
-            #pragma omp parallel for
+            // ERROR14 Step 1: Use schedule(static) for deterministic loop partitioning
+            #pragma omp parallel for schedule(static)
             for (int i = 0; i < static_cast<int>(embedding.size()); ++i) {
                 // NaN safety check
                 if (!std::isfinite(gradients[i])) {
