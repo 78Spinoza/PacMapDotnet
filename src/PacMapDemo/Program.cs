@@ -19,7 +19,7 @@ namespace PacMapDemo
     public class Program
     {
         private const string ResultsDir = "Results";
-        private const string DataDir = "Data";
+        private static readonly string DataDir = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "PacMapDemo", "Data"));
         private const string MammothDataFile = "mammoth_data.csv";
         private const string HairyMammothDataFile = "mammoth_a.csv";
 
@@ -41,26 +41,26 @@ namespace PacMapDemo
                 Console.WriteLine($"Loaded: {data.GetLength(0)} points, {data.GetLength(1)} dimensions");
 
                 // Run core demonstrations
-                Run10kMammothDemo(data);
+               // Run10kMammothDemo(data);
            
 
-                OpenResultsFolder();
+             
 
                 // Run transform consistency tests
-                // RunTransformConsistencyTests(data, labels); // DISABLED - testing exact KNN only
+                // RunTransformConsistencyTests(data, labels); 
 
                 // Run hyperparameter experiments
-                RunHyperparameterExperiments(data, labels); // DISABLED - testing exact KNN only
+                //RunHyperparameterExperiments(data, labels); 
 
 
-                CreateFlagship1MHairyMammoth();
+               // CreateFlagship1MHairyMammoth();
 
                 // Run advanced parameter tuning
-                DemoAdvancedParameterTuning(data, labels); // DISABLED - testing exact KNN only
+                //DemoAdvancedParameterTuning(data, labels); 
 
                 // Run MNIST demo
                 RunMnistDemo(); // DISABLED - testing exact KNN only
-
+                OpenResultsFolder();
                 Console.WriteLine("🎉 ALL DEMONSTRATIONS AND EXPERIMENTS COMPLETED!");
                 Console.WriteLine($"📁 Check {ResultsDir} folder for visualizations.");
             }
@@ -331,11 +331,10 @@ namespace PacMapDemo
             string modelPath = Path.Combine(ResultsDir, "hairy_mammoth_1m_hnsw.pmm");
          
 
-            // Create visualization
-            string outputPath = Path.Combine(ResultsDir, "hairy_mammoth_1m_embedding.png");
-            var paramInfo = CreateFitParamInfo(pacmap, stopwatch.Elapsed.TotalSeconds, "Flagship_1M_Hairy_Mammoth");
-            var title = BuildVisualizationTitle(pacmap, "Flagship 1M Hairy Mammoth");
-            Visualizer.PlotMammothPacMAP(embedding, data, title, outputPath, paramInfo);
+              // Create black and white visualization of original 3D data
+            string outputPath = Path.Combine(ResultsDir, "hairy_mammoth_1m_3d.png");
+            var title3D = "Flagship 1M Hairy Mammoth - Original 3D Black & White";
+            Visualizer.PlotOriginalMammoth3DReal(data, title3D, outputPath);
             Console.WriteLine($"   ✅ Created: {Path.GetFileName(outputPath)}");
         }
 
@@ -504,8 +503,8 @@ phases=({model.NumIters.phase1}, {model.NumIters.phase2}, {model.NumIters.phase3
             var title1 = BuildVisualizationTitle(model, "PACMAP Reproducibility Test - Embedding 1");
             var title2 = BuildVisualizationTitle(model, "PACMAP Reproducibility Test - Embedding 2");
 
-            Visualizer.PlotSimplePacMAP(embedding1, title1, Path.Combine(outputDir, "embedding1.png"), paramInfo1);
-            Visualizer.PlotSimplePacMAP(embedding2, title2, Path.Combine(outputDir, "embedding2.png"), paramInfo2);
+            Visualizer.PlotMammothPacMAP(embedding1, data, title1, Path.Combine(outputDir, "embedding1.png"), paramInfo1);
+            Visualizer.PlotMammothPacMAP(embedding2, data, title2, Path.Combine(outputDir, "embedding2.png"), paramInfo2);
             GenerateConsistencyPlot(embedding1, embedding2, labels, "Embedding Consistency (X)", Path.Combine(outputDir, "consistency_x.png"));
             GenerateHeatmapPlot(embedding1, embedding2, "Pairwise Distance Difference Heatmap", Path.Combine(outputDir, "distance_heatmap.png"));
             Console.WriteLine("   ✅ Visualizations generated");
@@ -523,7 +522,6 @@ phases=({model.NumIters.phase1}, {model.NumIters.phase2}, {model.NumIters.phase3
             DemoNeighborExperiments(data, labels, optimalHNSWParams);
             DemoLearningRateExperiments(data, labels, optimalHNSWParams);
             DemoInitializationStdDevExperiments(data, labels, optimalHNSWParams);
-            DemoExtendedLearningRateExperiments(data, labels, optimalHNSWParams);
         }
 
         /// <summary>
@@ -560,7 +558,7 @@ phases=({model.NumIters.phase1}, {model.NumIters.phase2}, {model.NumIters.phase3
         private static void DemoNeighborExperiments(double[,] data, int[] labels, (int M, int EfConstruction, int EfSearch) hnswParams)
         {
             Console.WriteLine("🔬 Testing Neighbor Counts (5-50)...");
-            var neighborTests = Enumerable.Range(0, 30).Select(i => 5 + i * 2).ToArray();
+            var neighborTests = Enumerable.Range(0, 13).Select(i => 5 + i * 2).ToArray();
             var results = new List<(int nNeighbors, double[,] embedding, double time, double quality)>();
 
             foreach (var nNeighbors in neighborTests)
@@ -809,7 +807,6 @@ phases=({model.NumIters.phase1}, {model.NumIters.phase2}, {model.NumIters.phase3
         {
             Console.WriteLine("🔢 Running MNIST Demo...");
             MnistDemo.RunDemo();
-            MnistDemo.RunPacmapOnMnist(subsetSize: 5000);
         }
 
   
