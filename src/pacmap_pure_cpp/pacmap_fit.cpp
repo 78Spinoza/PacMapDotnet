@@ -3,6 +3,7 @@
 #include "pacmap_optimization.h"
 #include "pacmap_simple_wrapper.h"
 #include "pacmap_distance.h"
+#include "pacmap_system_info.h"
 #include <iostream>
 #include <algorithm>
 #include <numeric>
@@ -268,12 +269,20 @@ namespace fit_utils {
         int autoHNSWParam,
         float initialization_std_dev) {
 
+
         if (!model || !data || !embedding || n_obs <= 0 || n_dim <= 0 ||
             embedding_dim <= 0 || n_neighbors <= 0 || n_neighbors >= n_obs) {
             if (progress_callback) {
                 progress_callback("Error", 0, 1, 0.0f, "Invalid parameters");
             }
             return PACMAP_ERROR_INVALID_PARAMS;
+        }
+
+
+        // Report system capabilities and performance optimizations
+        if (progress_callback) {
+            pacmap_system::report_system_capabilities(progress_callback);
+        } else {
         }
 
         if (embedding_dim > 50) {
@@ -284,21 +293,32 @@ namespace fit_utils {
         }
 
         // Validate n_neighbors parameter and issue adaptive formula warning
+        
         validate_n_neighbors_parameter(n_neighbors, n_obs, progress_callback);
+        
 
         // Validate MN_ratio and FP_ratio parameters and issue relationship warning
+        
         validate_ratio_parameters(mn_ratio, fp_ratio, progress_callback);
+        
 
+        
               try {
+            
             // Initialize PACMAP model parameters
             model->n_samples = n_obs;
+            
             model->n_features = n_dim;
+            
             model->n_components = embedding_dim;
+            
             model->n_neighbors = n_neighbors;
+            
             model->mn_ratio = mn_ratio;
             model->fp_ratio = fp_ratio;
             model->learning_rate = learning_rate;
             model->initialization_std_dev = initialization_std_dev;
+            
 
               model->phase1_iters = phase1_iters;
             model->phase2_iters = phase2_iters;
@@ -310,29 +330,42 @@ namespace fit_utils {
             model->hnsw_m = M > 0 ? M : 16;
             model->hnsw_ef_construction = ef_construction > 0 ? ef_construction : 150;  // ERROR12: Lowered from 200 for faster index building
             model->hnsw_ef_search = ef_search > 0 ? ef_search : 100;  // ERROR12: Lowered from 200 for 2x faster queries
+            
 
             // Auto-tune HNSW parameters if requested (ERROR12 Priority 1)
             // Only run for HNSW mode (not force_exact_knn) and datasets >= 5000 points
+            
             if (autoHNSWParam && !force_exact_knn && n_obs >= 5000) {
+                
                 int tune_result = autoTuneHNSWParams(model, data, n_obs, n_dim, progress_callback);
+                
                 if (tune_result != PACMAP_SUCCESS) {
                     // Tuning failed, but continue with defaults
                     if (progress_callback) {
+                        
                         progress_callback("Warning", 0, 1, 0.0f, "HNSW auto-tuning failed, using defaults M=16, ef=150");
                     }
                 }
             }
 
+            
             if (progress_callback) {
+                
                 progress_callback("Initializing PACMAP", 1, 10, 10.0f, "Setting up model parameters");
+            } else {
+                
             }
 
             // Convert input data to vector format and store in model for KNN direct mode
             // Convert double input to float for internal storage (API boundary conversion)
+            
             std::vector<double> input_data(data, data + (static_cast<size_t>(n_obs) * static_cast<size_t>(n_dim)));
+            
             model->training_data = input_data; // Store training data for KNN direct mode persistence
+            
 
             // CRITICAL FIX v2.8.4: Match Python preprocessing exactly - min-max + mean centering
+            
             // Python reference (pacmap.py lines 371-375):
             //   xmin, xmax = (np.min(X), np.max(X))
             //   X -= xmin          # Min offset
@@ -344,8 +377,10 @@ namespace fit_utils {
             // This affected distance calculations and force dynamics, contributing to oval formation
 
             // Step 1: Find global min and max values across entire dataset - double precision
+            
             double xmin = std::numeric_limits<double>::max();
             double xmax = std::numeric_limits<double>::lowest();
+            
             for (int i = 0; i < n_obs; i++) {
                 for (int j = 0; j < n_dim; j++) {
                     size_t idx = static_cast<size_t>(i) * static_cast<size_t>(n_dim) + static_cast<size_t>(j);
@@ -353,8 +388,10 @@ namespace fit_utils {
                     xmax = std::max(xmax, input_data[idx]);
                 }
             }
+            
 
             // Step 2: Apply min-max scaling to [0,1] range - double precision
+            
             std::vector<double> normalized_data = input_data;
             for (int i = 0; i < n_obs; i++) {
                 for (int j = 0; j < n_dim; j++) {
@@ -362,8 +399,10 @@ namespace fit_utils {
                     normalized_data[idx] = (input_data[idx] - xmin) / xmax;  // Scale to [0,1]
                 }
             }
+            
 
             // Step 3: Calculate column-wise means AFTER scaling (matching Python exactly) - double precision
+            
             model->feature_means.resize(n_dim, 0.0);
             model->feature_stds.resize(n_dim, 1.0);  // Keep for compatibility but not used in new normalization
 
@@ -375,14 +414,17 @@ namespace fit_utils {
                 }
                 model->feature_means[j] = sum / static_cast<double>(n_obs);
             }
+            
 
             // Step 4: Apply mean centering AFTER min-max scaling (matching Python exactly) - double precision
+            
             for (int i = 0; i < n_obs; i++) {
                 for (int j = 0; j < n_dim; j++) {
                     size_t idx = static_cast<size_t>(i) * static_cast<size_t>(n_dim) + static_cast<size_t>(j);
                     normalized_data[idx] -= model->feature_means[j];  // Mean centering
                 }
             }
+            
 
             // Store preprocessing parameters for transform consistency - double precision
             model->xmin = xmin;
@@ -394,11 +436,17 @@ namespace fit_utils {
             }
 
             // PACMAP Step 1: Triplet Sampling
+            
             if (progress_callback) {
+                
                 progress_callback("Triplet Sampling", 3, 10, 30.0f, "Sampling neighbor, mid-near, and far triplets");
+            } else {
+                
             }
 
+            
             sample_triplets(model, normalized_data.data(), progress_callback);
+            
 
             // ERROR12 Priority 12: Validate triplets before optimization
             if (model->triplets.empty()) {

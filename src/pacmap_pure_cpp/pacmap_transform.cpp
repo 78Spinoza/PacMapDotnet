@@ -41,7 +41,7 @@ namespace transform_utils {
                 }
 
                 // Normalize point using SAME preprocessing as training (min-max + mean centering)
-                // ðŸ”§ CRITICAL FIX: Apply exact same min-max scaling + mean centering as fit process
+                // § CRITICAL FIX: Apply exact same min-max scaling + mean centering as fit process
                 // Python reference (pacmap.py lines 371-375):
                 //   X -= xmin          # Min offset
                 //   X /= xmax          # Scale to [0,1]

@@ -845,10 +845,10 @@ namespace persistence_utils {
 
         if (save_original_index) {
             try {
-                // ✅ Create persistent L2Space owned by the model (fixes AccessViolationException)
+                //  Create persistent L2Space owned by the model (fixes AccessViolationException)
                 model->original_space = std::make_unique<hnswlib::L2Space>(model->n_features);
 
-                // ✅ Construct the original space index with persistent metric space
+                //  Construct the original space index with persistent metric space
                 model->original_space_index = std::make_unique<hnswlib::HierarchicalNSW<float>>(
                     model->original_space.get(),
                     model->n_samples,
@@ -858,7 +858,7 @@ namespace persistence_utils {
                 );
                 model->original_space_index->setEf(model->hnsw_ef_search);
 
-                // ✅ Load the compressed index from file with persistent space
+                //  Load the compressed index from file with persistent space
                 hnsw_utils::load_hnsw_from_stream_compressed(
                     stream,
                     model->original_space_index.get(),
@@ -882,10 +882,10 @@ namespace persistence_utils {
 
         if (save_embedding_index) {
             try {
-                // ✅ OPTION A: Create persistent L2Space owned by the model (fixes AccessViolationException)
+                //  OPTION A: Create persistent L2Space owned by the model (fixes AccessViolationException)
                 model->embedding_space = std::make_unique<hnswlib::L2Space>(model->n_components);
 
-                // ✅ Construct the embedding index with persistent metric space
+                //  Construct the embedding index with persistent metric space
                 model->embedding_space_index = std::make_unique<hnswlib::HierarchicalNSW<float>>(
                     model->embedding_space.get(),
                     model->n_samples,
@@ -895,7 +895,7 @@ namespace persistence_utils {
 
                 model->embedding_space_index->setEf(model->hnsw_ef_search);
 
-                // ✅ Load the compressed index from file with persistent space
+                //  Load the compressed index from file with persistent space
                 hnsw_utils::load_hnsw_from_stream_compressed(
                     stream,
                     model->embedding_space_index.get(),

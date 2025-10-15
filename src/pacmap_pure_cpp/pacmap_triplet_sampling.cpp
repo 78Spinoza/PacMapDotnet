@@ -97,7 +97,7 @@ void sample_triplets(PacMapModel* model, double* data, pacmap_progress_callback_
 
     // [OK] v2.8.9 FIX: DISABLED shuffling to match Python sequential processing
     // PROBLEM: Shuffled order + OpenMP = mixed force application = fragmentation
-    // SOLUTION: Use Python's deterministic NEIGHBOR→MN→FURTHER sequential order
+    // SOLUTION: Use Python's deterministic NEIGHBORMNFURTHER sequential order
         // std::shuffle(model->triplets.begin(), model->triplets.end(), model->rng);  // DISABLED - v2.8.9
 
     // ERROR13 FIX: Add triplet deduplication and validation
@@ -106,14 +106,14 @@ void sample_triplets(PacMapModel* model, double* data, pacmap_progress_callback_
     filter_invalid_triplets(model->triplets, model->n_samples);
 
     // FIX v2.5.9: CRITICAL - Python reference does NOT deduplicate directional pairs!
-    // Python creates n_samples × n_neighbors directional neighbor triplets and uses ALL of them
+    // Python creates n_samples  n_neighbors directional neighbor triplets and uses ALL of them
     // Deduplicating (i,j) and (j,i) as the same pair was removing ~44K neighbor triplets
-    // This caused severe underrepresentation of local attractive forces → oval formation
+    // This caused severe underrepresentation of local attractive forces  oval formation
     //
     // DISABLE deduplication to match Python's behavior:
     
     // Keep this for reference - shows what deduplication was doing:
-    // deduplicate_triplets(model->triplets);  // ← COMMENTED OUT - was removing 44K neighbor triplets!
+    // deduplicate_triplets(model->triplets);  //  COMMENTED OUT - was removing 44K neighbor triplets!
 
     if (callback && before_filter != model->triplets.size()) {
         char msg[256];
@@ -173,7 +173,9 @@ void sample_triplets(PacMapModel* model, double* data, pacmap_progress_callback_
     model->far_triplets = static_cast<int>(fp_triplets.size());
 
         // Triplet sampling completed - detailed output disabled for clean interface
-    callback("Sampling Triplets", 100, 100, 100.0f, nullptr);
+    if (callback) {
+        callback("Sampling Triplets", 100, 100, 100.0f, nullptr);
+    }
 }
 
 void sample_neighbors_pair(PacMapModel* model, const std::vector<double>& normalized_data,
@@ -187,7 +189,7 @@ void sample_neighbors_pair(PacMapModel* model, const std::vector<double>& normal
                  "Using Python-matching scaled distance neighbor selection");
     }
 
-    // ✅ v2.8.11 CRITICAL FIX: PYTHON-MATCHING SCALED DISTANCE NEIGHBOR SELECTION
+    //  v2.8.11 CRITICAL FIX: PYTHON-MATCHING SCALED DISTANCE NEIGHBOR SELECTION
     // Python (pacmap.py lines 373-427): Fetches n_neighbors + 50 extra neighbors,
     // calculates sigma (local scale), scales distances by local density,
     // sorts by scaled distance, then picks top n_neighbors
@@ -271,7 +273,7 @@ void sample_neighbors_pair(PacMapModel* model, const std::vector<double>& normal
             knn_indices[i][j] = knn_temp[j].second;
         }
 
-        // ✅ STEP 3: Calculate sigma (local scale) - Python line 423
+        //  STEP 3: Calculate sigma (local scale) - Python line 423
         // Python: sig = np.maximum(np.mean(knn_distances[:, 3:6], axis=1), 1e-10)
         // Mean of distances to 4th, 5th, 6th nearest neighbors (indices 3, 4, 5)
         if (knn_distances[i].size() >= 6) {
@@ -303,12 +305,12 @@ void sample_neighbors_pair(PacMapModel* model, const std::vector<double>& normal
                  "Applying density-aware distance scaling");
     }
 
-    // ✅ STEP 4: Scale distances and sort by scaled distance
+    //  STEP 4: Scale distances and sort by scaled distance
     completed = 0;
     #pragma omp parallel for if(model->n_samples > 1000)
     for (int i = 0; i < model->n_samples; ++i) {
         // Scale distances by local density - Python lines 236-239 (now 142-151)
-        // scaled_dist[i, j] = d² / (sig[i] * sig[j])
+        // scaled_dist[i, j] = d / (sig[i] * sig[j])
         std::vector<std::pair<double, int>> scaled_dist_with_idx;
         scaled_dist_with_idx.reserve(knn_indices[i].size());
 
@@ -320,11 +322,11 @@ void sample_neighbors_pair(PacMapModel* model, const std::vector<double>& normal
             scaled_dist_with_idx.emplace_back(scaled_d, neighbor_idx);
         }
 
-        // ✅ STEP 5: Sort by scaled distance - Python line 124
+        //  STEP 5: Sort by scaled distance - Python line 124
         // Python: scaled_sort = np.argsort(scaled_dist[i])
         std::sort(scaled_dist_with_idx.begin(), scaled_dist_with_idx.end());
 
-        // ✅ STEP 6: Pick top n_neighbors from scaled & sorted list
+        //  STEP 6: Pick top n_neighbors from scaled & sorted list
         #pragma omp critical
         {
             for (int j = 0; j < model->n_neighbors && j < static_cast<int>(scaled_dist_with_idx.size()); ++j) {
@@ -358,14 +360,14 @@ void sample_MN_pair(PacMapModel* model, const std::vector<double>& normalized_da
                  "CRITICAL FIX v2.8.14: Python-exact fixed-size array algorithm");
     }
 
-    // 🚨 CRITICAL FIX v2.8.14: IMPLEMENT PYTHON'S EXACT ALGORITHM
+    // � CRITICAL FIX v2.8.14: IMPLEMENT PYTHON'S EXACT ALGORITHM
     // Python reference: sample_MN_pair in pacmap.py lines 146-168
     // Previous C++ implementation was COMPLETELY WRONG!
     
     // Calculate per-point target exactly like Python
     int n_MN_per_point = n_mn / model->n_samples;
 
-    // ✅ PYTHON EXACT: Pre-allocate fixed-size array like Python: np.empty((n * n_MN, 2), dtype=np.int32)
+    //  PYTHON EXACT: Pre-allocate fixed-size array like Python: np.empty((n * n_MN, 2), dtype=np.int32)
     mn_triplets.reserve(model->n_samples * n_MN_per_point);
 
     // Thread-safe RNG for deterministic behavior
@@ -374,21 +376,21 @@ void sample_MN_pair(PacMapModel* model, const std::vector<double>& normalized_da
 
     int report_interval = std::max(1, model->n_samples / 10);
 
-    // ✅ PYTHON EXACT: Sequential processing like numba.prange (but without OpenMP to match Python exactly)
+    //  PYTHON EXACT: Sequential processing like numba.prange (but without OpenMP to match Python exactly)
     for (int i = 0; i < model->n_samples; ++i) {
-        // ✅ PYTHON EXACT: For each j in range(n_MN) - fixed count per point
+        //  PYTHON EXACT: For each j in range(n_MN) - fixed count per point
         for (int j = 0; j < n_MN_per_point; ++j) {
-            // ✅ PYTHON EXACT: sample_FP implementation with iterative rejection
+            //  PYTHON EXACT: sample_FP implementation with iterative rejection
             std::vector<int> sampled;
 
             // Sample 6 candidates with Python's exact rejection logic
             while (sampled.size() < 6) {
                 int candidate = dist(rng);
 
-                // ✅ PYTHON EXACT: Self rejection
+                //  PYTHON EXACT: Self rejection
                 if (candidate == i) continue;
 
-                // ✅ PYTHON EXACT: Duplicate rejection within current batch
+                //  PYTHON EXACT: Duplicate rejection within current batch
                 bool duplicate = false;
                 for (int t = 0; t < static_cast<int>(sampled.size()); ++t) {
                     if (candidate == sampled[t]) {
@@ -398,7 +400,7 @@ void sample_MN_pair(PacMapModel* model, const std::vector<double>& normalized_da
                 }
                 if (duplicate) continue;
 
-                // ✅ PYTHON EXACT: Iterative rejection using PREVIOUS pairs in this iteration
+                //  PYTHON EXACT: Iterative rejection using PREVIOUS pairs in this iteration
                 // Python: reject_ind=pair_MN[i * n_MN:i * n_MN + j, 1]
                 bool reject = false;
                 for (int prev_j = 0; prev_j < j; ++prev_j) {
@@ -414,7 +416,7 @@ void sample_MN_pair(PacMapModel* model, const std::vector<double>& normalized_da
                 sampled.push_back(candidate);
             }
 
-            // ✅ PYTHON EXACT: Calculate distances to all 6 candidates
+            //  PYTHON EXACT: Calculate distances to all 6 candidates
             std::vector<std::pair<double, int>> candidate_distances;
             candidate_distances.reserve(6);
 
@@ -427,13 +429,13 @@ void sample_MN_pair(PacMapModel* model, const std::vector<double>& normalized_da
                 candidate_distances.emplace_back(distance, sampled[t]);
             }
 
-            // ✅ PYTHON EXACT: Find closest candidate and DISCARD it
+            //  PYTHON EXACT: Find closest candidate and DISCARD it
             std::sort(candidate_distances.begin(), candidate_distances.end());
 
-            // ✅ PYTHON EXACT: Pick 2nd closest from remaining candidates
+            //  PYTHON EXACT: Pick 2nd closest from remaining candidates
             int picked = candidate_distances[1].second;
 
-            // ✅ PYTHON EXACT: Add to results with NO deduplication
+            //  PYTHON EXACT: Add to results with NO deduplication
             mn_triplets.emplace_back(Triplet{i, picked, MID_NEAR});
         }
 
@@ -636,9 +638,9 @@ std::unique_ptr<hnswlib::HierarchicalNSW<float>> create_hnsw_index(
         // Parallel addition for large datasets - much faster on multi-core CPUs
         std::atomic<int> completed(0);
 
-#ifdef _OPENMP
-        #pragma omp parallel for schedule(dynamic, 100)
-#endif
+        #ifdef _OPENMP
+           #pragma omp parallel for schedule(dynamic, 100)
+        #endif
         for (int i = 0; i < n_samples; ++i) {
             index->addPoint(data_float.data() + i * n_features, i);
 
@@ -718,16 +720,16 @@ void print_sampling_statistics(const std::vector<Triplet>& triplets) {
     }
 }
 
-// 🔬 PHASE 3: ENHANCED TRIPLET QUALITY VALIDATION
+// � PHASE 3: ENHANCED TRIPLET QUALITY VALIDATION
 void validate_triplet_quality(const std::vector<Triplet>& triplets,
                             const std::vector<double>& embedding, int n_components,
                             pacmap_progress_callback_internal callback) {
     if (triplets.empty()) {
-        if (callback) callback("Triplet Validation", 0, 0, 0.0f, "⚠️ No triplets to validate");
+        if (callback) callback("Triplet Validation", 0, 0, 0.0f, " No triplets to validate");
         return;
     }
 
-    // 🔍 Validate triplet structure and quality metrics
+    // � Validate triplet structure and quality metrics
     std::unordered_map<TripletType, int> type_counts;
     std::unordered_set<int> unique_anchors, unique_neighbors;
     int self_pairs = 0, out_of_bounds = 0;
@@ -742,19 +744,19 @@ void validate_triplet_quality(const std::vector<Triplet>& triplets,
         if (t.anchor < 0 || t.neighbor < 0) out_of_bounds++;
     }
 
-    // 📊 Coverage analysis
+    // � Coverage analysis
     float anchor_coverage = (float)unique_anchors.size() / embedding.size() * 100.0f / n_components;
     float neighbor_coverage = (float)unique_neighbors.size() / embedding.size() * 100.0f / n_components;
 
     char validation_msg[1024];
     snprintf(validation_msg, sizeof(validation_msg),
-            "🔬 TRIPLET VALIDATION v2.8.10: Total=%zu | Types: N=%d, MN=%d, F=%d | Coverage: anchors=%.1f%%, neighbors=%.1f%% | Issues: self=%d, oob=%d",
+            "� TRIPLET VALIDATION v2.8.10: Total=%zu | Types: N=%d, MN=%d, F=%d | Coverage: anchors=%.1f%%, neighbors=%.1f%% | Issues: self=%d, oob=%d",
             triplets.size(), type_counts[NEIGHBOR], type_counts[MID_NEAR], type_counts[FURTHER],
             anchor_coverage, neighbor_coverage, self_pairs, out_of_bounds);
 
     if (callback) callback("Triplet Validation", 0, 0, 0.0f, validation_msg);
 
-    // ⚠️ Check for potential issues
+    //  Check for potential issues
     if (self_pairs > 0) {
         char warning_msg[512];
             }
@@ -769,7 +771,7 @@ void analyze_triplet_distance_distributions(const std::vector<Triplet>& triplets
                                           pacmap_progress_callback_internal callback) {
     if (triplets.empty()) return;
 
-    // 📊 Analyze distance distributions by triplet type
+    // � Analyze distance distributions by triplet type
     std::unordered_map<TripletType, std::vector<double>> distances_by_type;
 
     for (const auto& t : triplets) {
@@ -812,7 +814,7 @@ void analyze_triplet_distance_distributions(const std::vector<Triplet>& triplets
         char distance_msg[1024];
             }
 
-    // 🎯 Validate distance ordering: expect NEIGHBOR < MID_NEAR < FURTHER
+    // � Validate distance ordering: expect NEIGHBOR < MID_NEAR < FURTHER
     if (distances_by_type[NEIGHBOR].size() > 0 && distances_by_type[MID_NEAR].size() > 0 && distances_by_type[FURTHER].size() > 0) {
         double n_mean = std::accumulate(distances_by_type[NEIGHBOR].begin(), distances_by_type[NEIGHBOR].end(), 0.0) / distances_by_type[NEIGHBOR].size();
         double mn_mean = std::accumulate(distances_by_type[MID_NEAR].begin(), distances_by_type[MID_NEAR].end(), 0.0) / distances_by_type[MID_NEAR].size();
@@ -828,7 +830,7 @@ void check_triplet_coverage(const std::vector<Triplet>& triplets, int n_samples,
                           pacmap_progress_callback_internal callback) {
     if (triplets.empty()) return;
 
-    // 🎯 Analyze how well triplets cover the dataset
+    // � Analyze how well triplets cover the dataset
     std::vector<int> anchor_frequency(n_samples, 0);
     std::vector<int> neighbor_frequency(n_samples, 0);
     std::unordered_map<TripletType, std::unordered_set<int>> type_coverage;
@@ -885,7 +887,7 @@ void detect_triplet_anomalies(const std::vector<Triplet>& triplets,
                              pacmap_progress_callback_internal callback) {
     if (triplets.empty()) return;
 
-    // 🔍 Detect potential anomalies in triplet structure
+    // � Detect potential anomalies in triplet structure
     std::unordered_map<long long, int> pair_frequency;
     std::vector<int> point_triplet_count(embedding.size() / n_components, 0);
     int duplicate_pairs = 0, highly_connected_points = 0;

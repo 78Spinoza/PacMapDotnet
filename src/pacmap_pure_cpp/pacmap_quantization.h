@@ -9,7 +9,7 @@
 namespace pq_utils {
 
     // Calculate optimal number of PQ subspaces (pq_m) for given dimension
-    // Finds largest divisor of n_dim that creates subspaces with ≥ min_subspace_dim dimensions
+    // Finds largest divisor of n_dim that creates subspaces with  min_subspace_dim dimensions
     // Prioritizes common values (2, 4, 8, 16) for optimal performance
     int calculate_optimal_pq_m(int n_dim, int min_subspace_dim = 4);
 

@@ -44,6 +44,8 @@ add_library(pacmap SHARED
     pacmap_quantization.h
     pacmap_crc32.h
     pacmap_hnsw_utils.h
+    pacmap_simd_utils.h
+    pacmap_system_info.h
 
     # External dependencies
     hnswalg.h
@@ -85,23 +87,42 @@ else()
     )
 endif()
 
+# OpenMP Configuration - CRITICAL for parallel processing
+if(MSVC)
+    # Enable OpenMP for parallel processing on Windows
+    find_package(OpenMP REQUIRED)
+    if(OpenMP_CXX_FOUND)
+        message(STATUS "OpenMP found for MSVC: ${OpenMP_CXX_VERSION}")
+        target_compile_options(pacmap PRIVATE /openmp)
+        target_compile_definitions(pacmap PRIVATE _OPENMP=201511)  # Define OpenMP macro manually
+        target_link_libraries(pacmap OpenMP::OpenMP_CXX)
+    else()
+        message(FATAL_ERROR "OpenMP not found - required for performance")
+    endif()
+else()
+    # Enable OpenMP for parallel processing on GCC/Clang
+    find_package(OpenMP REQUIRED)
+    if(OpenMP_CXX_FOUND)
+        message(STATUS "OpenMP found for GCC/Clang: ${OpenMP_CXX_VERSION}")
+        target_compile_options(pacmap PRIVATE -fopenmp)
+        target_link_libraries(pacmap OpenMP::OpenMP_CXX)
+    else()
+        message(FATAL_ERROR "OpenMP not found - required for performance")
+    endif()
+endif()
+
 # Performance optimizations for Release builds
 if(CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
     if(MSVC)
         # MSVC optimizations
         target_compile_options(pacmap PRIVATE /O2 /Ob2 /DNDEBUG)
-        # Enable AVX2 for better performance on modern CPUs
-        target_compile_options(pacmap PRIVATE /arch:AVX2)
+        # Temporarily disable AVX2 to debug C++ test segfault
+        # target_compile_options(pacmap PRIVATE /arch:AVX2)
     else()
         # GCC/Clang optimizations
         target_compile_options(pacmap PRIVATE -O3 -DNDEBUG)
         # Enable native optimizations for better performance
         target_compile_options(pacmap PRIVATE -march=native)
-        # Enable OpenMP for parallel processing
-        find_package(OpenMP)
-        if(OpenMP_CXX_FOUND)
-            target_link_libraries(pacmap OpenMP::OpenMP_CXX)
-        endif()
     endif()
 endif()
 
@@ -143,6 +164,44 @@ if(WIN32)
     target_compile_definitions(test_basic_integration PRIVATE _CRT_SECURE_NO_WARNINGS)
 endif()
 set_target_properties(test_basic_integration PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+)
+
+# Minimal test to isolate segfault issue
+add_executable(test_minimal
+    test_minimal.cpp
+)
+target_link_libraries(test_minimal pacmap)
+if(WIN32)
+    target_compile_definitions(test_minimal PRIVATE _CRT_SECURE_NO_WARNINGS)
+endif()
+set_target_properties(test_minimal PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+)
+
+# OpenMP isolation test to debug segfault
+add_executable(test_openmp_isolation
+    test_openmp_isolation.cpp
+)
+if(WIN32)
+    target_compile_options(test_openmp_isolation PRIVATE /openmp)
+    target_compile_definitions(test_openmp_isolation PRIVATE _OPENMP=201511)
+else()
+    target_compile_options(test_openmp_isolation PRIVATE -fopenmp)
+endif()
+set_target_properties(test_openmp_isolation PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+)
+
+# Fit-only test to isolate segfault to fit function
+add_executable(test_fit_only
+    test_fit_only.cpp
+)
+target_link_libraries(test_fit_only pacmap)
+if(WIN32)
+    target_compile_definitions(test_fit_only PRIVATE _CRT_SECURE_NO_WARNINGS)
+endif()
+set_target_properties(test_fit_only PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
 )
 

@@ -2,12 +2,16 @@
 #include "pacmap_gradient.h"
 #include "pacmap_triplet_sampling.h"
 #include "pacmap_distance.h"
+#include "pacmap_simd_utils.h"
 #include <random>
 #include <iostream>
 #include <iomanip>
 #include <sstream>
 #include <cmath>
 #include <chrono>
+
+// ERROR14 Step 3: Eigen SIMD vectorization for Adam optimizer
+#include <Eigen/Dense>
 
 void optimize_embedding(PacMapModel* model, double* embedding_out, pacmap_progress_callback_internal callback) {
 
@@ -44,7 +48,7 @@ void optimize_embedding(PacMapModel* model, double* embedding_out, pacmap_progre
     model->adam_v.assign(embedding.size(), 0.0);
 
                 
-    callback("Starting Optimization", 0, 0, 0.0f, nullptr);
+    if (callback) callback("Starting Optimization", 0, 0, 0.0f, nullptr);
 
     auto loop_start = std::chrono::high_resolution_clock::now();
 
@@ -65,7 +69,7 @@ void optimize_embedding(PacMapModel* model, double* embedding_out, pacmap_progre
             char opt_msg[256];
             snprintf(opt_msg, sizeof(opt_msg), "OPTIMIZER: Using %s optimizer (learning_rate=%.6f)",
                     model->adam_beta1 > 0.0f ? "Adam" : "Simple SGD (Python reference)", model->learning_rate);
-            callback("Optimizer Setup", iter, total_iters, 0.0f, opt_msg);
+            if (callback) callback("Optimizer Setup", iter, total_iters, 0.0f, opt_msg);
         }
 
         if (model->adam_beta1 > 0.0f) {
@@ -74,62 +78,169 @@ void optimize_embedding(PacMapModel* model, double* embedding_out, pacmap_progre
                            std::sqrt(1.0 - std::pow(static_cast<double>(model->adam_beta2), iter + 1)) /
                            (1.0 - std::pow(static_cast<double>(model->adam_beta1), iter + 1));
 
-            // ERROR14 Step 1: Use schedule(static) for deterministic loop partitioning across runs
-            #pragma omp parallel for schedule(static)
-            for (int i = 0; i < static_cast<int>(embedding.size()); ++i) {
-                // ERROR13: NaN safety - skip non-finite gradients to prevent Adam state corruption
-                if (!std::isfinite(gradients[i])) {
-                    continue;
+            // ERROR14 Step 3: Check if SIMD is available via runtime detection
+            bool use_simd = pacmap_simd::should_use_simd() && model->n_components >= 4;
+
+            if (use_simd) {
+                // ERROR14 Step 3: SIMD-optimized Adam optimizer using Eigen
+                // Process samples in parallel, but vectorize within each sample's dimensions
+                #pragma omp parallel for schedule(static)
+                for (int sample = 0; sample < model->n_samples; ++sample) {
+                    size_t sample_offset = static_cast<size_t>(sample) * model->n_components;
+
+                    // Create Eigen maps for vectorized operations
+                    Eigen::Map<Eigen::VectorXd> emb_vec(embedding.data() + sample_offset, model->n_components);
+                    Eigen::Map<Eigen::VectorXd> grad_vec(gradients.data() + sample_offset, model->n_components);
+                    Eigen::Map<Eigen::VectorXd> m_vec(model->adam_m.data() + sample_offset, model->n_components);
+                    Eigen::Map<Eigen::VectorXd> v_vec(model->adam_v.data() + sample_offset, model->n_components);
+
+                    // ERROR14 Step 3: Vectorized Adam state updates
+                    // First check for NaN/Inf in gradients (deterministic order)
+                    bool has_finite_gradients = true;
+                    for (int d = 0; d < model->n_components; ++d) {
+                        if (!std::isfinite(grad_vec(d))) {
+                            has_finite_gradients = false;
+                            break;
+                        }
+                    }
+
+                    if (has_finite_gradients) {
+                        // Update biased first moment estimate (vectorized)
+                        m_vec = static_cast<double>(model->adam_beta1) * m_vec +
+                                (1.0 - static_cast<double>(model->adam_beta1)) * grad_vec;
+
+                        // Update biased second moment estimate (vectorized)
+                        v_vec = static_cast<double>(model->adam_beta2) * v_vec +
+                                (1.0 - static_cast<double>(model->adam_beta2)) * grad_vec.array().square().matrix();
+
+                        // Ensure adam_v stays non-negative (vectorized)
+                        v_vec = v_vec.cwiseMax(0.0);
+
+                        // Compute Adam update with bias correction (vectorized)
+                        Eigen::VectorXd adam_update_vec = adam_lr * m_vec.array() /
+                                                        (v_vec.array().sqrt() + static_cast<double>(model->adam_eps));
+
+                        // Check if Adam update is finite (deterministic order)
+                        bool has_finite_updates = true;
+                        for (int d = 0; d < model->n_components; ++d) {
+                            if (!std::isfinite(adam_update_vec(d))) {
+                                has_finite_updates = false;
+                                break;
+                            }
+                        }
+
+                        if (has_finite_updates) {
+                            // Update parameters (vectorized)
+                            emb_vec -= adam_update_vec;
+                        }
+
+                        // Final safety - reset non-finite embedding coordinates (deterministic)
+                        for (int d = 0; d < model->n_components; ++d) {
+                            if (!std::isfinite(emb_vec(d))) {
+                                emb_vec(d) = 0.01 * ((d % 2 == 0) ? 1.0 : -1.0);
+                            }
+                        }
+                    }
                 }
+            } else {
+                // Scalar fallback for non-AVX2 CPUs or small dimensions
+                // ERROR14 Step 1: Use schedule(static) for deterministic loop partitioning across runs
+                #pragma omp parallel for schedule(static)
+                for (int i = 0; i < static_cast<int>(embedding.size()); ++i) {
+                    // ERROR13: NaN safety - skip non-finite gradients to prevent Adam state corruption
+                    if (!std::isfinite(gradients[i])) {
+                        continue;
+                    }
 
-                // Update biased first moment estimate with RAW gradients (pure double precision)
-                model->adam_m[i] = static_cast<double>(model->adam_beta1) * model->adam_m[i] +
-                                        (1.0 - static_cast<double>(model->adam_beta1)) * gradients[i];
+                    // Update biased first moment estimate with RAW gradients (pure double precision)
+                    model->adam_m[i] = static_cast<double>(model->adam_beta1) * model->adam_m[i] +
+                                            (1.0 - static_cast<double>(model->adam_beta1)) * gradients[i];
 
-                // Update biased second moment estimate with RAW gradients (pure double precision)
-                model->adam_v[i] = static_cast<double>(model->adam_beta2) * model->adam_v[i] +
-                                        (1.0 - static_cast<double>(model->adam_beta2)) * gradients[i] * gradients[i];
+                    // Update biased second moment estimate with RAW gradients (pure double precision)
+                    model->adam_v[i] = static_cast<double>(model->adam_beta2) * model->adam_v[i] +
+                                            (1.0 - static_cast<double>(model->adam_beta2)) * gradients[i] * gradients[i];
 
-                // ERROR13: Ensure adam_v stays non-negative (numerical safety check)
-                if (model->adam_v[i] < 0.0) {
-                    model->adam_v[i] = 0.0;
-                }
+                    // ERROR13: Ensure adam_v stays non-negative (numerical safety check)
+                    if (model->adam_v[i] < 0.0) {
+                        model->adam_v[i] = 0.0;
+                    }
 
-                // Compute Adam update with bias correction (pure double precision)
-                double adam_update = adam_lr * model->adam_m[i] /
-                                    (std::sqrt(model->adam_v[i]) + static_cast<double>(model->adam_eps));
+                    // Compute Adam update with bias correction (pure double precision)
+                    double adam_update = adam_lr * model->adam_m[i] /
+                                        (std::sqrt(model->adam_v[i]) + static_cast<double>(model->adam_eps));
 
-                // ERROR13: Check if Adam update is finite before applying (prevents NaN spreading)
-                if (!std::isfinite(adam_update)) {
-                    continue;
-                }
+                    // ERROR13: Check if Adam update is finite before applying (prevents NaN spreading)
+                    if (!std::isfinite(adam_update)) {
+                        continue;
+                    }
 
-                // Update parameters (pure double precision)
-                embedding[i] -= adam_update;
+                    // Update parameters (pure double precision)
+                    embedding[i] -= adam_update;
 
-                // ERROR13: Final safety - reset embedding coordinate if it becomes non-finite
-                if (!std::isfinite(embedding[i])) {
-                    // Reset to small random value if it becomes non-finite
-                    embedding[i] = 0.01 * ((i % 2 == 0) ? 1.0 : -1.0);
+                    // ERROR13: Final safety - reset embedding coordinate if it becomes non-finite
+                    if (!std::isfinite(embedding[i])) {
+                        // Reset to small random value if it becomes non-finite
+                        embedding[i] = 0.01 * ((i % 2 == 0) ? 1.0 : -1.0);
+                    }
                 }
             }
         } else {
             // Simple SGD optimizer (exact Python reference match)
             // Python line 351-352: embedding -= learning_rate * gradients
-            // ERROR14 Step 1: Use schedule(static) for deterministic loop partitioning
-            #pragma omp parallel for schedule(static)
-            for (int i = 0; i < static_cast<int>(embedding.size()); ++i) {
-                // NaN safety check
-                if (!std::isfinite(gradients[i])) {
-                    continue;
+
+            // ERROR14 Step 3: Check if SIMD is available via runtime detection
+            bool use_simd = pacmap_simd::should_use_simd() && model->n_components >= 4;
+
+            if (use_simd) {
+                // ERROR14 Step 3: SIMD-optimized SGD optimizer using Eigen
+                // Process samples in parallel, but vectorize within each sample's dimensions
+                #pragma omp parallel for schedule(static)
+                for (int sample = 0; sample < model->n_samples; ++sample) {
+                    size_t sample_offset = static_cast<size_t>(sample) * model->n_components;
+
+                    // Create Eigen maps for vectorized operations
+                    Eigen::Map<Eigen::VectorXd> emb_vec(embedding.data() + sample_offset, model->n_components);
+                    Eigen::Map<Eigen::VectorXd> grad_vec(gradients.data() + sample_offset, model->n_components);
+
+                    // ERROR14 Step 3: Vectorized SGD update
+                    // First check for NaN/Inf in gradients (deterministic order)
+                    bool has_finite_gradients = true;
+                    for (int d = 0; d < model->n_components; ++d) {
+                        if (!std::isfinite(grad_vec(d))) {
+                            has_finite_gradients = false;
+                            break;
+                        }
+                    }
+
+                    if (has_finite_gradients) {
+                        // Simple SGD update exactly like Python: embedding -= learning_rate * gradients (vectorized)
+                        emb_vec -= static_cast<double>(model->learning_rate) * grad_vec;
+
+                        // Safety check for non-finite embedding values (deterministic)
+                        for (int d = 0; d < model->n_components; ++d) {
+                            if (!std::isfinite(emb_vec(d))) {
+                                emb_vec(d) = 0.01 * ((d % 2 == 0) ? 1.0 : -1.0);
+                            }
+                        }
+                    }
                 }
+            } else {
+                // Scalar fallback for non-AVX2 CPUs or small dimensions
+                // ERROR14 Step 1: Use schedule(static) for deterministic loop partitioning
+                #pragma omp parallel for schedule(static)
+                for (int i = 0; i < static_cast<int>(embedding.size()); ++i) {
+                    // NaN safety check
+                    if (!std::isfinite(gradients[i])) {
+                        continue;
+                    }
 
-                // Simple SGD update exactly like Python: embedding -= learning_rate * gradients
-                embedding[i] -= static_cast<double>(model->learning_rate) * gradients[i];
+                    // Simple SGD update exactly like Python: embedding -= learning_rate * gradients
+                    embedding[i] -= static_cast<double>(model->learning_rate) * gradients[i];
 
-                // Safety check for non-finite embedding values
-                if (!std::isfinite(embedding[i])) {
-                    embedding[i] = 0.01 * ((i % 2 == 0) ? 1.0 : -1.0);
+                    // Safety check for non-finite embedding values
+                    if (!std::isfinite(embedding[i])) {
+                        embedding[i] = 0.01 * ((i % 2 == 0) ? 1.0 : -1.0);
+                    }
                 }
             }
         }
@@ -145,7 +256,7 @@ void optimize_embedding(PacMapModel* model, double* embedding_out, pacmap_progre
 
             // Early termination check
             if (iter > 200 && should_terminate_early(loss_history)) {
-                callback("Early Termination - Converged", iter, total_iters,
+                if (callback) callback("Early Termination - Converged", iter, total_iters,
                         static_cast<float>(iter) / total_iters * 100.0f,
                         "Convergence detected");
                 break;
@@ -172,7 +283,7 @@ void optimize_embedding(PacMapModel* model, double* embedding_out, pacmap_progre
         embedding_out[i] = embedding[i];
     }
 
-    callback("Optimization Complete", total_iters, total_iters, 100.0f, nullptr);
+    if (callback) callback("Optimization Complete", total_iters, total_iters, 100.0f, nullptr);
 }
 
 void initialize_random_embedding_double(std::vector<double>& embedding, int n_samples, int n_components, std::mt19937& rng, float std_dev) {
@@ -258,7 +369,7 @@ void monitor_optimization_progress(int iter, int total_iters, float loss,
     std::string message = phase + " (Iter " + std::to_string(iter) + "/" + std::to_string(total_iters) +
                            ") - Loss: " + loss_stream.str();
 
-    callback(phase.c_str(), iter, total_iters, progress, message.c_str());
+    if (callback) callback(phase.c_str(), iter, total_iters, progress, message.c_str());
 }
 
 float compute_embedding_quality(const std::vector<float>& embedding, const std::vector<Triplet>& triplets,

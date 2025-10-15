@@ -94,7 +94,7 @@ struct PacMapModel {
     std::vector<double> feature_means;
     std::vector<double> feature_stds;
 
-    // 🔧 CRITICAL FIX v2.8.4: Min-max normalization parameters (matching Python) - double precision
+    // � CRITICAL FIX v2.8.4: Min-max normalization parameters (matching Python) - double precision
     double xmin = 0.0;  // Global minimum value for min-max scaling
     double xmax = 1.0;  // Global maximum value for min-max scaling
 
@@ -113,7 +113,7 @@ struct PacMapModel {
     std::unique_ptr<hnswlib::SpaceInterface<float>> original_space_factory;
     std::unique_ptr<hnswlib::SpaceInterface<float>> embedding_space_factory;
 
-    // ✅ Persistent metric spaces (fixes AccessViolationException from dangling pointers)
+    //  Persistent metric spaces (fixes AccessViolationException from dangling pointers)
     std::unique_ptr<hnswlib::L2Space> original_space;
     std::unique_ptr<hnswlib::L2Space> embedding_space;
 

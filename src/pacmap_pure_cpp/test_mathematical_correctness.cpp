@@ -124,7 +124,7 @@ bool test_mathematical_correctness() {
         std::cout << "FAILED: Clusters not well separated (separation = " << separation << ")" << std::endl;
         passed = false;
     } else {
-        std::cout << "✅ PASSED: Good cluster separation (" << separation << ")" << std::endl;
+        std::cout << " PASSED: Good cluster separation (" << separation << ")" << std::endl;
     }
 
     // Test 2: Within-cluster variance should be reasonable
@@ -132,7 +132,7 @@ bool test_mathematical_correctness() {
         std::cout << "FAILED: Within-cluster variance too high (" << avg_variance << ")" << std::endl;
         passed = false;
     } else {
-        std::cout << "✅ PASSED: Reasonable within-cluster variance (" << avg_variance << ")" << std::endl;
+        std::cout << " PASSED: Reasonable within-cluster variance (" << avg_variance << ")" << std::endl;
     }
 
     // Test 3: Embedding should not have NaN or Inf values
@@ -144,7 +144,7 @@ bool test_mathematical_correctness() {
         }
     }
     if (passed) {
-        std::cout << "✅ PASSED: No invalid values in embedding" << std::endl;
+        std::cout << " PASSED: No invalid values in embedding" << std::endl;
     }
 
     // Test 4: Reproducibility with same seed
@@ -172,7 +172,7 @@ bool test_mathematical_correctness() {
             std::cout << "FAILED: Results not reproducible (max diff = " << max_diff << ")" << std::endl;
             passed = false;
         } else {
-            std::cout << "✅ PASSED: Reproducible results with same seed" << std::endl;
+            std::cout << " PASSED: Reproducible results with same seed" << std::endl;
         }
     }
 
@@ -181,13 +181,13 @@ bool test_mathematical_correctness() {
 
     std::cout << "\n=== MATHEMATICAL CORRECTNESS SUMMARY ===" << std::endl;
     if (passed) {
-        std::cout << "🎉 ALL MATHEMATICAL CORRECTNESS TESTS PASSED!" << std::endl;
-        std::cout << "   - Cluster separation: ✅" << std::endl;
-        std::cout << "   - Variance control: ✅" << std::endl;
-        std::cout << "   - Numerical stability: ✅" << std::endl;
-        std::cout << "   - Reproducibility: ✅" << std::endl;
+        std::cout << "� ALL MATHEMATICAL CORRECTNESS TESTS PASSED!" << std::endl;
+        std::cout << "   - Cluster separation: " << std::endl;
+        std::cout << "   - Variance control: " << std::endl;
+        std::cout << "   - Numerical stability: " << std::endl;
+        std::cout << "   - Reproducibility: " << std::endl;
     } else {
-        std::cout << "❌ MATHEMATICAL CORRECTNESS TESTS FAILED!" << std::endl;
+        std::cout << " MATHEMATICAL CORRECTNESS TESTS FAILED!" << std::endl;
     }
 
     return passed;
@@ -199,10 +199,10 @@ int main() {
     bool success = test_mathematical_correctness();
 
     if (success) {
-        std::cout << "\n✅ ALL TESTS PASSED - PACMAP is mathematically correct!" << std::endl;
+        std::cout << "\n ALL TESTS PASSED - PACMAP is mathematically correct!" << std::endl;
         return 0;
     } else {
-        std::cout << "\n❌ TESTS FAILED - Mathematical issues detected!" << std::endl;
+        std::cout << "\n TESTS FAILED - Mathematical issues detected!" << std::endl;
         return 1;
     }
 }

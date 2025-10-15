@@ -202,15 +202,15 @@ cmake .. -DCMAKE_CXX_STANDARD=17 -DCMAKE_CXX_STANDARD_REQUIRED=ON
 ./hnsw_validation_test
 
 # Expected output:
-# ✅ TEST 1 PASSED: HNSW vs Exact Accuracy (MSE < 0.01)
-# ✅ TEST 2 PASSED: Multi-Metric Support
-# ✅ TEST 3 PASSED: Memory Usage and Persistence
-# 🎉 ALL TESTS PASSED! HNSW optimization ready for deployment.
+#  TEST 1 PASSED: HNSW vs Exact Accuracy (MSE < 0.01)
+#  TEST 2 PASSED: Multi-Metric Support
+#  TEST 3 PASSED: Memory Usage and Persistence
+# � ALL TESTS PASSED! HNSW optimization ready for deployment.
 ```
 
 #### Memory and Speed Validation
 The test suite automatically validates:
-- **Speedup**: ≥2x improvement for datasets >2000 samples
+- **Speedup**: 2x improvement for datasets >2000 samples
 - **Accuracy**: MSE between HNSW and exact <0.01
 - **Memory**: Proper index size and persistence
 

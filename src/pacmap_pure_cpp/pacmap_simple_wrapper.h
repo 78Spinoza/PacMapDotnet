@@ -1,4 +1,4 @@
-﻿#ifndef PACMAP_SIMPLE_WRAPPER_H
+#ifndef PACMAP_SIMPLE_WRAPPER_H
 #define PACMAP_SIMPLE_WRAPPER_H
 
 #include <cstdint>
@@ -46,11 +46,11 @@ extern "C" {
 
     // Outlier level enumeration for enhanced safety detection
     typedef enum {
-        PACMAP_OUTLIER_NORMAL = 0,      // Within normal range (≤ p95)
+        PACMAP_OUTLIER_NORMAL = 0,      // Within normal range ( p95)
         PACMAP_OUTLIER_UNUSUAL = 1,     // Unusual but acceptable (p95-p99)
-        PACMAP_OUTLIER_MILD = 2,        // Mild outlier (p99 to 2.5σ)
-        PACMAP_OUTLIER_EXTREME = 3,     // Extreme outlier (2.5σ to 4σ)
-        PACMAP_OUTLIER_NOMANSLAND = 4   // No man's land (> 4σ)
+        PACMAP_OUTLIER_MILD = 2,        // Mild outlier (p99 to 2.5)
+        PACMAP_OUTLIER_EXTREME = 3,     // Extreme outlier (2.5 to 4)
+        PACMAP_OUTLIER_NOMANSLAND = 4   // No man's land (> 4)
     } PacMapOutlierLevel;
 
     // Forward declaration
@@ -101,16 +101,19 @@ extern "C" {
         PacMapMetric metric,
         double* embedding,
         pacmap_progress_callback_v2 progress_callback,
-        int force_exact_knn = 0,
-        int M = -1,
-        int ef_construction = -1,
-        int ef_search = -1,
-        int use_quantization = 0,
-        int random_seed = -1,
-        int autoHNSWParam = 1,
-        float initialization_std_dev = 1e-4f);
+        int force_exact_knn,
+        int M,
+        int ef_construction,
+        int ef_search,
+        int use_quantization,
+        int random_seed,
+        int autoHNSWParam,
+        float initialization_std_dev);
 
   
+    // Test function to isolate segfault issue
+    PACMAP_API int pacmap_test_minimal_fit(PacMapModel* model);
+
     // Global callback management functions
     PACMAP_API void pacmap_set_global_callback(pacmap_progress_callback_v2 callback);
     PACMAP_API void pacmap_clear_global_callback();

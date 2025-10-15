@@ -10,7 +10,7 @@ typedef void (*pacmap_progress_callback_internal)(const char* phase, int current
 // ERROR13 FIX: Three-phase weight schedule using Python-matching progress
 extern std::tuple<float, float, float> get_weights(int current_iter, int total_iters);
 
-// ðŸ”¬ PHASE 4: Enhanced phase transition debugging with phase information
+// ¬ PHASE 4: Enhanced phase transition debugging with phase information
 extern std::tuple<float, float, float, std::string> get_weights_with_phase_info(int current_iter, int total_iters);
 
 // Double precision gradient computation for numerical stability (Python matching)

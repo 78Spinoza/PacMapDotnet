@@ -1,11 +1,15 @@
 #include "pacmap_gradient.h"
 #include "pacmap_distance.h"
 #include "pacmap_triplet_sampling.h"
+#include "pacmap_simd_utils.h"
 #include <cmath>
 #include <algorithm>
 #include <omp.h>
 #include <iostream>
 #include <chrono>
+
+// ERROR14 Step 3: Eigen SIMD vectorization for distance calculations
+#include <Eigen/Dense>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -17,11 +21,11 @@ std::tuple<float, float, float> get_weights(int current_iter, int total_iters) {
     // FIX13-v4: CRITICAL - Match Python weight schedule EXACTLY!
     // Python reference (pacmap.py lines 337-353) shows w_neighbors CHANGES across phases!
     //
-    // PREVIOUS BUG: C++ used constant w_n=1.0, but Python uses 2.0 → 3.0 → 1.0
+    // PREVIOUS BUG: C++ used constant w_n=1.0, but Python uses 2.0  3.0  1.0
     // This caused 2-3x weaker local structure in Phases 1-2, leading to oval formation
     //
     // Python weight schedule:
-    //   Phase 1: w_neighbors=2.0, w_MN=1000→3, w_FP=1.0
+    //   Phase 1: w_neighbors=2.0, w_MN=10003, w_FP=1.0
     //   Phase 2: w_neighbors=3.0, w_MN=3.0, w_FP=1.0
     //   Phase 3: w_neighbors=1.0, w_MN=0.0, w_FP=1.0
     float w_n, w_mn;
@@ -33,18 +37,18 @@ std::tuple<float, float, float> get_weights(int current_iter, int total_iters) {
         // Phase 1: Global structure (0-10%)
         float phase1_progress = progress / 0.1f;
         w_mn = 1000.0f * (1.0f - phase1_progress) + 3.0f * phase1_progress;
-        w_n = 2.0f;   // ← FIX: Python uses 2.0, NOT 1.0!
+        w_n = 2.0f;   //  FIX: Python uses 2.0, NOT 1.0!
     } else if (progress < 0.4f) {
         // Phase 2: Balance phase (10-40%)
         w_mn = 3.0f;
-        w_n = 3.0f;   // ← FIX: Python uses 3.0, NOT 1.0!
+        w_n = 3.0f;   //  FIX: Python uses 3.0, NOT 1.0!
     } else {
         // Phase 3: Local structure (40-100%)
         // FIX13: w_MN must be ZERO immediately in Phase 3 (not gradual decay)
         // Python reference (pacmap.py line 350): w_MN = 0.0 (instant zero)
-        // Previous bug: Used gradual decay w_mn = 3.0f * (1.0f - phase3_progress) → wrong force balance
-        w_mn = 0.0f;  // ← Match Python exactly!
-        w_n = 1.0f;   // ← Finally matches Python in Phase 3
+        // Previous bug: Used gradual decay w_mn = 3.0f * (1.0f - phase3_progress)  wrong force balance
+        w_mn = 0.0f;  //  Match Python exactly!
+        w_n = 1.0f;   //  Finally matches Python in Phase 3
     }
 
     return {w_n, w_mn, w_f};
@@ -124,208 +128,84 @@ void compute_gradients(const std::vector<double>& embedding, const std::vector<T
     // Batch size tuned for L2/L3 cache (10k triplets = ~240KB with doubles)
     const size_t batch_size = 10000;
 
-    // PHASE 2 FIX: CRITICAL - Match Python sequential processing order exactly!
-    // Python reference processes ALL triplets by type sequentially:
-    //   1. ALL NEIGHBOR triplets first
-    //   2. ALL MID_NEAR triplets second
-    //   3. ALL FURTHER triplets third
-    //
-    // PREVIOUS BUG: C++ processed in interleaved order due to shuffling
-    // This creates different floating-point rounding and optimization dynamics
-    //
-    // FIX: Process triplets by type sequentially like Python (pacmap.py lines 268-306)
+    // ERROR14 Step 3: Check if SIMD is available via runtime detection
+    bool use_simd = pacmap_simd::should_use_simd();
 
-    // Process all triplet types sequentially
-    int processed_neighbors = 0, processed_midnear = 0, processed_further = 0;
-    int skipped_nan = 0, skipped_zero_distance = 0, skipped_triplets = 0;
-    std::string current_phase_name;
-    int phase_transition_count = 0;
-
-    // PHASE 1: Process ALL NEIGHBOR triplets (matches Python lines 268-279)
-    // ERROR14 Step 2: Use static schedule for determinism and batch for cache locality
-    #pragma omp parallel for schedule(static) reduction(+:processed_neighbors,skipped_nan,skipped_zero_distance)
-    for (size_t batch_start = 0; batch_start < triplets.size(); batch_start += batch_size) {
-        size_t batch_end = std::min(batch_start + batch_size, triplets.size());
-        for (size_t idx = batch_start; idx < batch_end; ++idx) {
-            const auto& t = triplets[idx];
-            if (t.type != NEIGHBOR) continue;  // Skip non-neighbor triplets in this phase
+    // PROPER OPENMP FIX: Single parallel loop with atomic operations
+    // This avoids the complex thread-local storage that causes DLL unload issues
+    #pragma omp parallel for schedule(static)
+    for (int idx = 0; idx < static_cast<int>(triplets.size()); ++idx) {
+        const auto& t = triplets[idx];
 
         size_t idx_a = static_cast<size_t>(t.anchor) * n_components;
         size_t idx_n = static_cast<size_t>(t.neighbor) * n_components;
 
-        // FIX13: CRITICAL - Match Python distance calculation EXACTLY!
-        // Python (pacmap.py line 271-274): d_ij = 1.0, then d_ij += y_ij[d]**2
-        // Result: d_ij = 1.0 + sum(diff²)  ← NOT sqrt(sum(diff²))!
-        // This is the SQUARED distance plus 1.0, NOT Euclidean distance!
+        // ERROR14 Step 3: SIMD-optimized distance computation using Eigen
         double d_ij = 1.0;
-        for (int d = 0; d < n_components; ++d) {
-            double diff = embedding[idx_a + d] - embedding[idx_n + d];
-            d_ij += diff * diff;  // Add squared difference (NO sqrt!)
+        if (use_simd && n_components >= 4) {
+            // Vectorized path using Eigen (AVX2/AVX512)
+            Eigen::Map<const Eigen::VectorXd> vec_a(embedding.data() + idx_a, n_components);
+            Eigen::Map<const Eigen::VectorXd> vec_n(embedding.data() + idx_n, n_components);
+            Eigen::VectorXd diff = vec_a - vec_n;
+            d_ij += diff.squaredNorm();  // SIMD-accelerated squared norm
+        } else {
+            // Scalar fallback for non-AVX2 CPUs or small dimensions
+            for (int d = 0; d < n_components; ++d) {
+                double diff = embedding[idx_a + d] - embedding[idx_n + d];
+                d_ij += diff * diff;
+            }
         }
-        // Note: d_ij starts at 1.0, so it's always >= 1.0 (no need to check for zero)
 
-        // FIX v2.8.7: CRITICAL - Match Python gradient formula EXACTLY!
-        // Python (pacmap.py line 276): w1 = w_neighbors * (20. / (10. + d_ij) ** 2)
-        // Then (line 278): grad[i, d] += w1 * y_ij[d]  ← RAW difference, NOT normalized!
-        //
-        // PREVIOUS BUG: Used 10.0 instead of 20.0 (missing factor of 2)
-        //               AND divided by d_ij (incorrect normalization)
-        // RESULT: 2× weaker forces + distance-independent magnitudes → oval formation
-        double grad_magnitude = static_cast<double>(w_n) * 20.0 / std::pow(10.0 + d_ij, 2.0);  // ✅ Factor of 2!
+        // Calculate gradient magnitude based on triplet type
+        double grad_magnitude = 0.0;
+        switch (t.type) {
+            case NEIGHBOR:
+                grad_magnitude = static_cast<double>(w_n) * 20.0 / std::pow(10.0 + d_ij, 2.0);
+                break;
+            case MID_NEAR:
+                grad_magnitude = static_cast<double>(w_mn) * 20000.0 / std::pow(10000.0 + d_ij, 2.0);
+                break;
+            case FURTHER:
+                grad_magnitude = -static_cast<double>(w_f) * 2.0 / std::pow(1.0 + d_ij, 2.0);
+                break;
+        }
 
-        // Numerical safety: Skip if non-finite (prevents NaN propagation)
+        // Numerical safety: Skip if non-finite
         if (!std::isfinite(grad_magnitude)) {
-            skipped_nan++;
             continue;
         }
 
-        // Apply gradient to raw difference vector (NO normalization by d_ij!)
-        for (int d = 0; d < n_components; ++d) {
-            double diff = embedding[idx_a + d] - embedding[idx_n + d];
-            double gradient_component = grad_magnitude * diff;  // ✅ Raw diff, matches Python!
+        // PROPER FIX: Use atomic operations for thread safety
+        if (use_simd && n_components >= 4) {
+            Eigen::Map<const Eigen::VectorXd> vec_a(embedding.data() + idx_a, n_components);
+            Eigen::Map<const Eigen::VectorXd> vec_n(embedding.data() + idx_n, n_components);
+            Eigen::VectorXd diff = vec_a - vec_n;
+            Eigen::VectorXd grad_vec = grad_magnitude * diff;
 
-            if (!std::isfinite(gradient_component)) continue;
+            for (int d = 0; d < n_components; ++d) {
+                double gradient_component = grad_vec(d);
+                if (!std::isfinite(gradient_component)) continue;
 
-            #pragma omp atomic
-            gradients[idx_a + d] += gradient_component;
-            #pragma omp atomic
-            gradients[idx_n + d] -= gradient_component;
+                #pragma omp atomic
+                gradients[idx_a + d] += gradient_component;
+                #pragma omp atomic
+                gradients[idx_n + d] -= gradient_component;
+            }
+        } else {
+            for (int d = 0; d < n_components; ++d) {
+                double diff = embedding[idx_a + d] - embedding[idx_n + d];
+                double gradient_component = grad_magnitude * diff;
+
+                if (!std::isfinite(gradient_component)) continue;
+
+                #pragma omp atomic
+                gradients[idx_a + d] += gradient_component;
+                #pragma omp atomic
+                gradients[idx_n + d] -= gradient_component;
+            }
         }
-
-        processed_neighbors++;
-        }  // End inner batch loop
-    }  // End outer parallel batch loop
-
-    // PHASE 2: Process ALL MID_NEAR triplets (matches Python lines 281-292)
-    // ERROR14 Step 2: Use static schedule for determinism and batch for cache locality
-    #pragma omp parallel for schedule(static) reduction(+:processed_midnear,skipped_nan,skipped_zero_distance,skipped_triplets)
-    for (size_t batch_start = 0; batch_start < triplets.size(); batch_start += batch_size) {
-        size_t batch_end = std::min(batch_start + batch_size, triplets.size());
-        for (size_t idx = batch_start; idx < batch_end; ++idx) {
-            const auto& t = triplets[idx];
-            if (t.type != MID_NEAR) continue;  // Skip non-mid-near triplets in this phase
-
-        size_t idx_a = static_cast<size_t>(t.anchor) * n_components;
-        size_t idx_n = static_cast<size_t>(t.neighbor) * n_components;
-
-        // FIX13: CRITICAL - Match Python distance calculation EXACTLY!
-        // Python (pacmap.py line 271-274): d_ij = 1.0, then d_ij += y_ij[d]**2
-        // Result: d_ij = 1.0 + sum(diff²)  ← NOT sqrt(sum(diff²))!
-        // This is the SQUARED distance plus 1.0, NOT Euclidean distance!
-        double d_ij = 1.0;
-        for (int d = 0; d < n_components; ++d) {
-            double diff = embedding[idx_a + d] - embedding[idx_n + d];
-            d_ij += diff * diff;  // Add squared difference (NO sqrt!)
-        }
-        // Note: d_ij starts at 1.0, so it's always >= 1.0 (no need to check for zero)
-
-        // FIX v2.8.7: CRITICAL - Match Python gradient formula EXACTLY!
-        // Python (pacmap.py line 289): w = w_MN * 20000. / (10000. + d_ij) ** 2
-        // Then (line 291): grad[i, d] += w * y_ij[d]  ← RAW difference, NOT normalized!
-        //
-        // PREVIOUS BUG: Used 10000.0 instead of 20000.0 (missing factor of 2)
-        //               AND divided by d_ij (incorrect normalization)
-        double grad_magnitude = static_cast<double>(w_mn) * 20000.0 / std::pow(10000.0 + d_ij, 2.0);  // ✅ Factor of 2!
-
-        // Numerical safety: Skip if non-finite (prevents NaN propagation)
-        if (!std::isfinite(grad_magnitude)) {
-            skipped_nan++;
-            continue;
-        }
-
-        // Apply gradient to raw difference vector (NO normalization by d_ij!)
-        for (int d = 0; d < n_components; ++d) {
-            double diff = embedding[idx_a + d] - embedding[idx_n + d];
-            double gradient_component = grad_magnitude * diff;  // ✅ Raw diff, matches Python!
-
-            if (!std::isfinite(gradient_component)) continue;
-
-            #pragma omp atomic
-            gradients[idx_a + d] += gradient_component;
-            #pragma omp atomic
-            gradients[idx_n + d] -= gradient_component;
-        }
-
-        processed_midnear++;
-        }  // End inner batch loop
-    }  // End outer parallel batch loop
-
-    // PHASE 3: Process ALL FURTHER triplets (matches Python lines 294-305)
-    // ERROR14 Step 2: Use static schedule for determinism and batch for cache locality
-    #pragma omp parallel for schedule(static) reduction(+:processed_further,skipped_nan,skipped_zero_distance,skipped_triplets)
-    for (size_t batch_start = 0; batch_start < triplets.size(); batch_start += batch_size) {
-        size_t batch_end = std::min(batch_start + batch_size, triplets.size());
-        for (size_t idx = batch_start; idx < batch_end; ++idx) {
-            const auto& t = triplets[idx];
-            if (t.type != FURTHER) continue;  // Skip non-further triplets in this phase
-
-        size_t idx_a = static_cast<size_t>(t.anchor) * n_components;
-        size_t idx_n = static_cast<size_t>(t.neighbor) * n_components;
-
-        // FIX13: CRITICAL - Match Python distance calculation EXACTLY!
-        // Python (pacmap.py line 271-274): d_ij = 1.0, then d_ij += y_ij[d]**2
-        // Result: d_ij = 1.0 + sum(diff²)  ← NOT sqrt(sum(diff²))!
-        // This is the SQUARED distance plus 1.0, NOT Euclidean distance!
-        double d_ij = 1.0;
-        for (int d = 0; d < n_components; ++d) {
-            double diff = embedding[idx_a + d] - embedding[idx_n + d];
-            d_ij += diff * diff;  // Add squared difference (NO sqrt!)
-        }
-        // Note: d_ij starts at 1.0, so it's always >= 1.0 (no need to check for zero)
-
-        // FURTHER triplets are repulsive to maintain separation
-        double grad_magnitude = -static_cast<double>(w_f) * 2.0 / std::pow(1.0 + d_ij, 2.0);
-
-        // Numerical safety: Skip if non-finite (prevents NaN propagation)
-        if (!std::isfinite(grad_magnitude)) {
-            skipped_nan++;
-            continue;
-        }
-
-        // Apply gradient to raw difference vector (NO normalization by d_ij!)
-        for (int d = 0; d < n_components; ++d) {
-            double diff = embedding[idx_a + d] - embedding[idx_n + d];
-            double gradient_component = grad_magnitude * diff;  // ✅ Raw diff, matches Python!
-
-            if (!std::isfinite(gradient_component)) continue;
-
-            #pragma omp atomic
-            gradients[idx_a + d] += gradient_component;
-            #pragma omp atomic
-            gradients[idx_n + d] -= gradient_component;
-        }
-
-        processed_further++;
-        }  // End inner batch loop
-    }  // End outer parallel batch loop
-
-
-    // ERROR13 FIX: COMMENTED OUT gradient clipping - may interfere with natural force balance
-    // Python reference doesn't use gradient clipping - lets gradients flow naturally
-    // The clipping was causing artificial constraints that prevent proper embedding formation
-    /*
-    // Gradient clipping for Adam stability with derivative formulas
-    // Gradient derivatives are smaller, so standard clipping is sufficient
-    for (float& g : gradients) {
-        g = std::max(-4.0f, std::min(4.0f, g));  // Clip to [-4, 4]
-    }
-    */
-
-    // FIX13-v3: CRITICAL - Python does NOT normalize by triplet count!
-    // Python reference (pacmap.py lines 339-341):
-    //   gradients[i] += gradient   # ← Direct accumulation, NO division!
-    //   gradients[j] -= gradient
-    //
-    // Previous fixes were WRONG:
-    //   v2.7.0: Divided by n_samples (10,000) → gradients 10,000x too small
-    //   v2.8.0: Divided by triplets.size() (325,611) → gradients 325,000x too small
-    //
-    // Result: Embedding stayed in tiny random noise circle, barely moved
-    // CORRECT FIX: NO NORMALIZATION - let gradients accumulate naturally like Python!
-    //
-    // (normalization code removed - Python doesn't normalize)
-
-    }
+    }  // End compute_gradients function
+}
 
 double compute_pacmap_loss(const std::vector<double>& embedding, const std::vector<Triplet>& triplets,
                          float w_n, float w_mn, float w_f, int n_components,
@@ -354,7 +234,7 @@ double compute_pacmap_loss(const std::vector<double>& embedding, const std::vect
             continue;
         }
 
-        // ✅ v2.8.10: CORRECTED loss formulas consistent with FIXED gradient implementation
+        //  v2.8.10: CORRECTED loss formulas consistent with FIXED gradient implementation
         // ALL THREE TRIPLET TYPES are now ATTRACTIVE, so loss should decrease with smaller distances
         double loss_term = 0.0;
         switch (triplet.type) {
@@ -371,7 +251,7 @@ double compute_pacmap_loss(const std::vector<double>& embedding, const std::vect
                 mn_count++;
                 break;
             case FURTHER:
-                // ✅ v2.8.10: CORRECTED - now attractive, loss decreases with smaller distances
+                //  v2.8.10: CORRECTED - now attractive, loss decreases with smaller distances
                 // Consistent with grad = w_f * 2.0 / (1.0 + d_ij)^2 (attractive)
                 loss_term = static_cast<double>(w_f) * 2.0 * d_ij / (1.0 + d_ij);
                 fp_loss += loss_term;

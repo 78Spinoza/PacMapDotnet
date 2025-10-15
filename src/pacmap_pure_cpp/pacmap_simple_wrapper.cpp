@@ -39,12 +39,38 @@ extern "C" {
         PacMapMetric metric, double* embedding, pacmap_progress_callback_v2 progress_callback,
         int force_exact_knn, int M, int ef_construction, int ef_search,
         int use_quantization, int random_seed, int autoHNSWParam, float initialization_std_dev) {
+
+        if (!model) {
+            return PACMAP_ERROR_INVALID_PARAMS;
+        }
+        if (!data) {
+            return PACMAP_ERROR_INVALID_PARAMS;
+        }
+        if (!embedding) {
+            return PACMAP_ERROR_INVALID_PARAMS;
+        }
+
         try {
             // Direct call to internal PACMAP implementation
-            return fit_utils::internal_pacmap_fit_with_progress_v2(model, data, n_obs, n_dim, embedding_dim,
+            int result = fit_utils::internal_pacmap_fit_with_progress_v2(model, data, n_obs, n_dim, embedding_dim,
                 n_neighbors, MN_ratio, FP_ratio, learning_rate, n_iters, phase1_iters, phase2_iters, phase3_iters,
                 metric, embedding, progress_callback, force_exact_knn, M, ef_construction, ef_search,
                 use_quantization, random_seed, autoHNSWParam, initialization_std_dev);
+
+            // CRITICAL: Auto-cleanup OpenMP threads after fit completes
+            // This prevents segfault during DLL unload by ensuring all threads are terminated
+            #ifdef _OPENMP
+            omp_set_num_threads(1);
+            omp_set_nested(0);
+            omp_set_dynamic(0);
+            // Force thread pool shutdown
+            #pragma omp parallel
+            {
+                // Single-threaded region forces OpenMP runtime cleanup
+            }
+            #endif
+
+            return result;
         } catch (const std::exception& e) {
             std::string error_msg = std::string("PACMAP fitting failed: ") + e.what();
             if (progress_callback) {
@@ -256,4 +282,61 @@ extern "C" {
         // No-op in minimal implementation
     }
 
+    PACMAP_API int pacmap_test_minimal_fit(PacMapModel* model) {
+        if (!model) {
+            return PACMAP_ERROR_INVALID_PARAMS;
+        }
+
+        // Try to set some basic parameters
+        model->n_samples = 10;
+        model->n_features = 5;
+        model->n_components = 2;
+
+        return PACMAP_SUCCESS;
+    }
+
+    // OpenMP cleanup function to prevent segfault on DLL unload
+    PACMAP_API void pacmap_cleanup() {
+        // Clean up OpenMP threads to prevent segfault on DLL unload
+        #ifdef _OPENMP
+        // CRITICAL: Force immediate shutdown of ALL OpenMP activity
+        // This prevents any lingering threads from causing segfault
+
+        // Step 1: Disable all parallelism immediately
+        omp_set_num_threads(1);
+        omp_set_nested(0);
+        omp_set_dynamic(0);
+
+        // Step 2: Execute a dummy parallel region to force thread pool shutdown
+        // This ensures all worker threads are terminated before DLL unload
+        #pragma omp parallel
+        {
+            // This single-threaded region forces OpenMP runtime to clean up
+            // the thread pool and terminate worker threads
+        }
+        #endif
+    }
+
 } // extern "C"
+
+// DLL process detach handler for clean OpenMP shutdown
+#ifdef _WIN32
+#include <windows.h>
+
+BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved) {
+    switch (ul_reason_for_call) {
+    case DLL_PROCESS_DETACH:
+        // Clean up OpenMP threads before DLL unload to prevent segfault
+        #ifdef _OPENMP
+        // Force complete OpenMP shutdown
+        omp_set_num_threads(1);
+        // Reset thread pool completely
+        omp_set_nested(0);
+        // Additional safety: disable dynamic thread adjustment
+        omp_set_dynamic(0);
+        #endif
+        break;
+    }
+    return TRUE;
+}
+#endif

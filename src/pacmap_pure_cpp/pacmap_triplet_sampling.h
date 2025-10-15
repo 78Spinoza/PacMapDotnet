@@ -50,7 +50,7 @@ extern float assess_triplet_quality(const std::vector<Triplet>& triplets,
                                    const std::vector<float>& data, int n_features);
 extern void print_sampling_statistics(const std::vector<Triplet>& triplets);
 
-// ðŸ”¬ PHASE 3: ENHANCED TRIPLET QUALITY VALIDATION
+// ¬ PHASE 3: ENHANCED TRIPLET QUALITY VALIDATION
 extern void validate_triplet_quality(const std::vector<Triplet>& triplets,
                                     const std::vector<double>& embedding, int n_components,
                                     pacmap_progress_callback_internal callback = nullptr);
