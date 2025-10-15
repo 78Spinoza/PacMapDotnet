@@ -170,6 +170,12 @@ The projection quality is extraordinary. Here's the enlarged view showing the pr
 ![Mammoth PaCMAP Enhanced](docs/Other/mamutPACManEnlarged.png)
 *Enlarged view revealing how PaCMAP maintains trunk curvature, leg positioning, and body proportions*
 
+
+![Mammoth PaCMAP Our lib](docs/Other/mammoth_pacmap_embedding.png)
+* Produced by our C# C++ library.*
+
+
+
 ## Alternative Visualizations
 
 Different initialization methods show the importance of parameter selection:
