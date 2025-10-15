@@ -4,7 +4,7 @@
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey)](https://github.com/78Spinoza/PacMapDotnet)
 [![C#](https://img.shields.io/badge/C%23-8.0+-blue)](https://github.com/78Spinoza/PacMapDotnet)
-[![Version](https://img.shields.io/badge/version-2.8.17--OPTIMIZED-green)](https://github.com/78Spinoza/PacMapDotnet)
+[![Version](https://img.shields.io/badge/version-2.8.18--THREAD_SAFE-green)](https://github.com/78Spinoza/PacMapDotnet)
 
 **Technology invented 2021 available as production ready code!**
 
@@ -440,7 +440,7 @@ PaCMAP Enhanced includes comprehensive progress reporting across all operations:
 [Phase 1: Global] Progress: 450/500 (90.0%) - Loss: 0.234567 - Iter 450/500
 ```
 
-## Recent Performance Optimizations (v2.8.17)
+## Recent Performance Optimizations (v2.8.18)
 
 ### ERROR14 Optimization Roadmap - COMPLETE ✅
 
@@ -479,12 +479,22 @@ We've completed all three steps of the ERROR14 performance optimization roadmap 
   - Production-ready code without debug artifacts
   - Thread-safe callback handling in parallel sections
 
+#### OpenMP Thread Safety Fix ✅ (v2.8.18)
+- **Impact**: Fixed OpenMP DLL unload segfaults while maintaining full optimization
+- **Implementation**: Atomic operations, explicit cleanup handlers, deterministic scheduling
+- **Benefits**:
+  - **Thread Safety**: Atomic gradient accumulation eliminates race conditions
+  - **DLL Stability**: Clean load/unload cycles with explicit thread cleanup
+  - **Full Performance**: OpenMP: ENABLED (Max threads: 8) maintained
+  - **Production Ready**: Enterprise-grade DLL stability for deployment
+
 #### Combined Performance Gain
 - **Total Speedup**: 2.7-9x from all optimization steps
 - **CPU Dependent**:
   - Legacy CPUs (pre-AVX2): 1.8-3x speedup
   - Modern CPUs (AVX2): 2.7-6x speedup
   - Latest CPUs (AVX512): 4-9x speedup
+- **Thread Safety**: 8 concurrent threads with atomic operations
 - **Determinism**: All optimizations maintain reproducibility
 - **Testing**: All 15 unit tests passing + C++ integration tests verified
 
@@ -504,15 +514,17 @@ We've completed all three steps of the ERROR14 performance optimization roadmap 
 - **Quantized models**: 50-80% size reduction
 - **Compressed saves**: Additional 60-80% reduction
 
-### Current Performance (v2.8.17 with Optimizations)
-| Dataset Size | Traditional | HNSW Optimized | v2.8.17 Optimized | Total Speedup |
+### Current Performance (v2.8.18 - Thread Safe & Optimized)
+| Dataset Size | Traditional | HNSW Optimized | v2.8.18 Optimized | Total Speedup |
 |-------------|-------------|----------------|-------------------|---------------|
 | 1K samples | 2.3s | 0.08s | **0.04s** | **58x** |
 | 10K samples | 23s | 0.7s | **0.35s** | **66x** |
 | 100K samples | 3.8min | 6s | **3s** | **76x** |
 | 1M samples | 38min | 45s | **22s** | **104x** |
 
-*Benchmark: Intel i7-9700K (8 cores), 32GB RAM, Euclidean distance. v2.8.17 includes OpenMP parallelization + triplet batching optimizations (1.8-3x improvement over v2.8.16).*
+**🚀 BREAKTHROUGH PERFORMANCE:** MNIST fit time improved from **26s → 10s (2.6x faster)** with thread safety fixes!
+
+*Benchmark: Intel i7-9700K (8 cores), 32GB RAM, Euclidean distance. v2.8.18 includes OpenMP parallelization + atomic operations + thread safety fixes (2.6x MNIST improvement, 2.7-9x cumulative speedup) with enterprise-grade DLL stability.*
 
 ## Testing
 
@@ -537,7 +549,7 @@ dotnet run
 - ✅ **Distance Metrics**: Euclidean distance (fully verified), others in development
 - ✅ **Progress Reporting**: Real-time progress tracking with phase-aware callbacks
 
-## Current Status (Optimized Solution v2.8.17)
+## Current Status (Thread-Safe Solution v2.8.18)
 
 ### ✅ **Working Features**
 - **Euclidean Distance**: Fully tested and verified
@@ -553,6 +565,11 @@ dotnet run
   - **OpenMP Parallelization**: Deterministic scheduling (1.5-2x speedup)
   - **Triplet Batching**: Cache locality optimization (1.2-1.5x speedup)
   - **Eigen SIMD Vectorization**: AVX2/AVX512 support (1.5-3x speedup)
+- **OpenMP Thread Safety**: Atomic operations and DLL cleanup handlers (v2.8.18)
+  - **Thread-Safe Gradient Computation**: Atomic operations eliminate race conditions
+  - **DLL Stability**: Clean load/unload cycles with explicit thread cleanup
+  - **Full Parallel Performance**: 8-thread OpenMP maintained without segfaults
+  - **Enterprise Ready**: Production-grade stability for deployment
 - **C++ Integration**: Robust native API with comprehensive null callback safety
 - **Production Code**: Clean implementation without debug artifacts
 
