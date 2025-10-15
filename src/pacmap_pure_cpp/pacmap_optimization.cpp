@@ -294,21 +294,7 @@ void optimize_embedding(PacMapModel* model, double* embedding_out, pacmap_progre
 
                 double axis_ratio = static_cast<double>(points_near_axes) / model->n_samples;
 
-                std::cout << "\n=== EMBEDDING SPREAD ANALYSIS (Iter " << iter << ") ===\n";
-                std::cout << "  Center: (" << center_x << ", " << center_y << ")\n";
-                std::cout << "  Spread: X=" << spread_x << ", Y=" << spread_y << "\n";
-                std::cout << "  Points near axes: " << axis_ratio * 100 << "%\n";
-
-                if (axis_ratio > 0.7) {
-                    std::cout << "  ⚠️  WARNING: High axis clustering detected! Cross pattern forming.\n";
-                } else if (axis_ratio > 0.5) {
-                    std::cout << "  ⚠️  CAUTION: Moderate axis clustering.\n";
-                } else {
-                    std::cout << "  ✅ Good 2D distribution detected.\n";
-                }
-
-                std::cout << "==========================================\n\n";
-            }
+              }
 
 
             monitor_optimization_progress(iter, total_iters, loss, get_current_phase(iter, model->phase1_iters, model->phase2_iters), callback);
