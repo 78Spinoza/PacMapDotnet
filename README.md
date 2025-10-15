@@ -41,7 +41,6 @@ Current PaCMAP implementations are mostly Python-based scientific tools lacking:
 - **Fast approximate fitting** (e.g., via HNSW) for large-scale production
 - **Cross-platform portability** to .NET and native C++
 - **Safety features** like outlier detection and progress reporting
-- **Support for arbitrary embedding dimensions** and multiple metrics
 - **Linux/Windows binaries for easy testing and cloud deployment**
 
 This C++/C# version bridges these gaps, making PaCMAP **production-ready** for AI pipelines. See also my previous [UMAP (invented 2018) implementation](https://github.com/78Spinoza/UMAP) that is the scientific predecessor of the improved PaCMAP.
@@ -200,7 +199,7 @@ Below are visualizations generated using this PaCMAP library implementation. As 
 **Key Achievement**: Unlike t-SNE, the cluster sizes here actually reflect the balanced nature of MNIST classes, and the spatial relationships between digits (e.g., 4 and 9 being close, 8 and 3, etc ) make intuitive sense.
 
 
-### MNIST Parameter Optimization GIFs
+### PACMAP Hyperpramater insensitivty on the 70k 28x28 MNIST dataset
 
 ![MNIST Ratio Animation](docs/Other/MNSTMnRatio.gif)
 *Parameter optimization animation showing the effect of varying MN_ratio from 0.4 to 1.3 while maintaining FP_ratio = 4 × MN_ratio relationship. This visualize how parameter changes affect the embedding structure.*
@@ -253,8 +252,6 @@ This production implementation includes advanced features not found in typical r
 - ✅ **Multi-level Outlier Detection**: Data quality and distribution shift monitoring
 - ✅ **Cross-Platform**: Seamless integration with **.NET** and **C++**
 - ✅ **Comprehensive Test Suite**: Validation ensuring production quality
-- ✅ **GIF Generation**: Animated parameter exploration for visual understanding
-
 
 
 *GIF animations referenced above were adapted from the excellent UMAP examples repository: https://github.com/MNoichl/UMAP-examples-mammoth-/tree/master*
@@ -442,7 +439,7 @@ PaCMAP Enhanced includes comprehensive progress reporting across all operations:
 
 ## Recent Performance Optimizations (v2.8.18)
 
-### ERROR14 Optimization Roadmap - COMPLETE ✅
+### Optimization Roadmap - COMPLETE ✅
 
 We've completed all three steps of the ERROR14 performance optimization roadmap with significant improvements:
 
@@ -575,8 +572,6 @@ dotnet run
 
 ### 🔄 **In Development**
 - **Additional Distance Metrics**: Cosine, Manhattan, Correlation, Hamming
-- **GPU Acceleration**: CUDA support for large datasets
-- **WebAssembly Support**: Browser-based embeddings
 - **Streaming Processing**: Large dataset handling
 
 ### ⚠️ **Known Limitations**
