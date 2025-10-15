@@ -102,7 +102,7 @@ namespace fit_utils {
             callback("HNSW Auto-Tuning", 0, 100, 0.0f, msg.c_str());
         }
 
-        // Sample random points
+        // Sample random points using std::mt19937
         std::vector<float> subsample(static_cast<size_t>(subsample_size) * static_cast<size_t>(n_dim));
         std::mt19937 rng(model->random_seed >= 0 ? model->random_seed : 42);
         std::uniform_int_distribution<int> dist(0, n_obs - 1);
@@ -449,7 +449,8 @@ namespace fit_utils {
             
 
             // ERROR12 Priority 12: Validate triplets before optimization
-            if (model->triplets.empty()) {
+            // MEMORY FIX: Check flat triplet storage instead of old vector
+            if (model->triplets_flat.empty()) {
                 if (progress_callback) {
                     progress_callback("Error", 0, 1, 0.0f, "No triplets generated for optimization - check your parameters");
                 }
@@ -466,7 +467,7 @@ namespace fit_utils {
                 progress_callback("Optimizer Setup", 4, 10, 40.0f, "Initializing Adam optimizer state");
             }
 
-            // CRITICAL FIX: Initialize embedding to match Rust implementation exactly
+            // CRITICAL FIX: Initialize embedding to match Rust implementation exactly using std::mt19937
             // Rust uses simple random normal initialization without post-scaling
             std::mt19937 generator(random_seed >= 0 ? random_seed : 42);
             std::normal_distribution<float> dist(0.0f, 1e-4f); // CRITICAL FIX: Match reference implementation exactly

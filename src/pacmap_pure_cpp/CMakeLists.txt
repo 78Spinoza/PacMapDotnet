@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.15)
-project(pacmap VERSION 2.8.17 LANGUAGES CXX)
+project(pacmap VERSION 2.8.23 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -202,6 +202,18 @@ if(WIN32)
     target_compile_definitions(test_fit_only PRIVATE _CRT_SECURE_NO_WARNINGS)
 endif()
 set_target_properties(test_fit_only PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+)
+
+# Gradient analysis test for cross pattern investigation
+add_executable(test_gradient_analysis
+    test_gradient_analysis.cpp
+)
+target_link_libraries(test_gradient_analysis pacmap)
+if(WIN32)
+    target_compile_definitions(test_gradient_analysis PRIVATE _CRT_SECURE_NO_WARNINGS)
+endif()
+set_target_properties(test_gradient_analysis PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
 )
 

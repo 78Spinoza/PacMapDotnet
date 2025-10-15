@@ -31,8 +31,7 @@ extern void monitor_optimization_progress(int iter, int total_iters, float loss,
                                          const std::string& phase, pacmap_progress_callback_v2 callback);
 
 // Convergence and quality metrics
-extern float compute_embedding_quality(const std::vector<float>& embedding, const std::vector<Triplet>& triplets,
-                                     int n_components);
+// REMOVED: Old compute_embedding_quality - replaced by flat storage version
 extern bool check_optimization_convergence(const std::vector<float>& loss_history, float tolerance = 1e-6);
 
 // Optimization strategies
@@ -72,8 +71,7 @@ extern float get_phase_weight(int iter, int total_iters, float start_weight, flo
 
 // Quality assessment
 extern void assess_embedding_quality(const std::vector<float>& embedding, const PacMapModel* model);
-extern float compute_trustworthiness(const std::vector<float>& embedding, const std::vector<Triplet>& triplets,
-                                     int n_samples, int n_components);
+// REMOVED: compute_trustworthiness - would need flat storage adaptation if needed
 
 // Performance optimization
 extern void optimize_for_dataset_size(PacMapModel* model, int n_samples);

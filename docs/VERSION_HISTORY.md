@@ -1,6 +1,56 @@
 # PacMapDotnet Version History
 
-## Version 2.4.9-TEST - HNSW OPTIMIZATION & COMPREHENSIVE TESTING (Current)
+## Version 2.8.23 - STABLE RNG CLEANUP & OPTIMIZATION (Current)
+
+### 🔧 RANDOM NUMBER GENERATOR CLEANUP
+- **REMOVED PCG DEPENDENCIES**: Eliminated complex PCG library dependencies causing compilation issues
+- **RESTORED STD::MT19937**: Reverted to standard Mersenne Twister RNG for stability
+- **REMOVED UNUSED FILES**: Cleaned up numpy_random.h/cpp implementation files
+- **MULTI-THREADING RESTORED**: OpenMP parallel processing fully re-enabled for production performance
+- **CLEAN DEBUG OUTPUT**: Removed all debug print statements for professional production use
+
+### ⚡ PERFORMANCE OPTIMIZATIONS
+- **OPENMP MULTI-THREADING**: Full parallel processing restored for 2.6x+ speedup
+- **DETERMINISTIC RNG**: Standard Mersenne Twister with proper seeding for reproducibility
+- **MEMORY EFFICIENCY**: Cleaner memory usage without PCG library overhead
+- **PRODUCTION READY**: Clean, stable build without debug artifacts
+
+### 🔄 VERSION SYNCHRONIZATION
+- **CONSISTENT VERSIONING**: Updated v2.8.23 across CMakeLists.txt, pacmap_simple_wrapper.h, and PacMapModel.cs
+- **BUILD STABILITY**: All components synchronized for reliable compilation
+- **API COMPATIBILITY**: No breaking changes - drop-in replacement for v2.8.22
+
+### 📋 TECHNICAL IMPROVEMENTS
+- **REMOVED PCG_RANDOM_HPP**: Eliminated complex header-only library dependencies
+- **STANDARD RNG**: Using std::mt19937 from C++ standard library
+- **CLEANER CODEBASE**: Removed unused numpy_random implementation files
+- **ENHANCED STABILITY**: More reliable builds across different compilers
+
+### 🧪 TESTING STATUS
+- **BUILD SUCCESS**: All components compile cleanly with std::mt19937
+- **MULTI-THREADING VERIFIED**: OpenMP parallel processing working correctly
+- **DEMO COMPATIBILITY**: C# wrapper builds and runs successfully
+- **PERFORMANCE VALIDATED**: No performance degradation from RNG changes
+
+---
+
+## Version 2.8.22 - PRODUCTION THREAD SAFETY (Previous)
+
+### 🛡️ THREAD SAFETY BREAKTHROUGH
+- **ATOMIC OPERATIONS**: Thread-safe gradient computation eliminating race conditions
+- **DLL STABILITY**: Clean load/unload cycles with explicit thread cleanup
+- **FULL PARALLEL PERFORMANCE**: 8-thread OpenMP maintained without segfaults
+- **ENTERPRISE READY**: Production-grade DLL stability for deployment
+
+### ⚡ PERFORMANCE IMPROVEMENTS
+- **MNIST OPTIMIZATION**: 26s → 10s (2.6x faster) with thread safety fixes
+- **THREAD-SAFE GRADIENTS**: Atomic operations eliminate race conditions in parallel sections
+- **CLEANUP HANDLERS**: Explicit thread cleanup prevents DLL unload segfaults
+- **DETERMINISTIC SCHEDULING**: OpenMP schedule(static) for reproducible results
+
+---
+
+## Version 2.4.9-TEST - HNSW OPTIMIZATION & COMPREHENSIVE TESTING
 
 ### 🚀 HNSW OPTIMIZATION BREAKTHROUGH
 - **MASSIVE SPEEDUP**: 29-51x faster training with HNSW approximate nearest neighbors

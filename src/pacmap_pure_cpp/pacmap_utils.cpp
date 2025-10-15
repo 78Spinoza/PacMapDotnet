@@ -204,40 +204,7 @@ bool check_for_nan_inf(const float* data, int size) {
     return false;
 }
 
-bool validate_triplet_distribution(const std::vector<Triplet>& triplets, int n_samples) {
-    if (triplets.empty()) {
-        std::cerr << "Error: No triplets available for optimization" << std::endl;
-        return false;
-    }
-
-    // Check for valid indices
-    for (const auto& triplet : triplets) {
-        if (triplet.anchor < 0 || triplet.anchor >= n_samples ||
-            triplet.neighbor < 0 || triplet.neighbor >= n_samples ||
-            triplet.anchor == triplet.neighbor) {
-            std::cerr << "Error: Invalid triplet with indices (" << triplet.anchor
-                      << ", " << triplet.neighbor << ")" << std::endl;
-            return false;
-        }
-    }
-
-    // Check triplet type distribution
-    int neighbor_count = 0, mn_count = 0, fp_count = 0;
-    for (const auto& triplet : triplets) {
-        switch (triplet.type) {
-            case NEIGHBOR: neighbor_count++; break;
-            case MID_NEAR: mn_count++; break;
-            case FURTHER: fp_count++; break;
-        }
-    }
-
-    if (neighbor_count == 0 || mn_count == 0 || fp_count == 0) {
-        std::cerr << "Warning: Missing triplet types - N:" << neighbor_count
-                  << " MN:" << mn_count << " F:" << fp_count << std::endl;
-    }
-
-    return true;
-}
+// REMOVED: validate_triplet_distribution function - would need flat storage adaptation if needed
 
 void start_performance_timer(PacMapModel* model) {
     model->performance_stats.start_time = std::chrono::high_resolution_clock::now();
@@ -336,13 +303,13 @@ void standardize_data(std::vector<float>& data, int n_samples, int n_features) {
     }
 }
 
-std::mt19937 get_seeded_rng(int seed) {
+std::mt19937 get_seeded_mt19937(int seed) {
     return seed >= 0 ? std::mt19937(seed) : std::mt19937(std::random_device{}());
 }
 
 void set_random_seed(PacMapModel* model, int seed) {
     model->random_seed = seed;
-    model->rng = get_seeded_rng(seed);
+    model->rng = get_seeded_mt19937(seed);
 }
 
 void* aligned_malloc(size_t size, size_t alignment) {
@@ -473,35 +440,11 @@ void print_model_info(const PacMapModel* model) {
               << model->phase2_iters << ", " << model->phase3_iters << ")" << std::endl;
     std::cout << "Random Seed: " << model->random_seed << std::endl;
     std::cout << "Metric: " << static_cast<int>(model->metric) << std::endl;
-    std::cout << "Triplets: " << model->triplets.size() << std::endl;
+    std::cout << "Triplets: " << model->get_triplet_count() << std::endl;
     std::cout << "===============================" << std::endl;
 }
 
-void print_triplet_stats(const std::vector<Triplet>& triplets) {
-    if (triplets.empty()) {
-        std::cout << "No triplets available" << std::endl;
-        return;
-    }
-
-    int neighbor_count = 0, mn_count = 0, fp_count = 0;
-    for (const auto& t : triplets) {
-        switch (t.type) {
-            case NEIGHBOR: neighbor_count++; break;
-            case MID_NEAR: mn_count++; break;
-            case FURTHER: fp_count++; break;
-        }
-    }
-
-    std::cout << "=== Triplet Statistics ===" << std::endl;
-    std::cout << "Total Triplets: " << triplets.size() << std::endl;
-    std::cout << "Neighbor Pairs: " << neighbor_count << " ("
-              << (100.0f * neighbor_count / triplets.size()) << "%)" << std::endl;
-    std::cout << "Mid-Near Pairs: " << mn_count << " ("
-              << (100.0f * mn_count / triplets.size()) << "%)" << std::endl;
-    std::cout << "Far Pairs: " << fp_count << " ("
-              << (100.0f * fp_count / triplets.size()) << "%)" << std::endl;
-    std::cout << "===========================" << std::endl;
-}
+// REMOVED: print_triplet_stats function - would need flat storage adaptation if needed
 
 void print_performance_stats(const PerformanceStats& stats) {
     std::cout << "=== Performance Statistics ===" << std::endl;

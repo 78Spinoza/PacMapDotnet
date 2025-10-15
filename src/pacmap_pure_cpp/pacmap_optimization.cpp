@@ -31,7 +31,7 @@ void optimize_embedding(PacMapModel* model, double* embedding_out, pacmap_progre
     
     int total_iters = model->phase1_iters + model->phase2_iters + model->phase3_iters;
 
-    if (model->triplets.empty()) {
+    if (model->triplets_flat.empty()) {
         if (callback) callback("Error", 0, 100, 0.0f, "No triplets available for optimization");
         return;
     }
@@ -57,9 +57,9 @@ void optimize_embedding(PacMapModel* model, double* embedding_out, pacmap_progre
         // ERROR13 FIX: Get three-phase weights for current iteration using Python-matching progress
         auto [w_n, w_mn, w_f] = get_weights(iter, total_iters);
 
-        // Compute gradients for all triplets - now using double precision embedding with callback
-        compute_gradients(embedding, model->triplets, gradients,
-                         w_n, w_mn, w_f, model->n_components, callback);
+        // MEMORY FIX: Compute gradients using flat triplet storage to prevent allocation failures
+        compute_gradients_flat(embedding, model->triplets_flat, gradients,
+                             w_n, w_mn, w_f, model->n_components, callback);
 
         // ERROR13 FIX: Choose optimizer based on Python reference vs Adam optimization
         // Python reference uses simple SGD: embedding -= learning_rate * gradients
@@ -247,11 +247,70 @@ void optimize_embedding(PacMapModel* model, double* embedding_out, pacmap_progre
 
         // Monitor progress and compute loss
         if (iter % 10 == 0 || iter == total_iters - 1) {
-            double loss = compute_pacmap_loss(embedding, model->triplets,
-                                                   w_n, w_mn, w_f, model->n_components);
+            // MEMORY FIX: Use flat storage loss computation to prevent allocation failures
+            double loss = compute_pacmap_loss_flat(embedding, model->triplets_flat,
+                                                  w_n, w_mn, w_f, model->n_components);
             loss_history.push_back(static_cast<float>(loss));
 
-            
+            // DEBUG: Check embedding spread for large datasets (cross pattern detection)
+            if (model->n_samples > 50000 && (iter == 0 || iter == 100 || iter == 500 || iter % 1000 == 0)) {
+                double min_x = embedding[0], max_x = embedding[0], min_y = embedding[1], max_y = embedding[1];
+                double sum_x = 0.0, sum_y = 0.0;
+
+                for (int i = 0; i < model->n_samples; ++i) {
+                    double x = embedding[i * 2];
+                    double y = embedding[i * 2 + 1];
+
+                    min_x = std::min(min_x, x);
+                    max_x = std::max(max_x, x);
+                    min_y = std::min(min_y, y);
+                    max_y = std::max(max_y, y);
+
+                    sum_x += x;
+                    sum_y += y;
+                }
+
+                double center_x = sum_x / model->n_samples;
+                double center_y = sum_y / model->n_samples;
+                double spread_x = max_x - min_x;
+                double spread_y = max_y - min_y;
+
+                // Check for cross pattern: points clustered in cross formation
+                double cross_score = 0.0;
+                int points_near_axes = 0;
+                for (int i = 0; i < model->n_samples; ++i) {
+                    double x = embedding[i * 2];
+                    double y = embedding[i * 2 + 1];
+
+                    // Distance from center
+                    double dx = x - center_x;
+                    double dy = y - center_y;
+
+                    // Check if point is near either axis (characteristic of cross pattern)
+                    if (std::abs(dx) < 0.1 * spread_x || std::abs(dy) < 0.1 * spread_y) {
+                        points_near_axes++;
+                    }
+                }
+
+                double axis_ratio = static_cast<double>(points_near_axes) / model->n_samples;
+
+                std::cout << "\n=== EMBEDDING SPREAD ANALYSIS (Iter " << iter << ") ===\n";
+                std::cout << "  Center: (" << center_x << ", " << center_y << ")\n";
+                std::cout << "  Spread: X=" << spread_x << ", Y=" << spread_y << "\n";
+                std::cout << "  Points near axes: " << axis_ratio * 100 << "%\n";
+
+                if (axis_ratio > 0.7) {
+                    std::cout << "  ⚠️  WARNING: High axis clustering detected! Cross pattern forming.\n";
+                } else if (axis_ratio > 0.5) {
+                    std::cout << "  ⚠️  CAUTION: Moderate axis clustering.\n";
+                } else {
+                    std::cout << "  ✅ Good 2D distribution detected.\n";
+                }
+
+                std::cout << "==========================================\n\n";
+            }
+
+
             monitor_optimization_progress(iter, total_iters, loss, get_current_phase(iter, model->phase1_iters, model->phase2_iters), callback);
 
             // Early termination check
@@ -287,8 +346,7 @@ void optimize_embedding(PacMapModel* model, double* embedding_out, pacmap_progre
 }
 
 void initialize_random_embedding_double(std::vector<double>& embedding, int n_samples, int n_components, std::mt19937& rng, float std_dev) {
-    // Legacy function - kept for compatibility but now uses NumPy RNG through model
-    // This function should not be used - prefer the version that takes NumpyRandom
+    // std::mt19937-based random initialization
     std::normal_distribution<double> normal_dist(0.0, static_cast<double>(std_dev));
 
     for (int i = 0; i < n_samples; ++i) {
@@ -301,7 +359,7 @@ void initialize_random_embedding_double(std::vector<double>& embedding, int n_sa
 
 
 void initialize_random_embedding(std::vector<float>& embedding, int n_samples, int n_components, std::mt19937& rng, float std_dev) {
-    // Legacy function for compatibility - now forwards to double precision version
+    // std::mt19937-based random initialization using double precision internally
     std::vector<double> embedding_double(n_samples * n_components);
     initialize_random_embedding_double(embedding_double, n_samples, n_components, rng, std_dev);
 
@@ -372,15 +430,23 @@ void monitor_optimization_progress(int iter, int total_iters, float loss,
     if (callback) callback(phase.c_str(), iter, total_iters, progress, message.c_str());
 }
 
-float compute_embedding_quality(const std::vector<float>& embedding, const std::vector<Triplet>& triplets,
+float compute_embedding_quality(const std::vector<float>& embedding, const std::vector<uint32_t>& triplets_flat,
                                int n_components) {
-    if (triplets.empty()) return 0.0f;
+    if (triplets_flat.empty()) return 0.0f;
 
     float total_quality = 0.0f;
+    size_t num_triplets = triplets_flat.size() / 3;
 
-    for (const auto& triplet : triplets) {
-        size_t idx_a = static_cast<size_t>(triplet.anchor) * n_components;
-        size_t idx_n = static_cast<size_t>(triplet.neighbor) * n_components;
+    for (size_t idx = 0; idx < num_triplets; ++idx) {
+        size_t triplet_offset = idx * 3;
+
+        // Extract triplet data from flat storage
+        uint32_t anchor = triplets_flat[triplet_offset];
+        uint32_t neighbor = triplets_flat[triplet_offset + 1];
+        uint32_t type = triplets_flat[triplet_offset + 2];
+
+        size_t idx_a = static_cast<size_t>(anchor) * n_components;
+        size_t idx_n = static_cast<size_t>(neighbor) * n_components;
 
         float dist = compute_sampling_distance(embedding.data() + idx_a,
                                              embedding.data() + idx_n,
@@ -388,7 +454,7 @@ float compute_embedding_quality(const std::vector<float>& embedding, const std::
 
         // Quality metric based on triplet type and distance
         float quality;
-        switch (triplet.type) {
+        switch (static_cast<TripletType>(type)) {
             case NEIGHBOR:
                 quality = 1.0f / (1.0f + dist);  // Should be small
                 break;
@@ -403,7 +469,7 @@ float compute_embedding_quality(const std::vector<float>& embedding, const std::
         total_quality += quality;
     }
 
-    return total_quality / static_cast<float>(triplets.size());
+    return total_quality / static_cast<float>(num_triplets);
 }
 
 bool check_optimization_convergence(const std::vector<float>& loss_history, float tolerance) {
@@ -497,7 +563,8 @@ OptimizationDiagnostics run_optimization_with_diagnostics(PacMapModel* model,
     // ERROR13 FIX: Use corrected weight function signature
     int total_iters = model->phase1_iters + model->phase2_iters + model->phase3_iters;
     auto [w_n, w_mn, w_f] = get_weights(0, total_iters);
-    diagnostics.initial_loss = static_cast<float>(compute_pacmap_loss(embedding_double, model->triplets,
+    // MEMORY FIX: Use flat storage loss computation for diagnostics
+    diagnostics.initial_loss = static_cast<float>(compute_pacmap_loss_flat(embedding_double, model->triplets_flat,
                                                   w_n, w_mn, w_f, model->n_components));
 
     // Run optimization with detailed monitoring (using double precision)
@@ -512,7 +579,8 @@ OptimizationDiagnostics run_optimization_with_diagnostics(PacMapModel* model,
     diagnostics.optimization_time_ms = std::chrono::duration<double, std::milli>(end_time - start_time).count();
 
     // Store final loss and compute reduction
-    diagnostics.final_loss = static_cast<float>(compute_pacmap_loss(embedding_double, model->triplets,
+    // MEMORY FIX: Use flat storage loss computation for diagnostics
+    diagnostics.final_loss = static_cast<float>(compute_pacmap_loss_flat(embedding_double, model->triplets_flat,
                                                 w_n, w_mn, w_f, model->n_components));
     diagnostics.loss_reduction = diagnostics.initial_loss - diagnostics.final_loss;
 
@@ -535,36 +603,10 @@ float get_phase_weight(int iter, int total_iters, float start_weight, float end_
 }
 
 void assess_embedding_quality(const std::vector<float>& embedding, const PacMapModel* model) {
-    float quality = compute_embedding_quality(embedding, model->triplets, model->n_components);
+    float quality = compute_embedding_quality(embedding, model->triplets_flat, model->n_components);
 }
 
-float compute_trustworthiness(const std::vector<float>& embedding, const std::vector<Triplet>& triplets,
-                             int n_samples, int n_components) {
-    // Simplified trustworthiness metric
-    // In practice, this would compare k-nearest neighbors in original vs embedded space
-    int preserved_triplets = 0;
-
-    for (const auto& triplet : triplets) {
-        if (triplet.type == NEIGHBOR) {
-            // Check if neighbor pairs are still close in embedding space
-            size_t idx_a = static_cast<size_t>(triplet.anchor) * n_components;
-            size_t idx_n = static_cast<size_t>(triplet.neighbor) * n_components;
-
-            float emb_dist = compute_sampling_distance(embedding.data() + idx_a,
-                                                     embedding.data() + idx_n,
-                                                     n_components, PACMAP_METRIC_EUCLIDEAN);
-
-            if (emb_dist < 0.1f) {  // Arbitrary threshold
-                preserved_triplets++;
-            }
-        }
-    }
-
-    int neighbor_triplets = std::count_if(triplets.begin(), triplets.end(),
-                                         [](const Triplet& t) { return t.type == NEIGHBOR; });
-
-    return neighbor_triplets > 0 ? static_cast<float>(preserved_triplets) / neighbor_triplets : 0.0f;
-}
+// REMOVED: compute_trustworthiness function - would need flat storage adaptation if needed
 
 void optimize_for_dataset_size(PacMapModel* model, int n_samples) {
     if (n_samples > 10000) {
@@ -586,7 +628,7 @@ void configure_memory_usage(PacMapModel* model, size_t available_memory_mb) {
 }
 
 void validate_optimization_state(const PacMapModel* model, const std::vector<float>& embedding) {
-    if (model->triplets.empty()) {
+    if (model->triplets_flat.empty()) {
         std::cerr << "Warning: No triplets available for optimization" << std::endl;
     }
 

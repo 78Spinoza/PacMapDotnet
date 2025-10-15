@@ -16,6 +16,7 @@
 
 void sample_triplets(PacMapModel* model, double* data, pacmap_progress_callback_internal callback) {
 
+    
     // CRITICAL DEBUG: Add more detailed triplet analysis
 
     // Validate parameters first
@@ -24,6 +25,7 @@ void sample_triplets(PacMapModel* model, double* data, pacmap_progress_callback_
         return;
     }
 
+    
     // Normalize/quantize data (reuse UMAP infrastructure) - NOW DOUBLE PRECISION
     std::vector<double> normalized_data;
     normalized_data.assign(data, data + model->n_samples * model->n_features);
@@ -58,8 +60,8 @@ void sample_triplets(PacMapModel* model, double* data, pacmap_progress_callback_
         }
     }
 
-    // Initialize RNG for deterministic behavior
-    model->rng = get_seeded_rng(model->random_seed);
+    // Initialize std::mt19937 RNG for deterministic behavior
+    model->rng = get_seeded_mt19937(model->random_seed);
 
     // Sample three types of triplets
     std::vector<Triplet> neighbor_triplets, mn_triplets, fp_triplets;
@@ -73,8 +75,11 @@ void sample_triplets(PacMapModel* model, double* data, pacmap_progress_callback_
     int n_mn_per_point = static_cast<int>(model->n_neighbors * model->mn_ratio);
     int n_mn = n_mn_per_point * model->n_samples;  // Total = per_point * n_samples
     // Cap to prevent infeasible targets (max possible pairs)
-    size_t max_possible_pairs = static_cast<size_t>(model->n_samples) * (model->n_samples - 1) / 2;
-    n_mn = std::min(n_mn, static_cast<int>(max_possible_pairs));
+    // Use int64_t to prevent overflow for large datasets
+    int64_t max_possible_pairs = static_cast<int64_t>(model->n_samples) * (model->n_samples - 1) / 2;
+    n_mn = std::min(n_mn, static_cast<int>(std::min(max_possible_pairs, static_cast<int64_t>(INT_MAX))));
+
+    
     sample_MN_pair(model, normalized_data, mn_triplets, n_mn, callback);
 
     // FIX13: CRITICAL FIX - Correct far pair count calculation to match Python reference exactly
@@ -82,28 +87,44 @@ void sample_triplets(PacMapModel* model, double* data, pacmap_progress_callback_
     int n_fp_per_point = static_cast<int>(model->n_neighbors * model->fp_ratio);
     int n_fp = n_fp_per_point * model->n_samples;  // Total = per_point * n_samples
     // Cap to prevent infeasible targets
-    n_fp = std::min(n_fp, static_cast<int>(max_possible_pairs));
-    sample_FP_pair(model, normalized_data, neighbor_triplets, fp_triplets, n_fp, callback);
+    n_fp = std::min(n_fp, static_cast<int>(std::min(max_possible_pairs, static_cast<int64_t>(INT_MAX))));
 
-    // Combine all triplets (review-optimized: single vector)
-    model->triplets.clear();
-    // ERROR12 Priority 5: Cap vector reserves to prevent OOM with high ratios
-    model->triplets.reserve(std::min(
-        neighbor_triplets.size() + mn_triplets.size() + fp_triplets.size(),
-        MAX_VECTOR_SIZE));
-    model->triplets.insert(model->triplets.end(), neighbor_triplets.begin(), neighbor_triplets.end());
-    model->triplets.insert(model->triplets.end(), mn_triplets.begin(), mn_triplets.end());
-    model->triplets.insert(model->triplets.end(), fp_triplets.begin(), fp_triplets.end());
+        sample_FP_pair(model, normalized_data, neighbor_triplets, fp_triplets, n_fp, callback);
+
+    // MEMORY FIX: Combine all triplets using flat storage to prevent allocation failures
+    model->clear_triplets();
+    // Remove aggressive reservation for large datasets to avoid contiguous allocation failures
+    size_t total_triplets = neighbor_triplets.size() + mn_triplets.size() + fp_triplets.size();
+    if (model->n_samples <= 20000) {
+        // Only reserve for smaller datasets where allocation won't fail
+        model->triplets_flat.reserve(std::min(total_triplets * 3, MAX_VECTOR_SIZE));
+    }
+    // Add triplets using flat storage
+    for (const auto& t : neighbor_triplets) {
+        model->add_triplet(static_cast<uint32_t>(t.anchor),
+                          static_cast<uint32_t>(t.neighbor),
+                          static_cast<uint32_t>(t.type));
+    }
+    for (const auto& t : mn_triplets) {
+        model->add_triplet(static_cast<uint32_t>(t.anchor),
+                          static_cast<uint32_t>(t.neighbor),
+                          static_cast<uint32_t>(t.type));
+    }
+    for (const auto& t : fp_triplets) {
+        model->add_triplet(static_cast<uint32_t>(t.anchor),
+                          static_cast<uint32_t>(t.neighbor),
+                          static_cast<uint32_t>(t.type));
+    }
 
     // [OK] v2.8.9 FIX: DISABLED shuffling to match Python sequential processing
     // PROBLEM: Shuffled order + OpenMP = mixed force application = fragmentation
     // SOLUTION: Use Python's deterministic NEIGHBORMNFURTHER sequential order
         // std::shuffle(model->triplets.begin(), model->triplets.end(), model->rng);  // DISABLED - v2.8.9
 
-    // ERROR13 FIX: Add triplet deduplication and validation
+    // ERROR13 FIX: Add triplet validation for flat storage
     // Remove invalid triplets (self-pairs, out-of-bounds indices)
-    size_t before_filter = model->triplets.size();
-    filter_invalid_triplets(model->triplets, model->n_samples);
+    size_t before_filter = model->get_triplet_count();
+    filter_invalid_triplets_flat(model->triplets_flat, model->n_samples);
 
     // FIX v2.5.9: CRITICAL - Python reference does NOT deduplicate directional pairs!
     // Python creates n_samples  n_neighbors directional neighbor triplets and uses ALL of them
@@ -115,24 +136,30 @@ void sample_triplets(PacMapModel* model, double* data, pacmap_progress_callback_
     // Keep this for reference - shows what deduplication was doing:
     // deduplicate_triplets(model->triplets);  //  COMMENTED OUT - was removing 44K neighbor triplets!
 
-    if (callback && before_filter != model->triplets.size()) {
+    size_t after_filter = model->get_triplet_count();
+    if (callback && before_filter != after_filter) {
         char msg[256];
         snprintf(msg, sizeof(msg), "Filtered %zu invalid triplets",
-                 before_filter - model->triplets.size());
+                 before_filter - after_filter);
         callback("Triplet Validation", 100, 100, 100.0f, msg);
     }
 
-              
+
     // CRITICAL DEBUG: Analyze triplet quality
-    if (model->triplets.size() > 0) {
+    if (model->get_triplet_count() > 0) {
         // Check if triplets have good diversity in indices
         std::unordered_set<int> unique_anchors, unique_neighbors;
         std::unordered_map<TripletType, int> type_counts;
 
-        for (const auto& triplet : model->triplets) {
-            unique_anchors.insert(triplet.anchor);
-            unique_neighbors.insert(triplet.neighbor);
-            type_counts[triplet.type]++;
+        // MEMORY FIX: Iterate through flat triplet storage
+        for (size_t i = 0; i < model->triplets_flat.size(); i += 3) {
+            uint32_t anchor = model->triplets_flat[i];
+            uint32_t neighbor = model->triplets_flat[i + 1];
+            uint32_t type = model->triplets_flat[i + 2];
+
+            unique_anchors.insert(static_cast<int>(anchor));
+            unique_neighbors.insert(static_cast<int>(neighbor));
+            type_counts[static_cast<TripletType>(type)]++;
         }
 
               // Triplet analysis completed - detailed output disabled for clean interface
@@ -147,12 +174,17 @@ void sample_triplets(PacMapModel* model, double* data, pacmap_progress_callback_
             float total_dist = 0.0f;
             int valid_samples = 0;
 
-            for (const auto& t : model->triplets) {
-                if (t.type != type) continue;
+            // MEMORY FIX: Iterate through flat triplet storage
+            for (size_t i = 0; i < model->triplets_flat.size(); i += 3) {
+                uint32_t triplet_type = model->triplets_flat[i + 2];
+                if (triplet_type != static_cast<uint32_t>(type)) continue;
+
+                uint32_t anchor = model->triplets_flat[i];
+                uint32_t neighbor = model->triplets_flat[i + 1];
 
                 double dist_double = distance_metrics::compute_distance(
-                    normalized_data.data() + t.anchor * model->n_features,
-                    normalized_data.data() + t.neighbor * model->n_features,
+                    normalized_data.data() + anchor * model->n_features,
+                    normalized_data.data() + neighbor * model->n_features,
                     model->n_features, model->metric);
                 float dist = static_cast<float>(dist_double);
 
@@ -167,7 +199,7 @@ void sample_triplets(PacMapModel* model, double* data, pacmap_progress_callback_
     }
 
     // Update triplet counts
-    model->total_triplets = static_cast<int>(model->triplets.size());
+    model->total_triplets = static_cast<int>(model->get_triplet_count());
     model->neighbor_triplets = static_cast<int>(neighbor_triplets.size());
     model->mid_near_triplets = static_cast<int>(mn_triplets.size());
     model->far_triplets = static_cast<int>(fp_triplets.size());
@@ -182,7 +214,11 @@ void sample_neighbors_pair(PacMapModel* model, const std::vector<double>& normal
                          std::vector<Triplet>& neighbor_triplets, pacmap_progress_callback_internal callback) {
 
     neighbor_triplets.clear();
-    neighbor_triplets.reserve(model->n_samples * model->n_neighbors);
+    // MEMORY FIX: Remove aggressive reservation for large datasets to prevent allocation failures
+    if (model->n_samples <= 20000) {
+        neighbor_triplets.reserve(model->n_samples * model->n_neighbors);
+    }
+    // For large datasets, let the vector grow naturally
 
     if (callback) {
         callback("Sampling Neighbor Pairs", 0, model->n_samples, 0.0f,
@@ -204,11 +240,27 @@ void sample_neighbors_pair(PacMapModel* model, const std::vector<double>& normal
 
     // STEP 2: Fetch extra neighbors and calculate sigma for all points
     // Store KNN indices and distances for later scaling
-    std::vector<std::vector<int>> knn_indices(model->n_samples);
-    std::vector<std::vector<double>> knn_distances(model->n_samples);
+    // MEMORY FIX: Use conservative allocation for large datasets to prevent STL vector allocation failure
+    std::vector<std::vector<int>> knn_indices;
+    std::vector<std::vector<double>> knn_distances;
     std::vector<double> sigma(model->n_samples);
 
-    int report_interval = std::max(1, model->n_samples / 10);
+    // For large datasets, build vectors incrementally to avoid massive allocation
+    if (model->n_samples > 20000) {
+        knn_indices.reserve(model->n_samples);
+        knn_distances.reserve(model->n_samples);
+        // Don't pre-reserve inner vectors - let them grow naturally
+        for (int i = 0; i < model->n_samples; ++i) {
+            knn_indices.emplace_back();
+            knn_distances.emplace_back();
+        }
+    } else {
+        // Use normal allocation for smaller datasets
+        knn_indices.resize(model->n_samples);
+        knn_distances.resize(model->n_samples);
+    }
+
+    int report_interval = std::max(50, model->n_samples / 100); // Report every 1% (min 50 samples for performance)
     std::atomic<int> completed(0);
 
     if (callback) {
@@ -266,11 +318,12 @@ void sample_neighbors_pair(PacMapModel* model, const std::vector<double>& normal
         }
 
         // Store indices and distances
-        knn_indices[i].resize(knn_temp.size());
-        knn_distances[i].resize(knn_temp.size());
+        // For both normal and incremental allocation, use the same approach
+        knn_indices[i].clear();
+        knn_distances[i].clear();
         for (size_t j = 0; j < knn_temp.size(); ++j) {
-            knn_distances[i][j] = knn_temp[j].first;
-            knn_indices[i][j] = knn_temp[j].second;
+            knn_distances[i].push_back(knn_temp[j].first);
+            knn_indices[i].push_back(knn_temp[j].second);
         }
 
         //  STEP 3: Calculate sigma (local scale) - Python line 423
@@ -307,6 +360,7 @@ void sample_neighbors_pair(PacMapModel* model, const std::vector<double>& normal
 
     //  STEP 4: Scale distances and sort by scaled distance
     completed = 0;
+    // TEMP FIX: Force single thread to test cross pattern issue
     #pragma omp parallel for if(model->n_samples > 1000)
     for (int i = 0; i < model->n_samples; ++i) {
         // Scale distances by local density - Python lines 236-239 (now 142-151)
@@ -367,14 +421,18 @@ void sample_MN_pair(PacMapModel* model, const std::vector<double>& normalized_da
     // Calculate per-point target exactly like Python
     int n_MN_per_point = n_mn / model->n_samples;
 
-    //  PYTHON EXACT: Pre-allocate fixed-size array like Python: np.empty((n * n_MN, 2), dtype=np.int32)
-    mn_triplets.reserve(model->n_samples * n_MN_per_point);
+    // MEMORY FIX: Remove aggressive reservations for large datasets
+    // Only reserve for smaller datasets where allocation won't fail
+    if (model->n_samples <= 20000) {
+        mn_triplets.reserve(model->n_samples * n_MN_per_point);
+    }
+    // For large datasets, let the vector grow naturally
 
-    // Thread-safe RNG for deterministic behavior
-    std::mt19937 rng = get_seeded_rng(model->random_seed + 2000);
+    // Thread-safe std::mt19937 RNG for deterministic behavior
+    std::mt19937 rng = get_seeded_mt19937(model->random_seed + 2000);
     std::uniform_int_distribution<int> dist(0, model->n_samples - 1);
 
-    int report_interval = std::max(1, model->n_samples / 10);
+    int report_interval = std::max(50, model->n_samples / 100); // Report every 1% (min 50 samples for performance)
 
     //  PYTHON EXACT: Sequential processing like numba.prange (but without OpenMP to match Python exactly)
     for (int i = 0; i < model->n_samples; ++i) {
@@ -405,7 +463,8 @@ void sample_MN_pair(PacMapModel* model, const std::vector<double>& normalized_da
                 bool reject = false;
                 for (int prev_j = 0; prev_j < j; ++prev_j) {
                     int prev_pair_idx = i * n_MN_per_point + prev_j;
-                    if (prev_pair_idx < static_cast<int>(mn_triplets.size()) &&
+                    // FIX: Check bounds correctly - we're building sequentially, so prev_pair_idx is always valid
+                    if (mn_triplets.size() > prev_pair_idx &&
                         mn_triplets[prev_pair_idx].neighbor == candidate) {
                         reject = true;
                         break;
@@ -442,7 +501,10 @@ void sample_MN_pair(PacMapModel* model, const std::vector<double>& normalized_da
         // Progress reporting
         if (callback && ((i + 1) % report_interval == 0 || (i + 1) == model->n_samples)) {
             float percent = (float)(i + 1) / model->n_samples * 100.0f;
-            callback("Sampling Mid-Near Pairs", i + 1, model->n_samples, percent, nullptr);
+            char progress_msg[128];
+            snprintf(progress_msg, sizeof(progress_msg), "Processed %d/%d samples, generated %zu triplets",
+                     i + 1, model->n_samples, mn_triplets.size());
+            callback("Sampling Mid-Near Pairs", i + 1, model->n_samples, percent, progress_msg);
         }
     }
 
@@ -473,24 +535,47 @@ void sample_FP_pair(PacMapModel* model, const std::vector<double>& normalized_da
     // Calculate per-point target exactly like Python
     int n_FP_per_point = n_fp / model->n_samples;
 
-    // PYTHON EXACT: Pre-allocate fixed-size array like Python: np.empty((n * n_FP, 2), dtype=np.int32)
-    fp_triplets.reserve(model->n_samples * n_FP_per_point);
+    // MEMORY FIX: Remove aggressive reservations for large datasets
+    // Only reserve for smaller datasets where allocation won't fail
+    if (model->n_samples <= 20000) {
+        fp_triplets.reserve(model->n_samples * n_FP_per_point);
+    }
+    // For large datasets, let the vector grow naturally
 
     // FIX 1: Build UNIDIRECTIONAL neighbor exclusion sets (Python: only i->j, not j->i)
     // Python reference: reject_ind=pair_neighbors[i * n_neighbors:(i + 1) * n_neighbors, 1]
-    std::vector<std::unordered_set<int>> neighbor_sets(model->n_samples);
-    for (const auto& t : neighbor_triplets) {
-        neighbor_sets[t.anchor].insert(t.neighbor);
-        // REMOVED: neighbor_sets[t.neighbor].insert(t.anchor);  // This makes it bidirectional (WRONG!)
+    // MEMORY FIX: For large datasets, use hash-based lookup instead of storing all sets
+    std::vector<std::vector<int>> neighbor_lists;
+    if (model->n_samples > 20000) {
+        // For large datasets, use vector of vectors (more memory efficient than unordered_set)
+        neighbor_lists.resize(model->n_samples);
+        for (const auto& t : neighbor_triplets) {
+            if (t.anchor < neighbor_lists.size()) {
+                neighbor_lists[t.anchor].push_back(t.neighbor);
+            }
+        }
+    } else {
+        // For smaller datasets, use unordered_set for faster lookup
+        std::vector<std::unordered_set<int>> neighbor_sets;
+        neighbor_sets.resize(model->n_samples);
+        for (const auto& t : neighbor_triplets) {
+            neighbor_sets[t.anchor].insert(t.neighbor);
+        }
+
+        // Convert to vector format for uniform processing
+        neighbor_lists.resize(model->n_samples);
+        for (int i = 0; i < model->n_samples; ++i) {
+            neighbor_lists[i].assign(neighbor_sets[i].begin(), neighbor_sets[i].end());
+        }
     }
 
-    int report_interval = std::max(1, model->n_samples / 10);
+    int report_interval = std::max(50, model->n_samples / 100); // Report every 1% (min 50 samples for performance)
 
     // PYTHON EXACT: Sequential processing like Python numba.prange
     for (int i = 0; i < model->n_samples; ++i) {
         // FIX 1: PER-POINT deterministic seeding (Python: per-point RNG seeding)
         // Python uses deterministic per-point seeding, not thread-local seeding
-        std::mt19937 rng = get_seeded_rng(model->random_seed + 3000 + i);
+        std::mt19937 rng = get_seeded_mt19937(model->random_seed + 3000 + i);
         std::uniform_int_distribution<int> dist(0, model->n_samples - 1);
 
         std::unordered_set<int> sampled_indices;
@@ -504,9 +589,17 @@ void sample_FP_pair(PacMapModel* model, const std::vector<double>& normalized_da
             attempts++;
 
             // PYTHON EXACT: Rejection logic matches Python exactly
+            bool is_neighbor = false;
+            for (int neighbor : neighbor_lists[i]) {
+                if (neighbor == j) {
+                    is_neighbor = true;
+                    break;
+                }
+            }
+
             if (j != i &&
                 sampled_indices.find(j) == sampled_indices.end() &&
-                neighbor_sets[i].find(j) == neighbor_sets[i].end()) {
+                !is_neighbor) {
 
                 // FIX 2: REMOVED global deduplication (Python allows duplicate pairs)
                 // Python does NOT deduplicate far pairs - it allows the same pair to appear multiple times
@@ -523,7 +616,10 @@ void sample_FP_pair(PacMapModel* model, const std::vector<double>& normalized_da
         // Progress reporting
         if (callback && ((i + 1) % report_interval == 0 || (i + 1) == model->n_samples)) {
             float percent = (float)(i + 1) / model->n_samples * 100.0f;
-            callback("Sampling Far Pairs", i + 1, model->n_samples, percent, nullptr);
+            char progress_msg[128];
+            snprintf(progress_msg, sizeof(progress_msg), "Processed %d/%d samples, generated %zu triplets",
+                     i + 1, model->n_samples, fp_triplets.size());
+            callback("Sampling Far Pairs", i + 1, model->n_samples, percent, progress_msg);
         }
     }
 
@@ -632,12 +728,13 @@ std::unique_ptr<hnswlib::HierarchicalNSW<float>> create_hnsw_index(
 
     // Add data points to index with progress reporting
     // Use parallel insertion for large datasets (>5000 points) - HNSW is thread-safe
-    int report_interval = std::max(1, n_samples / 20); // Report every 5%
+    int report_interval = std::max(50, n_samples / 100); // Report every 1% (min 50 samples for performance)
 
     if (n_samples > 5000) {
         // Parallel addition for large datasets - much faster on multi-core CPUs
         std::atomic<int> completed(0);
 
+        // TEMP FIX: Force single thread to test cross pattern issue
         #ifdef _OPENMP
            #pragma omp parallel for schedule(dynamic, 100)
         #endif
@@ -684,6 +781,39 @@ void filter_invalid_triplets(std::vector<Triplet>& triplets, int n_samples) {
                       }),
         triplets.end()
     );
+}
+
+void filter_invalid_triplets_flat(std::vector<uint32_t>& triplets, int n_samples) {
+    // MEMORY FIX: Filter invalid triplelets in flat storage format
+    // Format: [anchor1, neighbor1, type1, anchor2, neighbor2, type2, ...]
+
+    size_t write_pos = 0;
+    for (size_t read_pos = 0; read_pos < triplets.size(); read_pos += 3) {
+        if (read_pos + 2 >= triplets.size()) break; // Ensure we have complete triplet
+
+        uint32_t anchor = triplets[read_pos];
+        uint32_t neighbor = triplets[read_pos + 1];
+        uint32_t type = triplets[read_pos + 2];
+
+        // Validate triplet
+        bool is_valid = (anchor < static_cast<uint32_t>(n_samples) &&
+                        neighbor < static_cast<uint32_t>(n_samples) &&
+                        anchor != neighbor &&
+                        type <= 2); // Valid TripletType
+
+        if (is_valid) {
+            // Move valid triplet to write position
+            if (write_pos != read_pos) {
+                triplets[write_pos] = anchor;
+                triplets[write_pos + 1] = neighbor;
+                triplets[write_pos + 2] = type;
+            }
+            write_pos += 3;
+        }
+    }
+
+    // Resize to remove invalid triplets
+    triplets.resize(write_pos);
 }
 
 void deduplicate_triplets(std::vector<Triplet>& triplets) {

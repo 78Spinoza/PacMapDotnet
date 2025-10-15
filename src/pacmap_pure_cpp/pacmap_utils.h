@@ -17,7 +17,7 @@ extern void auto_tune_parameters(PacMapModel* model, int n_samples);
 // Edge case detection
 extern bool detect_degenerate_cases(int n_samples, int n_features);
 extern bool check_for_nan_inf(const float* data, int size);
-extern bool validate_triplet_distribution(const std::vector<Triplet>& triplets, int n_samples);
+// REMOVED: validate_triplet_distribution - would need flat storage adaptation if needed
 
 // Performance monitoring
 extern void start_performance_timer(PacMapModel* model);
@@ -32,7 +32,7 @@ extern void normalize_data(std::vector<float>& data, int n_samples, int n_featur
 extern void standardize_data(std::vector<float>& data, int n_samples, int n_features);
 
 // Random number generation utilities
-extern std::mt19937 get_seeded_rng(int seed);
+extern std::mt19937 get_seeded_mt19937(int seed);
 extern void set_random_seed(PacMapModel* model, int seed);
 
 // Memory management utilities
@@ -53,7 +53,7 @@ extern bool is_valid_embedding_dimension(int n_components);
 
 // Debug utilities
 extern void print_model_info(const PacMapModel* model);
-extern void print_triplet_stats(const std::vector<Triplet>& triplets);
+// REMOVED: print_triplet_stats - would need flat storage adaptation if needed
 extern void print_performance_stats(const PerformanceStats& stats);
 
 // Callback utilities

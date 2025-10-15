@@ -94,7 +94,7 @@ struct PacMapModel {
     std::vector<double> feature_means;
     std::vector<double> feature_stds;
 
-    // § CRITICAL FIX v2.8.4: Min-max normalization parameters (matching Python) - double precision
+    // ï¿½ CRITICAL FIX v2.8.4: Min-max normalization parameters (matching Python) - double precision
     double xmin = 0.0;  // Global minimum value for min-max scaling
     double xmax = 1.0;  // Global maximum value for min-max scaling
 
@@ -117,8 +117,9 @@ struct PacMapModel {
     std::unique_ptr<hnswlib::L2Space> original_space;
     std::unique_ptr<hnswlib::L2Space> embedding_space;
 
-    // Unified triplet storage (review optimization)
-    std::vector<Triplet> triplets;
+    // MEMORY FIX: Flat triplet storage using uint32_t to prevent allocation failures
+    // Format: [anchor1, neighbor1, type1, anchor2, neighbor2, type2, ...]
+    std::vector<uint32_t> triplets_flat;  // More memory efficient than nested vectors
 
     // Data storage - now double precision
     std::vector<double> training_data;
@@ -161,7 +162,7 @@ struct PacMapModel {
     std::vector<uint8_t> pq_codes;
     std::vector<float> pq_centroids;
 
-    // Standard RNG for random operations
+    // Standard Mersenne Twister RNG for random operations
     std::mt19937 rng;
 
     // Error handling (review addition)
@@ -178,10 +179,25 @@ struct PacMapModel {
 
     // Constructor
     PacMapModel() {
-        // Initialize standard RNG with seed if provided
+        // Initialize RNG with seed if provided
         if (random_seed >= 0) {
             rng.seed(random_seed);
         }
+    }
+
+    // MEMORY FIX: Helper functions for flat triplet storage
+    inline void add_triplet(uint32_t anchor, uint32_t neighbor, uint32_t type) {
+        triplets_flat.push_back(anchor);
+        triplets_flat.push_back(neighbor);
+        triplets_flat.push_back(type);
+    }
+
+    inline uint32_t get_triplet_count() const {
+        return static_cast<uint32_t>(triplets_flat.size() / 3);
+    }
+
+    inline void clear_triplets() {
+        triplets_flat.clear();
     }
 
     // Destructor
