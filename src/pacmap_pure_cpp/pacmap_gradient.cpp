@@ -117,30 +117,35 @@ bool validate_gradients(const std::vector<double>& gradients, const std::string&
 }
 
 
-void compute_gradients(const std::vector<double>& embedding, const std::vector<Triplet>& triplets,
-                       std::vector<double>& gradients, float w_n, float w_mn, float w_f, int n_components,
-                       pacmap_progress_callback_internal callback) {
+// REMOVED: Old compute_gradients function - replaced by compute_gradients_flat
 
-    // ERROR14 Step 2: Reserve memory to avoid reallocations
+void compute_gradients_flat(const std::vector<double>& embedding, const std::vector<uint32_t>& triplets_flat,
+                           std::vector<double>& gradients, float w_n, float w_mn, float w_f, int n_components,
+                           pacmap_progress_callback_internal callback) {
+
+    // MEMORY FIX: Reserve memory to avoid reallocations
     gradients.assign(embedding.size(), 0.0);
 
-    // ERROR14 Step 2: Triplet batching for better cache locality
-    // Batch size tuned for L2/L3 cache (10k triplets = ~240KB with doubles)
-    const size_t batch_size = 10000;
-
-    // ERROR14 Step 3: Check if SIMD is available via runtime detection
+    // MEMORY FIX: Check if SIMD is available via runtime detection
     bool use_simd = pacmap_simd::should_use_simd();
 
-    // PROPER OPENMP FIX: Single parallel loop with atomic operations
-    // This avoids the complex thread-local storage that causes DLL unload issues
+    size_t num_triplets = triplets_flat.size() / 3;
+
+  
+    // MEMORY FIX: Use OpenMP for parallel processing with flat storage
     #pragma omp parallel for schedule(static)
-    for (int idx = 0; idx < static_cast<int>(triplets.size()); ++idx) {
-        const auto& t = triplets[idx];
+    for (int idx = 0; idx < static_cast<int>(num_triplets); ++idx) {
+        size_t triplet_offset = idx * 3;
 
-        size_t idx_a = static_cast<size_t>(t.anchor) * n_components;
-        size_t idx_n = static_cast<size_t>(t.neighbor) * n_components;
+        // Extract triplet data from flat storage
+        uint32_t anchor = triplets_flat[triplet_offset];
+        uint32_t neighbor = triplets_flat[triplet_offset + 1];
+        uint32_t type = triplets_flat[triplet_offset + 2];
 
-        // ERROR14 Step 3: SIMD-optimized distance computation using Eigen
+        size_t idx_a = static_cast<size_t>(anchor) * n_components;
+        size_t idx_n = static_cast<size_t>(neighbor) * n_components;
+
+        // MEMORY FIX: SIMD-optimized distance computation using Eigen
         double d_ij = 1.0;
         if (use_simd && n_components >= 4) {
             // Vectorized path using Eigen (AVX2/AVX512)
@@ -158,7 +163,7 @@ void compute_gradients(const std::vector<double>& embedding, const std::vector<T
 
         // Calculate gradient magnitude based on triplet type
         double grad_magnitude = 0.0;
-        switch (t.type) {
+        switch (static_cast<TripletType>(type)) {
             case NEIGHBOR:
                 grad_magnitude = static_cast<double>(w_n) * 20.0 / std::pow(10.0 + d_ij, 2.0);
                 break;
@@ -170,12 +175,13 @@ void compute_gradients(const std::vector<double>& embedding, const std::vector<T
                 break;
         }
 
+  
         // Numerical safety: Skip if non-finite
         if (!std::isfinite(grad_magnitude)) {
             continue;
         }
 
-        // PROPER FIX: Use atomic operations for thread safety
+        // MEMORY FIX: Use atomic operations for thread safety with flat storage
         if (use_simd && n_components >= 4) {
             Eigen::Map<const Eigen::VectorXd> vec_a(embedding.data() + idx_a, n_components);
             Eigen::Map<const Eigen::VectorXd> vec_n(embedding.data() + idx_n, n_components);
@@ -204,21 +210,32 @@ void compute_gradients(const std::vector<double>& embedding, const std::vector<T
                 gradients[idx_n + d] -= gradient_component;
             }
         }
-    }  // End compute_gradients function
-}
+    }
+}  // End compute_gradients_flat function
 
-double compute_pacmap_loss(const std::vector<double>& embedding, const std::vector<Triplet>& triplets,
-                         float w_n, float w_mn, float w_f, int n_components,
-                         pacmap_progress_callback_internal callback) {
+// REMOVED: Old compute_pacmap_loss function - replaced by compute_pacmap_loss_flat
 
-        double total_loss = 0.0;
+double compute_pacmap_loss_flat(const std::vector<double>& embedding, const std::vector<uint32_t>& triplets_flat,
+                               float w_n, float w_mn, float w_f, int n_components,
+                               pacmap_progress_callback_internal callback) {
+
+    double total_loss = 0.0;
     double neighbor_loss = 0.0, mn_loss = 0.0, fp_loss = 0.0;
     int neighbor_count = 0, mn_count = 0, fp_count = 0;
     int skipped_zero = 0, skipped_nan = 0;
 
-    for (const auto& triplet : triplets) {
-        size_t idx_a = static_cast<size_t>(triplet.anchor) * n_components;
-        size_t idx_n = static_cast<size_t>(triplet.neighbor) * n_components;
+    size_t num_triplets = triplets_flat.size() / 3;
+
+    for (size_t idx = 0; idx < num_triplets; ++idx) {
+        size_t triplet_offset = idx * 3;
+
+        // Extract triplet data from flat storage
+        uint32_t anchor = triplets_flat[triplet_offset];
+        uint32_t neighbor = triplets_flat[triplet_offset + 1];
+        uint32_t type = triplets_flat[triplet_offset + 2];
+
+        size_t idx_a = static_cast<size_t>(anchor) * n_components;
+        size_t idx_n = static_cast<size_t>(neighbor) * n_components;
 
         // Use true Euclidean distance with pure double precision (matching gradient computation)
         double d_ij_squared = 0.0;
@@ -234,10 +251,10 @@ double compute_pacmap_loss(const std::vector<double>& embedding, const std::vect
             continue;
         }
 
-        //  v2.8.10: CORRECTED loss formulas consistent with FIXED gradient implementation
+        // v2.8.10: CORRECTED loss formulas consistent with FIXED gradient implementation
         // ALL THREE TRIPLET TYPES are now ATTRACTIVE, so loss should decrease with smaller distances
         double loss_term = 0.0;
-        switch (triplet.type) {
+        switch (static_cast<TripletType>(type)) {
             case NEIGHBOR:
                 // Consistent with grad = w_n * 20.0 / (10.0 + d_ij)^2 (attractive)
                 loss_term = static_cast<double>(w_n) * 20.0 * d_ij / (10.0 + d_ij);
@@ -251,7 +268,7 @@ double compute_pacmap_loss(const std::vector<double>& embedding, const std::vect
                 mn_count++;
                 break;
             case FURTHER:
-                //  v2.8.10: CORRECTED - now attractive, loss decreases with smaller distances
+                // v2.8.10: CORRECTED - now attractive, loss decreases with smaller distances
                 // Consistent with grad = w_f * 2.0 / (1.0 + d_ij)^2 (attractive)
                 loss_term = static_cast<double>(w_f) * 2.0 * d_ij / (1.0 + d_ij);
                 fp_loss += loss_term;
@@ -272,7 +289,7 @@ double compute_pacmap_loss(const std::vector<double>& embedding, const std::vect
         return 0.0;
     }
 
-    double avg_loss = total_loss / static_cast<double>(triplets.size());
+    double avg_loss = total_loss / static_cast<double>(num_triplets);
 
     return avg_loss;
 }
@@ -387,48 +404,7 @@ size_t get_gradient_memory_usage(int n_samples, int n_components) {
 
 
 
-void compute_second_order_info(const std::vector<double>& embedding, const std::vector<Triplet>& triplets,
-                             std::vector<double>& hessian_diagonal, int n_components) {
-
-    hessian_diagonal.assign(embedding.size(), 0.0);
-
-    // Simple approximation of diagonal Hessian
-    #pragma omp parallel for
-    for (int idx = 0; idx < static_cast<int>(triplets.size()); ++idx) {
-        const auto& t = triplets[idx];
-        size_t idx_a = static_cast<size_t>(t.anchor) * n_components;
-        size_t idx_n = static_cast<size_t>(t.neighbor) * n_components;
-
-        // Compute distance
-        double d_ij_squared = 0.0;
-        for (int d = 0; d < n_components; ++d) {
-            double diff = embedding[idx_a + d] - embedding[idx_n + d];
-            d_ij_squared += diff * diff;
-        }
-        double d_ij = std::sqrt(std::max(d_ij_squared, 1e-15));
-
-        // Approximate second derivative contribution
-        double hess_contribution;
-        switch (t.type) {
-            case NEIGHBOR:
-                hess_contribution = 20.0 / std::pow(10.0 + d_ij, 3.0);
-                break;
-            case MID_NEAR:
-                hess_contribution = 20000.0 / std::pow(10000.0 + d_ij, 3.0);
-                break;
-            case FURTHER:
-                hess_contribution = 2.0 / std::pow(1.0 + d_ij, 3.0);
-                break;
-        }
-
-        for (int d = 0; d < n_components; ++d) {
-            #pragma omp atomic
-            hessian_diagonal[idx_a + d] += hess_contribution;
-            #pragma omp atomic
-            hessian_diagonal[idx_n + d] += hess_contribution;
-        }
-    }
-}
+// REMOVED: Old compute_second_order_info function - would need flat storage adaptation
 
 void adaptive_learning_rate_adjustment(float& learning_rate, const std::vector<float>& loss_history) {
     if (loss_history.size() < 10) return;

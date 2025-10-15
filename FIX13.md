@@ -58,7 +58,7 @@ cd ../PACMAPCSharp/PACMAPCSharp && dotnet build --configuration Release
 cd ../../PacMapDemo && dotnet build --configuration Release
 
 
-Version Updates: Synced in CMakeLists.txt, pacmap_simple_wrapper.h, PacMapModel.cs.
+Version Updates (minor update before test): Synced in CMakeLists.txt, pacmap_simple_wrapper.h, PacMapModel.cs.
 
 Testing Status
 

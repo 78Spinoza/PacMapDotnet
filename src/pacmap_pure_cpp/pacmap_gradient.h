@@ -10,20 +10,24 @@ typedef void (*pacmap_progress_callback_internal)(const char* phase, int current
 // ERROR13 FIX: Three-phase weight schedule using Python-matching progress
 extern std::tuple<float, float, float> get_weights(int current_iter, int total_iters);
 
-// ¬ PHASE 4: Enhanced phase transition debugging with phase information
+// ï¿½ PHASE 4: Enhanced phase transition debugging with phase information
 extern std::tuple<float, float, float, std::string> get_weights_with_phase_info(int current_iter, int total_iters);
 
-// Double precision gradient computation for numerical stability (Python matching)
-extern void compute_gradients(const std::vector<double>& embedding, const std::vector<Triplet>& triplets,
-                             std::vector<double>& gradients, float w_n, float w_mn, float w_f, int n_components,
-                             pacmap_progress_callback_internal callback = nullptr);
+// REMOVED: Old gradient computation - replaced by flat storage version
+
+// MEMORY FIX: Gradient computation for flat triplet storage to prevent allocation failures
+extern void compute_gradients_flat(const std::vector<double>& embedding, const std::vector<uint32_t>& triplets_flat,
+                                   std::vector<double>& gradients, float w_n, float w_mn, float w_f, int n_components,
+                                   pacmap_progress_callback_internal callback = nullptr);
 
 // REMOVED: AdaGrad functions - now using Adam optimizer in main optimization loop
 
-// Double precision loss computation for monitoring convergence (with enhanced debugging)
-extern double compute_pacmap_loss(const std::vector<double>& embedding, const std::vector<Triplet>& triplets,
-                                float w_n, float w_mn, float w_f, int n_components,
-                                pacmap_progress_callback_internal callback = nullptr);
+// REMOVED: Old loss computation - replaced by flat storage version
+
+// MEMORY FIX: Loss computation for flat triplet storage
+extern double compute_pacmap_loss_flat(const std::vector<double>& embedding, const std::vector<uint32_t>& triplets_flat,
+                                       float w_n, float w_mn, float w_f, int n_components,
+                                       pacmap_progress_callback_internal callback = nullptr);
 
 // Convergence detection and early stopping
 extern bool check_convergence(const std::vector<float>& loss_history, float threshold = 1e-6, int window = 50);
@@ -55,7 +59,5 @@ extern void print_gradient_stats(int processed_neighbors, int processed_midnear,
                                 float w_n, float w_mn, float w_f);
 extern bool validate_gradients(const std::vector<double>& gradients, const std::string& context);
 
-// Double precision advanced gradient features
-extern void compute_second_order_info(const std::vector<double>& embedding, const std::vector<Triplet>& triplets,
-                                     std::vector<double>& hessian_diagonal, int n_components);
+// REMOVED: Old second-order info computation - requires flat storage adaptation if needed
 extern void adaptive_learning_rate_adjustment(float& learning_rate, const std::vector<float>& loss_history);

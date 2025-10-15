@@ -26,10 +26,31 @@ namespace pacmap_system {
     SystemCapabilities detect_system_capabilities() {
         SystemCapabilities caps;
 
-        // OpenMP detection
+        // OpenMP detection with proper core detection and thread management
         #ifdef _OPENMP
+            // Detect available cores dynamically
+            int num_cores = omp_get_num_procs();
+            int logical_cores = omp_get_max_threads();
+
+            // Use all available physical cores for maximum performance
+            caps.max_threads = num_cores;
+
+            // Force OpenMP to use detected thread count
+            omp_set_num_threads(caps.max_threads);
+
             caps.openmp_enabled = true;
-            caps.max_threads = omp_get_max_threads();
+
+            // Ensure OpenMP is properly initialized with detected thread count
+            #pragma omp parallel
+            {
+                #pragma omp single
+                {
+                    // Force thread pool creation with proper thread count
+                }
+            }
+        #else
+            caps.openmp_enabled = false;
+            caps.max_threads = 1;
         #endif
 
         // SIMD detection
@@ -59,61 +80,22 @@ namespace pacmap_system {
         return caps;
     }
 
-    // Generate human-readable capability report
+    // Generate minimal capability report
     std::string generate_capability_report(const SystemCapabilities& caps) {
         std::ostringstream report;
 
-        report << "PACMAP v2.8.17 System Performance Report\n";
-        report << "==========================================\n";
-
-        // Parallel Processing
-        report << "PARALLEL PROCESSING:\n";
-        if (caps.openmp_enabled) {
-            report << "   OpenMP: ENABLED (Max threads: " << caps.max_threads << ")\n";
-            report << "   Multi-threading: ACTIVE for triplet sampling and gradient computation\n";
-        } else {
-            report << "   OpenMP: DISABLED (Single-threaded only)\n";
-        }
-
-        // SIMD Capabilities
-        report << "\nSIMD ACCELERATION:\n";
-        if (caps.simd_avx2) {
-            report << "   AVX2: ENABLED (8x float/vector parallelism)\n";
-            report << "   Eigen SIMD: ACTIVE for distance calculations and gradient updates\n";
-            report << "   Performance boost: ~2-3x for vector operations\n";
-        } else {
-            report << "   AVX2: NOT AVAILABLE (Using scalar fallback)\n";
-            report << "   Fallback: Standard loops (slower but compatible)\n";
-        }
-
-        // CPU Info
-        report << "\nSYSTEM INFORMATION:\n";
-        report << "   CPU Vendor: " << (caps.cpu_vendor.empty() ? "Unknown" : caps.cpu_vendor) << "\n";
-        report << "   Logical Cores: " << caps.max_threads << "\n";
-
-        // Performance Recommendations
-        report << "\nPERFORMANCE OPTIMIZATIONS:\n";
+        report << "System: ";
         if (caps.openmp_enabled && caps.max_threads > 1) {
-            report << "   Parallel triplet sampling with thread-local storage\n";
-            report << "   Thread-safe gradient accumulation with OpenMP\n";
+            report << "OpenMP " << caps.max_threads << " threads (detected " << omp_get_num_procs() << " cores), ";
         } else {
-            report << "   Consider enabling OpenMP for better performance\n";
+            report << "Single thread (" << omp_get_num_procs() << " cores detected), ";
         }
-
         if (caps.simd_avx2) {
-            report << "   Eigen SIMD vectorization for distance calculations\n";
-            report << "   Hardware-accelerated mathematical operations\n";
+            report << "AVX2 enabled";
         } else {
-            report << "   Consider upgrading to a CPU with AVX2 support\n";
+            report << "Scalar mode";
         }
-
-        // Thread Safety Status
-        report << "\nTHREAD SAFETY STATUS:\n";
-        report << "   Thread-local gradient accumulation (prevents race conditions)\n";
-        report << "   Thread-safe RNG with per-thread seeding\n";
-        report << "   Critical sections only where necessary\n";
-
-        report << "\n==========================================\n";
+        report << "\n";
 
         return report.str();
     }

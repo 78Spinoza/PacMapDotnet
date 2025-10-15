@@ -62,7 +62,10 @@ namespace PacMapDemo
                // DemoAdvancedParameterTuning(data, labels); 
 
                 // Run MNIST demo
-                RunMnistDemo(); // DISABLED - testing exact KNN only
+                RunMnistDemo();
+
+                // Open 70k MNIST embedding if it exists
+                Open70kMnistEmbedding();
               
                 Console.WriteLine("🎉 ALL DEMONSTRATIONS AND EXPERIMENTS COMPLETED!");
                 Console.WriteLine($"📁 Check {ResultsDir} folder for visualizations.");
@@ -812,6 +815,35 @@ phases=({model.NumIters.phase1}, {model.NumIters.phase2}, {model.NumIters.phase3
         {
             Console.WriteLine("🔢 Running MNIST Demo...");
             MnistDemo.RunDemo();
+        }
+
+        /// <summary>
+        /// Opens the 70k MNIST embedding result if it exists.
+        /// </summary>
+        private static void Open70kMnistEmbedding()
+        {
+            string embeddingPath = Path.Combine(ResultsDir, "mnist_2d_embedding_70k.png");
+            if (File.Exists(embeddingPath))
+            {
+                Console.WriteLine("🖼️ Opening 70k MNIST embedding result...");
+                try
+                {
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName = embeddingPath,
+                        UseShellExecute = true
+                    });
+                    Console.WriteLine($"   ✅ Opened 70k MNIST embedding: {Path.GetFileName(embeddingPath)}");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"   ⚠️ Could not open 70k MNIST embedding: {ex.Message}");
+                }
+            }
+            else
+            {
+                Console.WriteLine($"   ℹ️ 70k MNIST embedding not found: {embeddingPath}");
+            }
         }
 
   
