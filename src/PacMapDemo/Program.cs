@@ -42,9 +42,7 @@ namespace PacMapDemo
                 // Load and prepare mammoth dataset
                 var (data, labels) = LoadMammothData();
                 Console.WriteLine($"Loaded: {data.GetLength(0)} points, {data.GetLength(1)} dimensions");
-
-                // Skip 10K demo and go straight to 1M demo
-                // Run10kMammothDemo(data);
+                Run10kMammothDemo(data);
                 CreateFlagship1MHairyMammoth();
 
                 // Run advanced parameter tuning
@@ -53,7 +51,10 @@ namespace PacMapDemo
                 // Run MNIST demo
                 RunMnistDemo();
 
-             
+
+                RunTransformConsistencyTests(data, labels);
+
+
                 Console.WriteLine("🎉 ALL DEMONSTRATIONS AND EXPERIMENTS COMPLETED!");
                 Console.WriteLine($"📁 Check {ResultsDir} folder for visualizations.");
             }
@@ -305,13 +306,16 @@ namespace PacMapDemo
             var embedding = pacmap.Fit(
                 data: data,
                 embeddingDimension: 2,
-                nNeighbors: 40,
+                nNeighbors: 60,  // For 1M samples: adaptive formula gives 40, using 60 for better structure
                 mnRatio: 0.5f,
-                fpRatio: 2.0f,
+                fpRatio: 2.0f,   // CORRECT: FP = 4 × MN (2.0 = 4 × 0.5)
                 learningRate: 1.0f,
                 numIters: (100, 100, 250),
                 forceExactKnn: false,
-                autoHNSWParam: false,
+                autoHNSWParam: false,  // MANUAL: More reliable than auto-discovery
+                hnswM: 32,                   // good connectivity
+                hnswEfConstruction: 600,     // strong index quality without bloating build time
+                hnswEfSearch: 200,            // high recall, low latency
                 randomSeed: 42,
                 progressCallback: UnifiedProgressCallback
             );
@@ -336,20 +340,18 @@ namespace PacMapDemo
             // === VISUALIZATION (Actual PaCMAP 2D Embedding with Hyperparameters) ===
             Console.WriteLine("   Creating 2D visualizations of PaCMAP embedding...");
 
-            var title2D = $"Flagship 1M Hairy Mammoth - PaCMAP 2D Embedding";
+            var title2D = $"Flagship 1M Hairy Mammoth - PaCMAP 2D Embedding (Labeled)\n" + BuildVisualizationTitle(pacmap);
             var outputPath2D = Path.Combine(resultsDir, "hairy_mammoth_1m_pacmap_2d.png");
             var outputPath2D_BW = Path.Combine(resultsDir, "hairy_mammoth_1m_pacmap_2d_bw.png");
 
-            var paramInfo = CreateFitParamInfo(pacmap, stopwatch.Elapsed.TotalSeconds, "Flagship_1M_Demo");
+            // Create colored version with anatomical labels and hyperparameters
+            Visualizer.PlotMammothPacMAP(embedding, data, title2D, outputPath2D);
 
-            // Create colored version with hyperparameters
-            Visualizer.PlotMammothPacMAP(embedding, data, title2D, outputPath2D, paramInfo);
+            // Create true black and white version with hyperparameters (no labels)
+            var titleBW = $"Flagship 1M Hairy Mammoth - PaCMAP 2D Embedding (Black & White)\n" + BuildVisualizationTitle(pacmap);
+            Visualizer.PlotSimplePacMAP(embedding, titleBW, outputPath2D_BW, null);
 
-            // Create black and white version with hyperparameters
-            var titleBW = title2D + " - Black & White";
-            Visualizer.PlotMammothPacMAP(embedding, data, titleBW, outputPath2D_BW, paramInfo);
-
-            Console.WriteLine($"   ✅ PaCMAP 2D colored visualization created: {Path.GetFileName(outputPath2D)}");
+            Console.WriteLine($"   ✅ PaCMAP 2D labeled visualization created: {Path.GetFileName(outputPath2D)}");
             Console.WriteLine($"   ✅ PaCMAP 2D black & white visualization created: {Path.GetFileName(outputPath2D_BW)}");
         }
 

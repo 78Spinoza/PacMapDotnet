@@ -77,35 +77,105 @@ public float[,] Fit(float[,] data,
 - `metric`: Distance metric for computation (Euclidean, Manhattan, Cosine, Hamming - all fully verified)
 - `forceExactKnn`: Use exact KNN vs HNSW approximation (default: false for HNSW)
 - `randomSeed`: Random seed for reproducible results (-1 = random)
-- `autoHNSWParam`: Automatically tune HNSW parameters based on data size (default: true)
+- `autoHNSWParam`: Automatically tune HNSW parameters based on data size (default: false) ⚠️ **See Known Issues**
 - `progressCallback`: Progress callback for real-time feedback
+
+**⚠️ IMPORTANT FORMULAS AND PARAMETER RELATIONSHIPS:**
+
+### n_neighbors Adaptive Formula
+For optimal results across different dataset sizes:
+- **Small datasets (n < 10,000)**: Use `n_neighbors = 10`
+- **Large datasets (n ≥ 10,000)**: Use `n_neighbors = 10 + 15 * (log₁₀(n) - 4)`
+
+**Examples:**
+- 1,000 samples → 10 neighbors
+- 10,000 samples → 10 neighbors
+- 100,000 samples → 25 neighbors
+- 1,000,000 samples → 40 neighbors
+
+### Critical Parameter Relationship
+**For optimal results, maintain the relationship:**
+```
+FP_ratio = 4 × MN_ratio
+```
+
+**Default validated relationship:**
+- MN_ratio = 0.5
+- FP_ratio = 2.0 (which is 4 × 0.5)
+
+### Parameter Calculations
+- **Mid-Near pairs**: `n_MN = ⌊n_neighbors × MN_ratio⌋`
+- **Further pairs**: `n_FP = ⌊n_neighbors × FP_ratio⌋`
+
+### ⚠️ KNOWN ISSUES WITH autoHNSWParam
+The `autoHNSWParam` feature has known reliability issues:
+- **Problem**: May not always select optimal HNSW parameters for large datasets
+- **Recommendation**: For production use, manually specify HNSW parameters or use the recommended values below
+- **Default Changed**: Default is now `false` for production reliability
+
+**Recommended Manual HNSW Parameters:**
+```csharp
+// For small datasets (<10K samples)
+hnswM: 16, hnswEfConstruction: 200, hnswEfSearch: 100
+
+// For medium datasets (10K-100K samples)
+hnswM: 32, hnswEfConstruction: 400, hnswEfSearch: 150
+
+// For large datasets (>100K samples)
+hnswM: 32, hnswEfConstruction: 600, hnswEfSearch: 200
+```
 
 **Examples:**
 ```csharp
-// Basic PACMAP with default parameters
+// Basic PACMAP with default parameters (validated relationship)
 var embedding = pacmap.Fit(data);
 
-// Custom parameters for specific data characteristics
+// Custom parameters for specific data characteristics (CORRECT RELATIONSHIP)
 var customEmbedding = pacmap.Fit(data,
     embeddingDimension: 2,
     nNeighbors: 15,                   // More neighbors for local structure
-    mnRatio: 1.0f,                    // Stronger global structure
-    fpRatio: 3.0f,                    // Better uniform distribution
+    mnRatio: 0.75f,                   // Enhanced global structure
+    fpRatio: 3.0f,                    // CORRECT: FP = 4 × MN (3.0 = 4 × 0.75)
     learningRate: 1.0f,                // Learning rate
     metric: DistanceMetric.Euclidean,  // All metrics fully verified: Euclidean, Manhattan, Cosine, Hamming
     randomSeed: 42,                   // Reproducible results
-    autoHNSWParam: true,               // Auto-tune HNSW parameters
+    autoHNSWParam: false,              // MANUAL: Use manual HNSW parameters
+    hnswM: 32,                        // Good connectivity
+    hnswEfConstruction: 400,          // Strong index quality
+    hnswEfSearch: 150,                // High recall, low latency
     progressCallback: (phase, current, total, percent, message) => {
         Console.WriteLine($"[{phase}] {percent:F1}% - {message}");
     });
 
-// High-dimensional embedding for ML pipelines
+// Large dataset example (1M+ samples) with OPTIMIZED PARAMETERS
+var largeDatasetEmbedding = pacmap.Fit(data,
+    embeddingDimension: 2,
+    nNeighbors: 40,                   // Adaptive formula: 10 + 15 * (log₁₀(1M) - 4) = 40
+    mnRatio: 0.5f,                    // Standard global structure
+    fpRatio: 2.0f,                    // CORRECT: FP = 4 × MN (2.0 = 4 × 0.5)
+    learningRate: 1.0f,
+    metric: DistanceMetric.Euclidean,
+    randomSeed: 42,
+    autoHNSWParam: false,              // MANUAL: More reliable for large datasets
+    hnswM: 32,                        // Good connectivity for large datasets
+    hnswEfConstruction: 600,          // Strong index quality for large datasets
+    hnswEfSearch: 200,                // High recall for large datasets
+    progressCallback: (phase, current, total, percent, message) => {
+        Console.WriteLine($"[{phase}] {percent:F1}% - {message}");
+    });
+
+// High-dimensional embedding for ML pipelines (CORRECT RELATIONSHIP)
 var mlEmbedding = pacmap.Fit(data,
     embeddingDimension: 10,            // 10D for machine learning
     nNeighbors: 20,                    // More neighbors for stability
-    metric: DistanceMetric.Euclidean,  // Options: Euclidean, Manhattan, Cosine, Hamming
+    mnRatio: 0.6f,                    // Moderate global structure
+    fpRatio: 2.4f,                    // CORRECT: FP = 4 × MN (2.4 = 4 × 0.6)
+    metric: DistanceMetric.Euclidean,
     randomSeed: 123,
-    autoHNSWParam: true);
+    autoHNSWParam: false,              // MANUAL for production reliability
+    hnswM: 32,
+    hnswEfConstruction: 400,
+    hnswEfSearch: 150);
 
 // Exact KNN for small datasets (more accurate but slower)
 var exactEmbedding = pacmap.Fit(data,
@@ -497,11 +567,24 @@ var mlPacMap = new PacMapModel(
 
 #### For Large Datasets
 ```csharp
+// Use adaptive n_neighbors formula for large datasets
+int nSamples = data.GetLength(0);
+int nNeighbors = nSamples >= 10000 ?
+    10 + 15 * ((int)Math.Log10(nSamples) - 4) : 10;
+
 var largePacMap = new PacMapModel(
-    n_neighbors: 20,     // More neighbors for stability
-    MN_ratio: 0.5f,      // Standard global structure
-    FP_ratio: 2.0f,      // Standard uniform distribution
+    n_neighbors: nNeighbors,  // Adaptive formula-based selection
+    MN_ratio: 0.5f,           // Standard global structure
+    FP_ratio: 2.0f,           // CORRECT: FP = 4 × MN
     num_iters: (50, 50, 100)  // Fewer iterations for speed
+);
+
+// For production use, disable autoHNSWParam and use manual settings:
+var largePacMapEmbedding = largePacMap.Fit(data,
+    autoHNSWParam: false,
+    hnswM: 32,                   // Good connectivity
+    hnswEfConstruction: 600,     // Strong index quality for large datasets
+    hnswEfSearch: 200            // High recall for large datasets
 );
 ```
 
@@ -528,6 +611,26 @@ var largePacMap = new PacMapModel(
 3. **Too low learning rate**: Slow convergence
 4. **Wrong distance metric**: Poor results for inappropriate metrics
 5. **Not enough iterations**: Incomplete optimization
+6. **⚠️ Incorrect FP/MN relationship**: Breaking `FP_ratio = 4 × MN_ratio` formula
+7. **⚠️ autoHNSWParam reliance**: May not optimize properly for large datasets
+8. **⚠️ Wrong n_neighbors**: Not using adaptive formula for large datasets
+
+### Parameter Validation Warnings
+
+The C++ implementation will automatically validate parameters and issue warnings:
+- **n_neighbors**: Warnings when values are outside optimal ranges for dataset size
+- **FP/MN relationship**: Warnings when `FP_ratio ≠ 4 × MN_ratio`
+- **HNSW parameters**: Recommendations when using auto-discovery for large datasets
+
+### Production Deployment Recommendations
+
+1. **Use fixed random seeds** for reproducible results
+2. **Save trained models** for consistent predictions
+3. **Validate parameters** on small subsets first
+4. **Monitor memory usage** for large datasets
+5. **Test different distance metrics** for your specific data
+6. **⚠️ Use manual HNSW parameters** instead of autoHNSWParam for production
+7. **⚠️ Verify FP/MN relationship** before training large models
 
 ---
 

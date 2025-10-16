@@ -543,7 +543,7 @@ namespace PacMapSharp
                             int hnswEfConstruction = 150,
                             int hnswEfSearch = 100,
                             int randomSeed = -1,
-                            bool autoHNSWParam = true,
+                            bool autoHNSWParam = false,
                             float learningRate = 1.0f,
                             bool useQuantization = false,
                             ProgressCallback? progressCallback = null)
@@ -591,7 +591,7 @@ namespace PacMapSharp
                                        DistanceMetric metric = DistanceMetric.Euclidean,
                                        bool forceExactKnn = false,
                                        int randomSeed = -1,
-                                       bool autoHNSWParam = true,
+                                       bool autoHNSWParam = false,
                                        float learningRate = 1.0f,
                                        bool useQuantization = false,
                                        int hnswM = 16,
@@ -774,7 +774,7 @@ namespace PacMapSharp
                                    int hnswEfConstruction = 150,
                                    int hnswEfSearch = 100,
                                    int randomSeed = -1,
-                                   bool autoHNSWParam = true,
+                                   bool autoHNSWParam = false,
                                    float learningRate = 1.0f,
                                    bool useQuantization = false)
         {
