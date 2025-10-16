@@ -43,20 +43,9 @@ namespace PacMapDemo
                 var (data, labels) = LoadMammothData();
                 Console.WriteLine($"Loaded: {data.GetLength(0)} points, {data.GetLength(1)} dimensions");
 
-                // Run core demonstrations
-               // Run10kMammothDemo(data);
-           
-
-             
-
-                // Run transform consistency tests
-                // RunTransformConsistencyTests(data, labels); 
-
-                // Run hyperparameter experiments
-                //RunHyperparameterExperiments(data, labels); 
-
-
-               // CreateFlagship1MHairyMammoth();
+                // Skip 10K demo and go straight to 1M demo
+                // Run10kMammothDemo(data);
+                CreateFlagship1MHairyMammoth();
 
                 // Run advanced parameter tuning
                // DemoAdvancedParameterTuning(data, labels); 
@@ -64,9 +53,7 @@ namespace PacMapDemo
                 // Run MNIST demo
                 RunMnistDemo();
 
-                // Open 70k MNIST embedding if it exists
-                Open70kMnistEmbedding();
-              
+             
                 Console.WriteLine("🎉 ALL DEMONSTRATIONS AND EXPERIMENTS COMPLETED!");
                 Console.WriteLine($"📁 Check {ResultsDir} folder for visualizations.");
             }
@@ -324,7 +311,7 @@ namespace PacMapDemo
                 learningRate: 1.0f,
                 numIters: (100, 100, 250),
                 forceExactKnn: false,
-                autoHNSWParam: true,
+                autoHNSWParam: false,
                 randomSeed: 42,
                 progressCallback: UnifiedProgressCallback
             );
@@ -333,15 +320,37 @@ namespace PacMapDemo
             Console.WriteLine($"   ✅ 1M Embedding created: {embedding.GetLength(0)} x {embedding.GetLength(1)}");
             Console.WriteLine($"   ⏱️ Execution time: {stopwatch.Elapsed.TotalSeconds:F2}s");
 
-            // Save model
-            string modelPath = Path.Combine(ResultsDir, "hairy_mammoth_1m_hnsw.pmm");
-         
+            // === SAVE PACMAP MODEL ===
+            Console.WriteLine("   Saving PaCMAP model...");
 
-              // Create black and white visualization of original 3D data
-            string outputPath = Path.Combine(ResultsDir, "hairy_mammoth_1m_3d.png");
-            var title3D = "Flagship 1M Hairy Mammoth - Original 3D Black & White";
-            Visualizer.PlotOriginalMammoth3DReal(data, title3D, outputPath);
-            Console.WriteLine($"   ✅ Created: {Path.GetFileName(outputPath)}");
+            string resultsDir = Path.Combine(ResultsDir, "HairyMammoth_1M");
+            Directory.CreateDirectory(resultsDir);
+
+            var modelPath = Path.Combine(resultsDir, "pacmap_1m_model.pmm");
+
+            // Save the trained model
+            pacmap.Save(modelPath);
+
+            Console.WriteLine($"   ✅ Model saved: {Path.GetFileName(modelPath)}");
+
+            // === VISUALIZATION (Actual PaCMAP 2D Embedding with Hyperparameters) ===
+            Console.WriteLine("   Creating 2D visualizations of PaCMAP embedding...");
+
+            var title2D = $"Flagship 1M Hairy Mammoth - PaCMAP 2D Embedding";
+            var outputPath2D = Path.Combine(resultsDir, "hairy_mammoth_1m_pacmap_2d.png");
+            var outputPath2D_BW = Path.Combine(resultsDir, "hairy_mammoth_1m_pacmap_2d_bw.png");
+
+            var paramInfo = CreateFitParamInfo(pacmap, stopwatch.Elapsed.TotalSeconds, "Flagship_1M_Demo");
+
+            // Create colored version with hyperparameters
+            Visualizer.PlotMammothPacMAP(embedding, data, title2D, outputPath2D, paramInfo);
+
+            // Create black and white version with hyperparameters
+            var titleBW = title2D + " - Black & White";
+            Visualizer.PlotMammothPacMAP(embedding, data, titleBW, outputPath2D_BW, paramInfo);
+
+            Console.WriteLine($"   ✅ PaCMAP 2D colored visualization created: {Path.GetFileName(outputPath2D)}");
+            Console.WriteLine($"   ✅ PaCMAP 2D black & white visualization created: {Path.GetFileName(outputPath2D_BW)}");
         }
 
         /// <summary>
@@ -967,6 +976,35 @@ phases=({model.NumIters.phase1}, {model.NumIters.phase2}, {model.NumIters.phase3
             plotModel.Series.Add(scatterSeries);
             plotModel.Legends.Add(new Legend { LegendPosition = LegendPosition.TopRight });
             ExportPlotToPng(plotModel, outputPath);
+        }
+
+        /// <summary>
+        /// Saves embedding data to a CSV file.
+        /// </summary>
+        private static void SaveEmbeddingToCSV(double[,] embedding, string filePath)
+        {
+            using var writer = new StreamWriter(filePath);
+            int nSamples = embedding.GetLength(0);
+            int nDimensions = embedding.GetLength(1);
+
+            // Write header
+            var header = new string[nDimensions];
+            for (int i = 0; i < nDimensions; i++)
+            {
+                header[i] = $"Dim{i + 1}";
+            }
+            writer.WriteLine(string.Join(",", header));
+
+            // Write data
+            for (int i = 0; i < nSamples; i++)
+            {
+                var row = new string[nDimensions];
+                for (int j = 0; j < nDimensions; j++)
+                {
+                    row[j] = embedding[i, j].ToString("F6", System.Globalization.CultureInfo.InvariantCulture);
+                }
+                writer.WriteLine(string.Join(",", row));
+            }
         }
 
         /// <summary>

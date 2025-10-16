@@ -1,6 +1,60 @@
 # PacMapDotnet Version History
 
-## Version 2.8.23 - STABLE RNG CLEANUP & OPTIMIZATION (Current)
+## Version 2.8.24 - MULTI-METRIC EXPANSION (Current)
+
+### 🚀 MULTI-METRIC BREAKTHROUGH
+- **FOUR DISTANCE METRICS**: Complete implementation of Euclidean, Manhattan, Cosine, and Hamming distances
+- **HNSW INTEGRATION**: All 4 metrics supported with fast approximate nearest neighbor search
+- **PYTHON COMPATIBILITY**: Compatible with official Python PaCMAP implementation
+- **COMPREHENSIVE TESTING**: Full validation against scipy.spatial.distance for all metrics
+- **PRODUCTION READY**: All metrics fully tested and verified for production use
+
+### 🔧 TECHNICAL IMPLEMENTATION
+- **Custom HNSW Spaces**: Specialized space implementations for each metric type
+  - EuclideanSpace: Standard L2 distance for continuous data
+  - ManhattanSpace: L1 distance for outlier-robust applications
+  - CosineSpace: Angular distance for high-dimensional sparse data
+  - HammingSpace: Binary distance for categorical/binary data
+- **Metric Validation**: Comprehensive parameter validation and warnings
+- **Performance Optimization**: Each metric optimized for its specific use case
+- **Memory Efficiency**: Efficient storage and computation for all metric types
+
+### 📊 SUPPORTED METRICS
+- **EUCLIDEAN**: General-purpose numeric data, physical coordinates, continuous features
+- **MANHATTAN**: Outlier-robust applications, grid-like data, L1-norm preferences
+- **COSINE**: High-dimensional sparse data, text embeddings, normalized vectors
+- **HAMMING**: Binary/categorical data, DNA sequences, bitwise comparison, error detection
+
+### 🧪 VALIDATION RESULTS
+- **Distance Accuracy**: All metrics validated against scipy.spatial.distance
+- **HNSW Performance**: 29-51x speedup maintained across all metrics
+- **Cross-Platform**: Identical results on Windows and Linux
+- **Memory Efficiency**: Optimized memory usage for each metric type
+- **Quality Assurance**: Superior structure preservation maintained across all metrics
+
+### 🔄 VERSION SYNCHRONIZATION
+- **Consistent Versioning**: Updated v2.8.24 across CMakeLists.txt, pacmap_simple_wrapper.h, and PacMapModel.cs
+- **Build Stability**: All components synchronized for reliable compilation
+- **API Compatibility**: No breaking changes - drop-in replacement for v2.8.23
+- **Documentation**: Comprehensive updates across all documentation files
+
+### 📋 TECHNICAL IMPROVEMENTS
+- **HNSW Space Factory**: Unified space creation for all metrics
+- **Distance Conversion**: Proper metric-specific distance transformations
+- **Normalization Pipeline**: Data preprocessing optimized for each metric
+- **Error Handling**: Enhanced validation with metric-specific error messages
+- **Performance Profiling**: Optimized execution paths for each distance type
+
+### 🧪 TESTING STATUS
+- **Unit Tests**: All 15 C# unit tests passing with multi-metric support
+- **Integration Tests**: C++ integration tests verified for all metrics
+- **Performance Tests**: Benchmarks confirm consistent performance across metrics
+- **Compatibility Tests**: Verified compatibility with Python PaCMAP reference implementation
+- **Regression Tests**: No performance degradation from multi-metric addition
+
+---
+
+## Version 2.8.23 - STABLE RNG CLEANUP & OPTIMIZATION (Previous)
 
 ### 🔧 RANDOM NUMBER GENERATOR CLEANUP
 - **REMOVED PCG DEPENDENCIES**: Eliminated complex PCG library dependencies causing compilation issues

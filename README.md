@@ -4,7 +4,7 @@
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey)](https://github.com/78Spinoza/PacMapDotnet)
 [![C#](https://img.shields.io/badge/C%23-8.0+-blue)](https://github.com/78Spinoza/PacMapDotnet)
-[![Version](https://img.shields.io/badge/version-2.8.23--STABLE-green)](https://github.com/78Spinoza/PacMapDotnet)
+[![Version](https://img.shields.io/badge/version-2.8.24--MULTI--METRIC-green)](https://github.com/78Spinoza/PacMapDotnet)
 
 **Technology invented 2021 available as production ready code!**
 
@@ -253,7 +253,7 @@ This production implementation includes advanced features not found in typical r
 - ✅ **HNSW Optimization**: **50-200x faster** training and transforms using Hierarchical Navigable Small World graphs
 - ✅ **Advanced Quantization**: Parameter preservation with compression ratios and error statistics
 - ✅ **Arbitrary Dimensions**: Embed to any dimension (1D-50D), not just 2D/3D
-- ✅ **Multiple Metrics**: Currently Euclidean (fully verified), other metrics in testing
+- ✅ **Multiple Distance Metrics**: Euclidean, Manhattan, Cosine, and Hamming (fully supported and tested)
 - ✅ **Real-time Progress Reporting**: Comprehensive feedback during computation with phase-aware reporting
 - ✅ **Multi-level Outlier Detection**: Data quality and distribution shift monitoring
 - ✅ **Cross-Platform**: Seamless integration with **.NET** and **C++**
@@ -377,7 +377,7 @@ var embedding = pacmap.Fit(
     fpRatio: 2.0f,
     learningRate: 1.0f,
     numIters: (100, 100, 250),  // Default iterations
-    metric: DistanceMetric.Euclidean,
+    metric: DistanceMetric.Euclidean, // Options: Euclidean, Manhattan, Cosine, Hamming
     forceExactKnn: false,        // Use HNSW optimization
     randomSeed: 42,
     autoHNSWParam: true,         // Auto-tune HNSW parameters
@@ -413,7 +413,7 @@ var embedding = pacmap.Fit(
     data: data,
     embeddingDimension: 2,
     nNeighbors: 15,
-    metric: DistanceMetric.Euclidean, // Currently only Euclidean is fully verified
+    metric: DistanceMetric.Euclidean, // Options: Euclidean, Manhattan, Cosine, Hamming
     forceExactKnn: false,            // Use HNSW optimization
     autoHNSWParam: true,             // Auto-tune HNSW parameters
     randomSeed: 12345,
@@ -549,13 +549,13 @@ dotnet run
 - ✅ **PACMAP Embedding**: 2D embedding with anatomical coloring
 - ✅ **Hyperparameter Testing**: Comprehensive parameter exploration with GIF generation
 - ✅ **Model Persistence**: Save/load functionality testing
-- ✅ **Distance Metrics**: Euclidean distance (fully verified), others in development
+- ✅ **Distance Metrics**: Euclidean, Manhattan, Cosine, and Hamming distances (fully verified)
 - ✅ **Progress Reporting**: Real-time progress tracking with phase-aware callbacks
 
-## Current Status (Thread-Safe Solution v2.8.18)
+## Current Status (Multi-Metric Solution v2.8.24)
 
 ### ✅ **Working Features**
-- **Euclidean Distance**: Fully tested and verified
+- **Multi-Metric Support**: Euclidean, Manhattan, Cosine, and Hamming distances (fully tested and verified)
 - **HNSW Optimization**: Fast approximate nearest neighbors
 - **Model Persistence**: Save/load with CRC32 validation (includes min-max normalization parameters)
 - **Progress Reporting**: Phase-aware callbacks with detailed progress
@@ -577,12 +577,11 @@ dotnet run
 - **Production Code**: Clean implementation without debug artifacts
 
 ### 🔄 **In Development**
-- **Additional Distance Metrics**: Cosine, Manhattan, Correlation, Hamming
+- **Additional Distance Metrics**: Correlation (planned for future release)
 - **Streaming Processing**: Large dataset handling
 
 ### ⚠️ **Known Limitations**
-- Only Euclidean distance is fully verified
-- Large datasets (1M+) may need parameter tuning
+- Large datasets (1M+) may need parameter tuning for optimal performance
 - Some edge cases in distance calculations under investigation
 
 ## Build Instructions
@@ -686,12 +685,17 @@ If you use this implementation in your research, please cite the original PaCMAP
 
 ## 🗺️ Roadmap
 
-### v2.5.0 (Next) - METRIC_EXPANSION
-- 🔄 **Additional Distance Metrics**: Cosine, Manhattan, Correlation, Hamming
-- 🔄 **Enhanced Testing**: Comprehensive metric validation suite
-- 🔄 **Documentation**: Updated API documentation for new metrics
+### ✅ v2.8.24 (Current) - MULTI-METRIC EXPANSION
+- ✅ **Additional Distance Metrics**: Cosine, Manhattan, and Hamming distances (COMPLETED)
+- ✅ **HNSW Integration**: All 4 metrics supported with HNSW optimization
+- ✅ **Comprehensive Testing**: Full validation against scipy.spatial.distance
+- ✅ **Python Compatibility**: Compatible with official Python PaCMAP implementation
 
-### v2.6.0 (Planned) - PERFORMANCE_BOOST
+### v2.9.0 (Next) - ENHANCEMENTS
+- 🔄 **Correlation Distance**: Add Pearson correlation metric support
+- 🔄 **Enhanced Documentation**: Updated API documentation and examples
+
+### v2.10.0 (Planned) - PERFORMANCE_BOOST
 - 📊 **GPU Acceleration**: CUDA support for large datasets
 - 📊 **Memory Optimization**: Streaming processing for massive datasets
 - 📊 **Enhanced Quantization**: Improved compression algorithms

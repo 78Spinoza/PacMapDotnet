@@ -65,6 +65,7 @@ namespace hnsw_utils {
         l2_space.reset();
         ip_space.reset();
         l1_space.reset();
+        hamming_space.reset();
 
         try {
             switch (metric) {
@@ -78,6 +79,10 @@ namespace hnsw_utils {
 
             case PACMAP_METRIC_MANHATTAN:
                 l1_space = std::make_unique<L1Space>(n_dim);
+                return true;
+
+            case PACMAP_METRIC_HAMMING:
+                hamming_space = std::make_unique<HammingSpace>(n_dim);
                 return true;
 
             default:
@@ -97,6 +102,8 @@ namespace hnsw_utils {
             return ip_space.get();
         case PACMAP_METRIC_MANHATTAN:
             return l1_space.get();
+        case PACMAP_METRIC_HAMMING:
+            return hamming_space.get();
         default:
             return nullptr;
         }
@@ -105,7 +112,8 @@ namespace hnsw_utils {
     bool SpaceFactory::can_use_hnsw() const {
         return current_metric == PACMAP_METRIC_EUCLIDEAN ||
                current_metric == PACMAP_METRIC_COSINE ||
-               current_metric == PACMAP_METRIC_MANHATTAN;
+               current_metric == PACMAP_METRIC_MANHATTAN ||
+               current_metric == PACMAP_METRIC_HAMMING;
     }
 
     // HNSW stream utilities implementation
@@ -339,7 +347,7 @@ namespace hnsw_utils {
     // HNSW k-NN query utilities
     void build_knn_graph_hnsw(const std::vector<float>& data, int n_obs, int n_dim, int n_neighbors,
         hnswlib::HierarchicalNSW<float>* hnsw_index, std::vector<int>& nn_indices,
-        std::vector<double>& nn_distances) {
+        std::vector<double>& nn_distances, PacMapMetric metric) {
 
         nn_indices.resize(static_cast<size_t>(n_obs) * static_cast<size_t>(n_neighbors));
         nn_distances.resize(static_cast<size_t>(n_obs) * static_cast<size_t>(n_neighbors));
@@ -380,10 +388,18 @@ namespace hnsw_utils {
                     neighbors.resize(n_neighbors);
                 }
 
-                // Fill the arrays
+                // Fill the arrays with proper distance conversion
                 for (int j = 0; j < n_neighbors && j < static_cast<int>(neighbors.size()); j++) {
                     nn_indices[static_cast<size_t>(i) * static_cast<size_t>(n_neighbors) + static_cast<size_t>(j)] = neighbors[j].second;
-                    nn_distances[static_cast<size_t>(i) * static_cast<size_t>(n_neighbors) + static_cast<size_t>(j)] = static_cast<double>(neighbors[j].first);
+
+                    // Convert HNSW distance to proper metric distance
+                    float dist = neighbors[j].first;
+                    if (metric == PACMAP_METRIC_COSINE) {
+                        // HNSW InnerProductSpace returns negative dot product
+                        // Convert to cosine distance: 1 - cos_sim = 1 + (negative_dot_product)
+                        dist = std::max(0.0f, std::min(2.0f, 1.0f + dist));
+                    }
+                    nn_distances[static_cast<size_t>(i) * static_cast<size_t>(n_neighbors) + static_cast<size_t>(j)] = static_cast<double>(dist);
                 }
 
                 // Fill remaining slots with -1 and high distance if not enough neighbors
@@ -454,6 +470,9 @@ namespace hnsw_utils {
             else if (metric == PACMAP_METRIC_CORRELATION) {
                 return 0; // No normalization for correlation
             }
+            else if (metric == PACMAP_METRIC_HAMMING) {
+                return 4; // Binary conversion for Hamming (0/1 thresholding)
+            }
             return 1; // Use z-score normalization for other metrics
         }
 
@@ -523,6 +542,16 @@ namespace hnsw_utils {
                     for (int j = 0; j < n_dim; j++) {
                         size_t idx = static_cast<size_t>(i) * n_dim + j;
                         output_data[idx] = input_data[idx] / norm;
+                    }
+                }
+            }
+            else if (mode == 4) {
+                // Mode 4: Binary conversion for Hamming distance
+                for (int i = 0; i < n_obs; i++) {
+                    for (int j = 0; j < n_dim; j++) {
+                        size_t idx = static_cast<size_t>(i) * n_dim + j;
+                        // Binary threshold at 0.5 for Hamming distance
+                        output_data[idx] = input_data[idx] > 0.5f ? 1.0f : 0.0f;
                     }
                 }
             }

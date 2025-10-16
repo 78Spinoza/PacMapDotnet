@@ -50,6 +50,49 @@ public:
     }
 };
 
+// Custom HammingSpace implementation for Hamming distance in HNSW
+class HammingSpace : public hnswlib::SpaceInterface<float> {
+    hnswlib::DISTFUNC<float> fstdistfunc_;
+    size_t data_size_;
+    size_t dim_;
+
+public:
+    HammingSpace(size_t dim) : dim_(dim) {
+        fstdistfunc_ = HammingDist;
+        data_size_ = dim * sizeof(float);
+    }
+
+    size_t get_data_size() override {
+        return data_size_;
+    }
+
+    hnswlib::DISTFUNC<float> get_dist_func() override {
+        return fstdistfunc_;
+    }
+
+    void* get_dist_func_param() override {
+        return &dim_;
+    }
+
+    ~HammingSpace() {}
+
+    static float HammingDist(const void* pVect1v, const void* pVect2v, const void* qty_ptr) {
+        float* pVect1 = (float*)pVect1v;
+        float* pVect2 = (float*)pVect2v;
+        size_t qty = *((size_t*)qty_ptr);
+
+        float res = 0;
+        for (size_t i = 0; i < qty; i++) {
+            // Hamming distance counts mismatched bits for binary data
+            // For binary (0/1) data, this is simply the count of unequal values
+            if (pVect1[i] != pVect2[i]) {
+                res += 1.0f;
+            }
+        }
+        return res;
+    }
+};
+
 // HNSW space factory and management utilities
 namespace hnsw_utils {
 
@@ -58,6 +101,7 @@ namespace hnsw_utils {
         std::unique_ptr<hnswlib::L2Space> l2_space;
         std::unique_ptr<hnswlib::IPSpace> ip_space;
         std::unique_ptr<L1Space> l1_space;
+        std::unique_ptr<HammingSpace> hamming_space;
         PacMapMetric current_metric;
         int current_dim;
 
@@ -84,7 +128,7 @@ namespace hnsw_utils {
     // HNSW k-NN query utilities
     void build_knn_graph_hnsw(const std::vector<float>& data, int n_obs, int n_dim, int n_neighbors,
         hnswlib::HierarchicalNSW<float>* hnsw_index, std::vector<int>& nn_indices,
-        std::vector<double>& nn_distances);
+        std::vector<double>& nn_distances, PacMapMetric metric);
 
     // HNSW index creation and management
     std::unique_ptr<hnswlib::HierarchicalNSW<float>> create_hnsw_index(

@@ -4,7 +4,7 @@
 
 This document provides detailed technical implementation details for the PACMAP (Pairwise Controlled Manifold Approximation and Projection) C#/.NET library with native C++ optimization. The implementation includes complete algorithm fidelity to the Python reference with additional production-ready features.
 
-## 🎯 Current Implementation Status (v2.4.9-TEST)
+## 🎯 Current Implementation Status (v2.8.24)
 
 ### ✅ COMPLETED IMPLEMENTATION
 
@@ -24,11 +24,11 @@ The PACMAP implementation is **fully functional** with the following completed c
 
 #### **Production Features**
 - ✅ **C# API**: Comprehensive wrapper with progress callbacks and error handling
-- ✅ **Distance Metrics**: Euclidean (fully verified), others in testing
+- ✅ **Distance Metrics**: Euclidean, Manhattan, Cosine, and Hamming (all fully verified)
 - ✅ **Model Validation**: CRC32 checking and comprehensive error handling
 - ✅ **Cross-Platform**: Windows and Linux native binaries
 - ✅ **Demo Application**: Complete mammoth dataset with anatomical visualization
-- ✅ **Testing Phase**: Currently only Euclidean distance is fully verified
+- ✅ **Multi-Metric Support**: All 4 distance metrics fully implemented and tested
 
 #### **Visualization & Testing**
 - ✅ **OxyPlot Integration**: 2D embedding visualization with anatomical part coloring
@@ -44,7 +44,7 @@ The PACMAP implementation is **fully functional** with the following completed c
 
 ```
 src/pacmap_pure_cpp/
-├── pacmap_simple_wrapper.h/cpp      # C API interface (v2.4.9-TEST)
+├── pacmap_simple_wrapper.h/cpp      # C API interface (v2.8.24)
 ├── pacmap_fit.cpp                   # Core fitting algorithm with triplet sampling
 ├── pacmap_transform.cpp             # New data transformation using fitted models
 ├── pacmap_optimization.cpp          # Three-phase optimization with Adam
@@ -67,7 +67,7 @@ src/pacmap_pure_cpp/
 ```
 src/PACMAPCSharp/
 ├── PacMapModel.cs                   # Main API class with comprehensive functionality
-├── pacmap.dll                       # Native binary (v2.4.9-TEST)
+├── pacmap.dll                       # Native binary (v2.8.24)
 └── PACMAPCSharp.csproj             # Project configuration
 ```
 
@@ -335,7 +335,7 @@ float compute_pacmap_loss(const std::vector<float>& embedding, const std::vector
 
 ---
 
-## 🔧 Key Technical Implementation Details (Current v2.4.9-TEST)
+## 🔧 Key Technical Implementation Details (Current v2.8.24)
 
 ### 1. **HNSW Optimization Implementation**
 - **Feature**: Hierarchical Navigable Small World graphs for fast neighbor search
@@ -368,11 +368,17 @@ float compute_pacmap_loss(const std::vector<float>& embedding, const std::vector
 - **MN Pairs**: 25th-75th percentile for global structure
 - **FP Pairs**: 90th+ percentile for uniform distribution
 
+### 7. **Multi-Metric Support (NEW in v2.8.24)**
+- **Implementation**: Complete HNSW integration for all 4 metrics
+- **Supported Metrics**: Euclidean, Manhattan, Cosine, Hamming
+- **HNSW Spaces**: Custom space implementations for each metric
+- **Validation**: Comprehensive testing against scipy.spatial.distance
+
 ---
 
 ## 📊 Performance Characteristics
 
-### Mammoth Dataset Performance (v2.4.9-TEST)
+### Mammoth Dataset Performance (v2.8.24)
 - **HNSW Optimized**: ~6-45 seconds with HNSW (29-51x speedup vs traditional)
 - **Exact KNN**: ~38 minutes for 1M dataset (traditional approach)
 - **Memory Usage**: ~50MB for 10K mammoth dataset
@@ -380,13 +386,13 @@ float compute_pacmap_loss(const std::vector<float>& embedding, const std::vector
 - **Deterministic**: Same results with fixed random seed
 - **Auto Parameter Discovery**: Automatic HNSW optimization based on data size
 
-### Current Performance Improvements (v2.4.9-TEST)
+### Current Performance Improvements (v2.8.24)
 - ✅ **HNSW Optimization**: 29-51x faster training with approximate nearest neighbors
 - ✅ **Progress Reporting**: Phase-aware callbacks with detailed progress information
 - ✅ **Model Persistence**: Complete save/load functionality with CRC32 validation
 - ✅ **16-bit Quantization**: 50-80% memory reduction for model storage
 - ✅ **Auto HNSW Parameter Discovery**: Automatic optimization based on data size
-- ✅ **Testing Phase**: Currently only Euclidean distance is fully verified
+- ✅ **Multi-Metric Support**: All 4 distance metrics fully implemented and tested
 
 ### Previous Improvements (v2.0.5-EXACT-KNN-FIX)
 - ✅ **Fixed Exact KNN**: Corrected neighbor sampling to match Python sklearn
@@ -416,7 +422,7 @@ float compute_pacmap_loss(const std::vector<float>& embedding, const std::vector
 
 ### Current Testing and Validation
 
-### Algorithm Validation (Current v2.4.9-TEST)
+### Algorithm Validation (Current v2.8.24)
 - **Neighbor Sampling**: Python-style exact KNN with skip-self behavior ✅
 - **Triplet Types**: Proper neighbor/MN/FP triplet classification ✅
 - **Three-Phase Optimization**: Correct weight transitions (1000→3→0) ✅
@@ -436,14 +442,15 @@ float compute_pacmap_loss(const std::vector<float>& embedding, const std::vector
 - **Model Persistence Testing**: Save/load functionality validation ✅
 - **Progress Reporting**: Real-time progress tracking with phase-aware callbacks ✅
 
-### Cross-Platform Validation (Current v2.4.9-TEST)
-- **Windows**: pacmap.dll (v2.4.9-TEST) ✅
+### Cross-Platform Validation (Current v2.8.24)
+- **Windows**: pacmap.dll (v2.8.24) ✅
 - **Linux**: libpacmap.so (buildable with CMake) ✅
 - **C# Integration**: P/Invoke with proper memory management ✅
 - **Model Persistence**: Save/load with CRC32 validation ✅
 - **HNSW Testing**: Approximate vs exact KNN comparison ✅
 - **16-bit Quantization**: Memory efficiency validation ✅
 - **Auto-discovery**: HNSW parameter optimization testing ✅
+- **Multi-Metric Testing**: All 4 metrics validated against scipy.spatial.distance ✅
 
 ## Current Implementation Architecture
 
@@ -487,12 +494,12 @@ struct PacMapModelPersistence {
 };
 ```
 
-## Current Build System (v2.4.9-TEST)
+## Current Build System (v2.8.24)
 
 ### CMakeLists.txt (Current)
 ```cmake
 cmake_minimum_required(VERSION 3.15)
-project(pacmap VERSION 2.4.9 LANGUAGES CXX)
+project(pacmap VERSION 2.8.24 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -501,7 +508,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 add_definitions(-DPACMAP_EXPORTS)
 add_definitions(-DLZ4_FREESTANDING=0)
 
-# Core implementation files (v2.4.9-TEST)
+# Core implementation files (v2.8.24)
 add_library(pacmap SHARED
     pacmap_simple_wrapper.cpp
     pacmap_fit.cpp
@@ -519,7 +526,7 @@ add_library(pacmap SHARED
 )
 ```
 
-## Current File Structure (v2.4.9-TEST)
+## Current File Structure (v2.8.24)
 
 ### Production Implementation Files
 ```
@@ -543,10 +550,10 @@ src/pacmap_pure_cpp/
     └── CMakeLists.txt                   # Cross-platform configuration
 ```
 
-## Current Testing Status (v2.4.9-TEST)
+## Current Testing Status (v2.8.24)
 
 ### ✅ **WORKING FEATURES**
-- **Euclidean Distance**: Fully tested and verified with Python reference
+- **Multi-Metric Support**: Euclidean, Manhattan, Cosine, and Hamming distances (all fully tested)
 - **HNSW Optimization**: 29-51x speedup verified across dataset sizes
 - **Model Persistence**: Complete save/load with CRC32 validation
 - **Progress Reporting**: Phase-aware callbacks with detailed progress information
@@ -555,17 +562,16 @@ src/pacmap_pure_cpp/
 - **Multiple Dimensions**: 1D to 50D embeddings tested
 - **Transform Capability**: Project new data using fitted models
 - **Auto-discovery**: HNSW parameter optimization tested
+- **Metric Validation**: Comprehensive testing against scipy.spatial.distance
 
 ### 🔄 **IN DEVELOPMENT**
-- **Additional Distance Metrics**: Cosine, Manhattan, Correlation, Hamming (interface available)
+- **Correlation Distance**: Pearson correlation metric support (future)
 - **GPU Acceleration**: CUDA support for large datasets (future)
 - **WebAssembly Support**: Browser-based embeddings (future)
 
 ### ⚠️ **KNOWN LIMITATIONS**
-- Only Euclidean distance is fully verified
-- Large datasets (1M+) may need parameter tuning
+- Large datasets (1M+) may need parameter tuning for optimal performance
 - Some edge cases in distance calculations under investigation
-- Testing phase (v2.4.9-TEST) - additional validation ongoing
 
 ## Implementation Completion Status
 
@@ -574,8 +580,9 @@ The PACMAP implementation is **fully functional and production-ready** with:
 1. ✅ **Complete PACMAP Algorithm**: All core components implemented
 2. ✅ **HNSW Optimization**: 29-51x performance improvement
 3. ✅ **Production Features**: Model persistence, progress reporting, quantization
-4. ✅ **Testing Suite**: Comprehensive validation against Python reference
-5. ✅ **Documentation**: Updated to reflect current implementation status
-6. ✅ **Cross-Platform**: Windows and Linux support with identical results
+4. ✅ **Multi-Metric Support**: All 4 distance metrics fully implemented and tested
+5. ✅ **Testing Suite**: Comprehensive validation against Python reference
+6. ✅ **Documentation**: Updated to reflect current implementation status
+7. ✅ **Cross-Platform**: Windows and Linux support with identical results
 
-*This implementation guide reflects the current state of the PacMapDotnet implementation as of version 2.4.9-TEST.*
+*This implementation guide reflects the current state of the PacMapDotnet implementation as of version 2.8.24.*

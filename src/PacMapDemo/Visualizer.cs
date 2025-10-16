@@ -235,7 +235,14 @@ namespace PacMapDemo
                     exporter.Export(yzPlotModel, stream);
                 }
 
+                // Also create the expected single file (use XY view as the main one)
+                using (var stream = File.Create(outputPath))
+                {
+                    exporter.Export(plotModel, stream);
+                }
+
                 Console.WriteLine($"SUCCESS: Multiple view mammoth plots saved:");
+                Console.WriteLine($"  Main: {Path.GetFullPath(outputPath)}");
                 Console.WriteLine($"  XY (Top): {Path.GetFullPath(xyPath)}");
                 Console.WriteLine($"  XZ (Side): {Path.GetFullPath(xzPath)}");
                 Console.WriteLine($"  YZ (Front): {Path.GetFullPath(yzPath)}");

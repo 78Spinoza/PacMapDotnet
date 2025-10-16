@@ -67,11 +67,18 @@ int validate_parameters(PacMapModel* model) {
         return PACMAP_ERROR_INVALID_PARAMS;
     }
 
-    // FIXED: Restrict to Euclidean metric only (error analysis #4)
-    if (model->metric != PACMAP_METRIC_EUCLIDEAN) {
-        std::cout << "WARNING: Non-Euclidean metric detected. PACMAP officially supports Euclidean only." << std::endl;
-        std::cout << "WARNING: Automatically switching to EUCLIDEAN metric for algorithmic correctness." << std::endl;
-        model->metric = PACMAP_METRIC_EUCLIDEAN;  // Force Euclidean for correct PACMAP behavior
+    // Multi-metric support v2.8.24: Support all HNSW-compatible metrics
+    if (!is_supported_metric(model->metric)) {
+        set_last_error(model, PACMAP_ERROR_INVALID_PARAMS,
+                      "Unsupported metric specified. Supported metrics: euclidean, cosine, manhattan, hamming");
+        return PACMAP_ERROR_INVALID_PARAMS;
+    }
+
+    // Issue warnings for metric-specific requirements
+    if (model->metric == PACMAP_METRIC_HAMMING) {
+        std::cout << "INFO: Hamming metric selected - binary conversion will be applied automatically." << std::endl;
+    } else if (model->metric == PACMAP_METRIC_COSINE) {
+        std::cout << "INFO: Cosine metric selected - L2 normalization will be applied automatically." << std::endl;
     }
 
     return PACMAP_SUCCESS;

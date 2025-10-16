@@ -318,7 +318,7 @@ namespace PacMapSharp
         #region Constants
 
         // Expected DLL version - must match C++ PACMAP_WRAPPER_VERSION_STRING
-        private const string EXPECTED_DLL_VERSION = "2.8.23";
+        private const string EXPECTED_DLL_VERSION = "2.8.24";
 
         #endregion
 

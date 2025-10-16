@@ -3,16 +3,17 @@
 ## Overview
 Complete API documentation for the PACMAP (Pairwise Controlled Manifold Approximation and Projection) implementation with native C++ optimization. This document covers both C++ and C# APIs with comprehensive examples and best practices for dimensionality reduction with superior structure preservation.
 
-## 🚀 Key Features in v2.4.9-TEST
+## 🚀 Key Features in v2.8.24
 
-### Current Testing Phase Features
+### Current Production Features
+- **Multi-Metric Support**: Euclidean, Manhattan, Cosine, and Hamming distances (fully supported)
 - **HNSW Optimization**: 29-51x faster training with approximate nearest neighbors
 - **Progress Reporting**: Phase-aware callbacks with detailed progress information
 - **Model Persistence**: Complete save/load functionality with CRC32 validation
 - **16-bit Quantization**: 50-80% memory reduction for model storage
 - **Auto HNSW Parameter Discovery**: Automatic optimization based on data size
 - **Cross-Platform**: Windows and Linux support with identical results
-- **Testing Phase**: Currently only Euclidean distance is fully verified
+- **Production Ready**: All 4 distance metrics are fully tested and verified
 
 ### Previous Major Improvements
 - **Complete PACMAP Algorithm**: Full triplet-based approach with three-phase optimization
@@ -73,7 +74,7 @@ public float[,] Fit(float[,] data,
 - `fpRatio`: Far-pair ratio for uniform distribution (default: 2.0)
 - `learningRate`: Learning rate for optimization (default: 1.0)
 - `numIters`: Three-phase iteration tuple (default: (100, 100, 250))
-- `metric`: Distance metric for computation (currently only Euclidean fully verified)
+- `metric`: Distance metric for computation (Euclidean, Manhattan, Cosine, Hamming - all fully verified)
 - `forceExactKnn`: Use exact KNN vs HNSW approximation (default: false for HNSW)
 - `randomSeed`: Random seed for reproducible results (-1 = random)
 - `autoHNSWParam`: Automatically tune HNSW parameters based on data size (default: true)
@@ -91,7 +92,7 @@ var customEmbedding = pacmap.Fit(data,
     mnRatio: 1.0f,                    // Stronger global structure
     fpRatio: 3.0f,                    // Better uniform distribution
     learningRate: 1.0f,                // Learning rate
-    metric: DistanceMetric.Euclidean,  // Currently only Euclidean fully verified
+    metric: DistanceMetric.Euclidean,  // All metrics fully verified: Euclidean, Manhattan, Cosine, Hamming
     randomSeed: 42,                   // Reproducible results
     autoHNSWParam: true,               // Auto-tune HNSW parameters
     progressCallback: (phase, current, total, percent, message) => {
@@ -102,7 +103,7 @@ var customEmbedding = pacmap.Fit(data,
 var mlEmbedding = pacmap.Fit(data,
     embeddingDimension: 10,            // 10D for machine learning
     nNeighbors: 20,                    // More neighbors for stability
-    metric: DistanceMetric.Euclidean,
+    metric: DistanceMetric.Euclidean,  // Options: Euclidean, Manhattan, Cosine, Hamming
     randomSeed: 123,
     autoHNSWParam: true);
 
@@ -149,23 +150,20 @@ Console.WriteLine($"Embedding shape: [{embedding.GetLength(0)}, {embedding.GetLe
 public enum DistanceMetric
 {
     Euclidean = 0,      // ✅ Fully tested and verified
-    Cosine = 1,         // 🔄 In development
-    Manhattan = 2,      // 🔄 In development
-    Correlation = 3,    // 🔄 In development
-    Hamming = 4         // 🔄 In development
+    Cosine = 1,         // ✅ Fully tested and verified
+    Manhattan = 2,      // ✅ Fully tested and verified
+    Hamming = 4         // ✅ Fully tested and verified
 }
 ```
 
 **Current Status:**
-- **Euclidean**: ✅ Fully tested, verified, and production-ready
-- **Other Metrics**: 🔄 Available in interface but not yet fully verified
+- **All Metrics**: ✅ Fully tested, verified, and production-ready
 
 **Best Use Cases:**
-- **Euclidean**: General-purpose numeric data, physical coordinates, currently recommended
-- **Cosine**: High-dimensional sparse data, text embeddings, images (future)
-- **Manhattan**: Outlier-robust applications, grid-like data (future)
-- **Correlation**: Time series, correlated features, pattern matching (future)
-- **Hamming**: Binary/categorical data, DNA sequences, error detection (future)
+- **Euclidean**: General-purpose numeric data, physical coordinates, continuous features
+- **Cosine**: High-dimensional sparse data, text embeddings, normalized vectors
+- **Manhattan**: Outlier-robust applications, grid-like data, L1-norm preferences
+- **Hamming**: Binary/categorical data, DNA sequences, error detection, bitwise comparison
 
 ### Transform Methods
 
@@ -322,7 +320,6 @@ typedef enum {
     PACMAP_METRIC_EUCLIDEAN = 0,
     PACMAP_METRIC_COSINE = 1,
     PACMAP_METRIC_MANHATTAN = 2,
-    PACMAP_METRIC_CORRELATION = 3,
     PACMAP_METRIC_HAMMING = 4
 } PacMapMetric;
 ```
@@ -355,7 +352,7 @@ if (result == PACMAP_SUCCESS) {
 
 ---
 
-## Performance Characteristics (v2.4.9-TEST)
+## Performance Characteristics (v2.8.24)
 
 ### PACMAP vs Traditional Methods
 
@@ -510,11 +507,11 @@ var largePacMap = new PacMapModel(
 
 ### Distance Metric Selection
 
-- **Euclidean**: General purpose, physical coordinates
-- **Cosine**: High-dimensional sparse data, text embeddings
-- **Manhattan**: Robust to outliers, grid-like data
-- **Correlation**: Time series, correlated features
-- **Hamming**: Binary data, categorical features
+- **Euclidean**: General purpose, physical coordinates, continuous features
+- **Cosine**: High-dimensional sparse data, text embeddings, normalized vectors
+- **Manhattan**: Robust to outliers, grid-like data, L1-norm preferences
+- **Hamming**: Binary/categorical data, DNA sequences, bitwise comparison
+- **Note**: All metrics are fully supported and production-ready in v2.8.24
 
 ### Production Deployment
 
