@@ -318,9 +318,9 @@ namespace PacMapDemo
 
             Console.WriteLine($"   Loaded: {data.GetLength(0)} points, {data.GetLength(1)} dimensions");
 
-            // Check if we have enough data for 50k subsample (test run)
+            // Full 1M hairy mammoth dataset
             int availableSamples = data.GetLength(0);
-            int requestedSamples = 100000;  // Changed from 200k to 100k
+            int requestedSamples = 1000000;  // Full 1M flagship dataset
 
             if (availableSamples < requestedSamples)
             {
@@ -328,7 +328,7 @@ namespace PacMapDemo
                 requestedSamples = availableSamples;
             }
 
-            Console.WriteLine($"   Subsampling {requestedSamples:N0} points for PACMAP processing (TEST RUN)...");
+            Console.WriteLine($"   Processing FULL {requestedSamples:N0} points for PACMAP (1M FLAGSHIP DEMO)...");
             var (data2, labels2) = DataLoaders.SampleRandomPoints(data, labels, requestedSamples);
             Console.WriteLine($"   Subsampled: {data2.GetLength(0)} points, {data2.GetLength(1)} dimensions");
 

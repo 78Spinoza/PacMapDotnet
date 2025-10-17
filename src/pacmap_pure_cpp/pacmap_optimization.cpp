@@ -54,8 +54,8 @@ void optimize_embedding(PacMapModel* model, double* embedding_out, pacmap_progre
 
     // Main optimization loop with three phases
     for (int iter = 0; iter < total_iters; ++iter) {
-        // ERROR13 FIX: Get three-phase weights for current iteration using Python-matching progress
-        auto [w_n, w_mn, w_f] = get_weights(iter, total_iters);
+        // FIX21: Get three-phase weights using iteration-based boundaries (matching Python exactly)
+        auto [w_n, w_mn, w_f] = get_weights(iter, model->phase1_iters, model->phase2_iters);
 
         // MEMORY FIX: Compute gradients using flat triplet storage to prevent allocation failures
         compute_gradients_flat(embedding, model->triplets_flat, gradients,
@@ -418,7 +418,7 @@ void monitor_optimization_progress(int iter, int total_iters, float loss,
     if (callback) callback(phase.c_str(), iter, total_iters, progress, message.c_str());
 }
 
-float compute_embedding_quality(const std::vector<float>& embedding, const std::vector<uint32_t>& triplets_flat,
+float compute_embedding_quality(const std::vector<float>& embedding, const std::vector<uint64_t>& triplets_flat,
                                int n_components) {
     if (triplets_flat.empty()) return 0.0f;
 
@@ -429,9 +429,9 @@ float compute_embedding_quality(const std::vector<float>& embedding, const std::
         size_t triplet_offset = idx * 3;
 
         // Extract triplet data from flat storage
-        uint32_t anchor = triplets_flat[triplet_offset];
-        uint32_t neighbor = triplets_flat[triplet_offset + 1];
-        uint32_t type = triplets_flat[triplet_offset + 2];
+        uint64_t anchor = triplets_flat[triplet_offset];
+        uint64_t neighbor = triplets_flat[triplet_offset + 1];
+        uint64_t type = triplets_flat[triplet_offset + 2];
 
         size_t idx_a = static_cast<size_t>(anchor) * n_components;
         size_t idx_n = static_cast<size_t>(neighbor) * n_components;
@@ -548,9 +548,9 @@ OptimizationDiagnostics run_optimization_with_diagnostics(PacMapModel* model,
     }
 
     // Store initial loss
-    // ERROR13 FIX: Use corrected weight function signature
+    // FIX21: Use iteration-based weight function
     int total_iters = model->phase1_iters + model->phase2_iters + model->phase3_iters;
-    auto [w_n, w_mn, w_f] = get_weights(0, total_iters);
+    auto [w_n, w_mn, w_f] = get_weights(0, model->phase1_iters, model->phase2_iters);
     // MEMORY FIX: Use flat storage loss computation for diagnostics
     diagnostics.initial_loss = static_cast<float>(compute_pacmap_loss_flat(embedding_double, model->triplets_flat,
                                                   w_n, w_mn, w_f, model->n_components));

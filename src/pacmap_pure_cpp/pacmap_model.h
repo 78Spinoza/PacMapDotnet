@@ -118,9 +118,9 @@ struct PacMapModel {
     std::unique_ptr<hnswlib::L2Space> original_space;
     std::unique_ptr<hnswlib::L2Space> embedding_space;
 
-    // MEMORY FIX: Flat triplet storage using uint32_t to prevent allocation failures
+    // OVERFLOW FIX: Flat triplet storage using uint64_t for large dataset support
     // Format: [anchor1, neighbor1, type1, anchor2, neighbor2, type2, ...]
-    std::vector<uint32_t> triplets_flat;  // More memory efficient than nested vectors
+    std::vector<uint64_t> triplets_flat;  // 64-bit indexing prevents overflow with large datasets
 
     // Data storage - now double precision
     std::vector<double> training_data;
@@ -186,8 +186,8 @@ struct PacMapModel {
         }
     }
 
-    // MEMORY FIX: Helper functions for flat triplet storage
-    inline void add_triplet(uint32_t anchor, uint32_t neighbor, uint32_t type) {
+    // OVERFLOW FIX: Helper functions for flat triplet storage with 64-bit indexing
+    inline void add_triplet(uint64_t anchor, uint64_t neighbor, uint64_t type) {
         triplets_flat.push_back(anchor);
         triplets_flat.push_back(neighbor);
         triplets_flat.push_back(type);

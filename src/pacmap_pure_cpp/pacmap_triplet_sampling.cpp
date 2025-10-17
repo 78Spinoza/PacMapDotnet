@@ -16,9 +16,6 @@
 
 void sample_triplets(PacMapModel* model, double* data, pacmap_progress_callback_internal callback) {
 
-    
-    // CRITICAL DEBUG: Add more detailed triplet analysis
-
     // Validate parameters first
     if (validate_parameters(model) != PACMAP_SUCCESS) {
         if (callback) callback("Error", 0, 100, 0.0f, "Parameter validation failed");
@@ -98,21 +95,21 @@ void sample_triplets(PacMapModel* model, double* data, pacmap_progress_callback_
         // Only reserve for smaller datasets where allocation won't fail
         model->triplets_flat.reserve(std::min(total_triplets * 3, static_cast<size_t>(MAX_VECTOR_SIZE)));
     }
-    // Add triplets using flat storage
+    // Add triplets using flat storage with 64-bit indexing
     for (const auto& t : neighbor_triplets) {
-        model->add_triplet(static_cast<uint32_t>(t.anchor),
-                          static_cast<uint32_t>(t.neighbor),
-                          static_cast<uint32_t>(t.type));
+        model->add_triplet(static_cast<uint64_t>(t.anchor),
+                          static_cast<uint64_t>(t.neighbor),
+                          static_cast<uint64_t>(t.type));
     }
     for (const auto& t : mn_triplets) {
-        model->add_triplet(static_cast<uint32_t>(t.anchor),
-                          static_cast<uint32_t>(t.neighbor),
-                          static_cast<uint32_t>(t.type));
+        model->add_triplet(static_cast<uint64_t>(t.anchor),
+                          static_cast<uint64_t>(t.neighbor),
+                          static_cast<uint64_t>(t.type));
     }
     for (const auto& t : fp_triplets) {
-        model->add_triplet(static_cast<uint32_t>(t.anchor),
-                          static_cast<uint32_t>(t.neighbor),
-                          static_cast<uint32_t>(t.type));
+        model->add_triplet(static_cast<uint64_t>(t.anchor),
+                          static_cast<uint64_t>(t.neighbor),
+                          static_cast<uint64_t>(t.type));
     }
 
     // [OK] v2.8.9 FIX: DISABLED shuffling to match Python sequential processing
@@ -152,9 +149,9 @@ void sample_triplets(PacMapModel* model, double* data, pacmap_progress_callback_
 
         // MEMORY FIX: Iterate through flat triplet storage
         for (size_t i = 0; i < model->triplets_flat.size(); i += 3) {
-            uint32_t anchor = model->triplets_flat[i];
-            uint32_t neighbor = model->triplets_flat[i + 1];
-            uint32_t type = model->triplets_flat[i + 2];
+            uint64_t anchor = model->triplets_flat[i];
+            uint64_t neighbor = model->triplets_flat[i + 1];
+            uint64_t type = model->triplets_flat[i + 2];
 
             unique_anchors.insert(static_cast<int>(anchor));
             unique_neighbors.insert(static_cast<int>(neighbor));
@@ -175,11 +172,11 @@ void sample_triplets(PacMapModel* model, double* data, pacmap_progress_callback_
 
             // MEMORY FIX: Iterate through flat triplet storage
             for (size_t i = 0; i < model->triplets_flat.size(); i += 3) {
-                uint32_t triplet_type = model->triplets_flat[i + 2];
-                if (triplet_type != static_cast<uint32_t>(type)) continue;
+                uint64_t triplet_type = model->triplets_flat[i + 2];
+                if (triplet_type != static_cast<uint64_t>(type)) continue;
 
-                uint32_t anchor = model->triplets_flat[i];
-                uint32_t neighbor = model->triplets_flat[i + 1];
+                uint64_t anchor = model->triplets_flat[i];
+                uint64_t neighbor = model->triplets_flat[i + 1];
 
                 double dist_double = distance_metrics::compute_distance(
                     normalized_data.data() + anchor * model->n_features,
@@ -267,8 +264,8 @@ void sample_neighbors_pair(PacMapModel* model, const std::vector<double>& normal
                  model->force_exact_knn ? "Using exact KNN" : "Using HNSW");
     }
 
-    // Fetch neighbors and calculate sigma
-    #pragma omp parallel for if(model->n_samples > 1000)
+    // Fetch neighbors and calculate sigma - parallelized for performance
+    #pragma omp parallel for schedule(dynamic, 100)
     for (int i = 0; i < model->n_samples; ++i) {
         std::vector<std::pair<double, int>> knn_temp;
 
@@ -359,8 +356,8 @@ void sample_neighbors_pair(PacMapModel* model, const std::vector<double>& normal
 
     //  STEP 4: Scale distances and sort by scaled distance
     completed = 0;
-    // TEMP FIX: Force single thread to test cross pattern issue
-    #pragma omp parallel for if(model->n_samples > 1000)
+    // Parallelized distance scaling for performance
+    #pragma omp parallel for schedule(dynamic, 100)
     for (int i = 0; i < model->n_samples; ++i) {
         // Scale distances by local density - Python lines 236-239 (now 142-151)
         // scaled_dist[i, j] = d / (sig[i] * sig[j])
@@ -624,7 +621,7 @@ void sample_FP_pair(PacMapModel* model, const std::vector<double>& normalized_da
 
     if (callback) {
         char msg[256];
-        snprintf(msg, sizeof(msg), "Generated %zu far pairs using Python's EXACT algorithm (v2.8.15)",
+        snprintf(msg, sizeof(msg), "Generated %zu far pairs",
                  fp_triplets.size());
         callback("Sampling Far Pairs", model->n_samples, model->n_samples, 100.0f, msg);
     }
@@ -733,7 +730,7 @@ std::unique_ptr<hnswlib::HierarchicalNSW<float>> create_hnsw_index(
         // Parallel addition for large datasets - much faster on multi-core CPUs
         std::atomic<int> completed(0);
 
-        // TEMP FIX: Force single thread to test cross pattern issue
+        // Parallel HNSW index building for performance
         #ifdef _OPENMP
            #pragma omp parallel for schedule(dynamic, 100)
         #endif
@@ -782,7 +779,7 @@ void filter_invalid_triplets(std::vector<Triplet>& triplets, int n_samples) {
     );
 }
 
-void filter_invalid_triplets_flat(std::vector<uint32_t>& triplets, int n_samples) {
+void filter_invalid_triplets_flat(std::vector<uint64_t>& triplets, int n_samples) {
     // MEMORY FIX: Filter invalid triplelets in flat storage format
     // Format: [anchor1, neighbor1, type1, anchor2, neighbor2, type2, ...]
 
@@ -790,13 +787,13 @@ void filter_invalid_triplets_flat(std::vector<uint32_t>& triplets, int n_samples
     for (size_t read_pos = 0; read_pos < triplets.size(); read_pos += 3) {
         if (read_pos + 2 >= triplets.size()) break; // Ensure we have complete triplet
 
-        uint32_t anchor = triplets[read_pos];
-        uint32_t neighbor = triplets[read_pos + 1];
-        uint32_t type = triplets[read_pos + 2];
+        uint64_t anchor = triplets[read_pos];
+        uint64_t neighbor = triplets[read_pos + 1];
+        uint64_t type = triplets[read_pos + 2];
 
         // Validate triplet
-        bool is_valid = (anchor < static_cast<uint32_t>(n_samples) &&
-                        neighbor < static_cast<uint32_t>(n_samples) &&
+        bool is_valid = (anchor < static_cast<uint64_t>(n_samples) &&
+                        neighbor < static_cast<uint64_t>(n_samples) &&
                         anchor != neighbor &&
                         type <= 2); // Valid TripletType
 

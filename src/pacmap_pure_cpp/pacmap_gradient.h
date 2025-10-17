@@ -7,16 +7,16 @@
 // Forward declaration for callback type
 typedef void (*pacmap_progress_callback_internal)(const char* phase, int current, int total, float percent, const char* message);
 
-// ERROR13 FIX: Three-phase weight schedule using Python-matching progress
-extern std::tuple<float, float, float> get_weights(int current_iter, int total_iters);
+// FIX21: Three-phase weight schedule using iteration-based boundaries (matching Python exactly)
+extern std::tuple<float, float, float> get_weights(int current_iter, int phase1_iters, int phase2_iters);
 
-// � PHASE 4: Enhanced phase transition debugging with phase information
-extern std::tuple<float, float, float, std::string> get_weights_with_phase_info(int current_iter, int total_iters);
+// FIX21: Enhanced phase transition debugging with phase information (iteration-based)
+extern std::tuple<float, float, float, std::string> get_weights_with_phase_info(int current_iter, int phase1_iters, int phase2_iters);
 
 // REMOVED: Old gradient computation - replaced by flat storage version
 
-// MEMORY FIX: Gradient computation for flat triplet storage to prevent allocation failures
-extern void compute_gradients_flat(const std::vector<double>& embedding, const std::vector<uint32_t>& triplets_flat,
+// OVERFLOW FIX: Gradient computation for flat triplet storage with 64-bit indexing
+extern void compute_gradients_flat(const std::vector<double>& embedding, const std::vector<uint64_t>& triplets_flat,
                                    std::vector<double>& gradients, float w_n, float w_mn, float w_f, int n_components,
                                    pacmap_progress_callback_internal callback = nullptr);
 
@@ -24,8 +24,8 @@ extern void compute_gradients_flat(const std::vector<double>& embedding, const s
 
 // REMOVED: Old loss computation - replaced by flat storage version
 
-// MEMORY FIX: Loss computation for flat triplet storage
-extern double compute_pacmap_loss_flat(const std::vector<double>& embedding, const std::vector<uint32_t>& triplets_flat,
+// OVERFLOW FIX: Loss computation for flat triplet storage with 64-bit indexing
+extern double compute_pacmap_loss_flat(const std::vector<double>& embedding, const std::vector<uint64_t>& triplets_flat,
                                        float w_n, float w_mn, float w_f, int n_components,
                                        pacmap_progress_callback_internal callback = nullptr);
 

@@ -24,56 +24,50 @@
 
 static std::chrono::high_resolution_clock::time_point gradient_start_time;
 
-std::tuple<float, float, float> get_weights(int current_iter, int total_iters) {
-    // FIX13-v4: CRITICAL - Match Python weight schedule EXACTLY!
-    // Python reference (pacmap.py lines 337-353) shows w_neighbors CHANGES across phases!
+std::tuple<float, float, float> get_weights(int current_iter, int phase1_iters, int phase2_iters) {
+    // FIX21: CRITICAL - Use iteration-based phase boundaries to match Python EXACTLY!
+    // Python reference (pacmap.py lines 337-353) uses explicit iteration counts, NOT percentages
     //
-    // PREVIOUS BUG: C++ used constant w_n=1.0, but Python uses 2.0  3.0  1.0
-    // This caused 2-3x weaker local structure in Phases 1-2, leading to oval formation
+    // PREVIOUS BUG: C++ used percentage-based boundaries (10%, 40%, 100%)
+    // This caused phase transitions at wrong times, leading to convergence issues
     //
-    // Python weight schedule:
-    //   Phase 1: w_neighbors=2.0, w_MN=10003, w_FP=1.0
-    //   Phase 2: w_neighbors=3.0, w_MN=3.0, w_FP=1.0
-    //   Phase 3: w_neighbors=1.0, w_MN=0.0, w_FP=1.0
+    // Python weight schedule (iteration-based):
+    //   Phase 1 (itr < phase1_iters):      w_neighbors=2.0, w_MN=1000→3 (linear), w_FP=1.0
+    //   Phase 2 (itr < phase1+phase2):     w_neighbors=3.0, w_MN=3.0, w_FP=1.0
+    //   Phase 3 (itr >= phase1+phase2):    w_neighbors=1.0, w_MN=0.0, w_FP=1.0
     float w_n, w_mn;
     float w_f = 1.0f;  // Constant in Python (this is correct)
 
-    float progress = static_cast<float>(current_iter) / total_iters;
-
-    if (progress < 0.1f) {
-        // Phase 1: Global structure (0-10%)
-        float phase1_progress = progress / 0.1f;
+    if (current_iter < phase1_iters) {
+        // Phase 1: Global structure
+        float phase1_progress = static_cast<float>(current_iter) / phase1_iters;
         w_mn = 1000.0f * (1.0f - phase1_progress) + 3.0f * phase1_progress;
-        w_n = 2.0f;   //  FIX: Python uses 2.0, NOT 1.0!
-    } else if (progress < 0.4f) {
-        // Phase 2: Balance phase (10-40%)
+        w_n = 2.0f;
+    } else if (current_iter < phase1_iters + phase2_iters) {
+        // Phase 2: Balance phase
         w_mn = 3.0f;
-        w_n = 3.0f;   //  FIX: Python uses 3.0, NOT 1.0!
+        w_n = 3.0f;
     } else {
-        // Phase 3: Local structure (40-100%)
-        // FIX13: w_MN must be ZERO immediately in Phase 3 (not gradual decay)
-        // Python reference (pacmap.py line 350): w_MN = 0.0 (instant zero)
-        // Previous bug: Used gradual decay w_mn = 3.0f * (1.0f - phase3_progress)  wrong force balance
-        w_mn = 0.0f;  //  Match Python exactly!
-        w_n = 1.0f;   //  Finally matches Python in Phase 3
+        // Phase 3: Local structure
+        w_mn = 0.0f;
+        w_n = 1.0f;
     }
 
     return {w_n, w_mn, w_f};
 }
 
-std::tuple<float, float, float, std::string> get_weights_with_phase_info(int current_iter, int total_iters) {
+std::tuple<float, float, float, std::string> get_weights_with_phase_info(int current_iter, int phase1_iters, int phase2_iters) {
+    // FIX21: Updated to match iteration-based phase boundaries
     float w_n, w_mn;
     float w_f = 1.0f;
     std::string current_phase_name;
 
-    float progress = static_cast<float>(current_iter) / total_iters;
-
-    if (progress < 0.1f) {
-        float phase1_progress = progress / 0.1f;
+    if (current_iter < phase1_iters) {
+        float phase1_progress = static_cast<float>(current_iter) / phase1_iters;
         w_mn = 1000.0f * (1.0f - phase1_progress) + 3.0f * phase1_progress;
         w_n = 2.0f;
         current_phase_name = "Phase 1: Global Structure";
-    } else if (progress < 0.4f) {
+    } else if (current_iter < phase1_iters + phase2_iters) {
         w_mn = 3.0f;
         w_n = 3.0f;
         current_phase_name = "Phase 2: Balance Phase";
@@ -126,17 +120,21 @@ bool validate_gradients(const std::vector<double>& gradients, const std::string&
 
 // REMOVED: Old compute_gradients function - replaced by compute_gradients_flat
 
-void compute_gradients_flat(const std::vector<double>& embedding, const std::vector<uint32_t>& triplets_flat,
+void compute_gradients_flat(const std::vector<double>& embedding, const std::vector<uint64_t>& triplets_flat,
                            std::vector<double>& gradients, float w_n, float w_mn, float w_f, int n_components,
                            pacmap_progress_callback_internal callback) {
+
+    // FIX21 Cleanup: Removed verbose overflow detection debug output
+    // Root cause fixed (200k index rejection removed), uint64_t provides adequate range
+    // Bounds checking retained at line 200-205 for memory safety
+    size_t embedding_size = embedding.size();
+    size_t num_triplets = triplets_flat.size() / 3;
 
     // MEMORY FIX: Reserve memory to avoid reallocations
     gradients.assign(embedding.size(), 0.0);
 
     // MEMORY FIX: Check if SIMD is available via runtime detection
     bool use_simd = pacmap_simd::should_use_simd();
-
-    size_t num_triplets = triplets_flat.size() / 3;
 
   
     // FIX17.md Step 5: Use better OpenMP chunk size for cache locality
@@ -145,12 +143,20 @@ void compute_gradients_flat(const std::vector<double>& embedding, const std::vec
         size_t triplet_offset = idx * 3;
 
         // Extract triplet data from flat storage
-        uint32_t anchor = triplets_flat[triplet_offset];
-        uint32_t neighbor = triplets_flat[triplet_offset + 1];
-        uint32_t type = triplets_flat[triplet_offset + 2];
+        uint64_t anchor = triplets_flat[triplet_offset];
+        uint64_t neighbor = triplets_flat[triplet_offset + 1];
+        uint64_t type = triplets_flat[triplet_offset + 2];
+
+        // FIX21: Removed harmful 200k limit check - uint64_t supports up to 18 quintillion indices
+        // The actual bounds check below provides adequate protection for memory safety
 
         size_t idx_a = static_cast<size_t>(anchor) * n_components;
         size_t idx_n = static_cast<size_t>(neighbor) * n_components;
+
+        // SAFETY CHECK: Verify calculated indices are within embedding bounds
+        if (idx_a >= embedding.size() || idx_n >= embedding.size()) {
+            continue; // Skip this triplet to prevent memory corruption
+        }
 
         // FIX17.md Step 3: Fused distance computation with NaN/Inf check
         double d_ij = 1.0;
@@ -226,7 +232,7 @@ void compute_gradients_flat(const std::vector<double>& embedding, const std::vec
 
 // REMOVED: Old compute_pacmap_loss function - replaced by compute_pacmap_loss_flat
 
-double compute_pacmap_loss_flat(const std::vector<double>& embedding, const std::vector<uint32_t>& triplets_flat,
+double compute_pacmap_loss_flat(const std::vector<double>& embedding, const std::vector<uint64_t>& triplets_flat,
                                float w_n, float w_mn, float w_f, int n_components,
                                pacmap_progress_callback_internal callback) {
 
@@ -241,9 +247,9 @@ double compute_pacmap_loss_flat(const std::vector<double>& embedding, const std:
         size_t triplet_offset = idx * 3;
 
         // Extract triplet data from flat storage
-        uint32_t anchor = triplets_flat[triplet_offset];
-        uint32_t neighbor = triplets_flat[triplet_offset + 1];
-        uint32_t type = triplets_flat[triplet_offset + 2];
+        uint64_t anchor = triplets_flat[triplet_offset];
+        uint64_t neighbor = triplets_flat[triplet_offset + 1];
+        uint64_t type = triplets_flat[triplet_offset + 2];
 
         size_t idx_a = static_cast<size_t>(anchor) * n_components;
         size_t idx_n = static_cast<size_t>(neighbor) * n_components;
@@ -262,26 +268,25 @@ double compute_pacmap_loss_flat(const std::vector<double>& embedding, const std:
             continue;
         }
 
-        // v2.8.10: CORRECTED loss formulas consistent with FIXED gradient implementation
-        // ALL THREE TRIPLET TYPES are now ATTRACTIVE, so loss should decrease with smaller distances
+        // FIX21: Match Python loss formulas EXACTLY (Python pacmap.py lines 275, 288, 301)
+        // Remove extra multipliers (20.0, 20000.0, 2.0) that belong in gradient, not loss
         double loss_term = 0.0;
         switch (static_cast<TripletType>(type)) {
             case NEIGHBOR:
-                // Consistent with grad = w_n * 20.0 / (10.0 + d_ij)^2 (attractive)
-                loss_term = static_cast<double>(w_n) * 20.0 * d_ij / (10.0 + d_ij);
+                // Python: loss[0] += w_neighbors * (d_ij / (10. + d_ij))
+                loss_term = static_cast<double>(w_n) * d_ij / (10.0 + d_ij);
                 neighbor_loss += loss_term;
                 neighbor_count++;
                 break;
             case MID_NEAR:
-                // Consistent with grad = w_mn * 20000.0 / (10000.0 + d_ij)^2 (attractive)
-                loss_term = static_cast<double>(w_mn) * 20000.0 * d_ij / (10000.0 + d_ij);
+                // Python: loss[1] += w_MN * d_ij / (10000. + d_ij)
+                loss_term = static_cast<double>(w_mn) * d_ij / (10000.0 + d_ij);
                 mn_loss += loss_term;
                 mn_count++;
                 break;
             case FURTHER:
-                // v2.8.10: CORRECTED - now attractive, loss decreases with smaller distances
-                // Consistent with grad = w_f * 2.0 / (1.0 + d_ij)^2 (attractive)
-                loss_term = static_cast<double>(w_f) * 2.0 * d_ij / (1.0 + d_ij);
+                // Python: loss[2] += w_FP * 1. / (1. + d_ij)
+                loss_term = static_cast<double>(w_f) * 1.0 / (1.0 + d_ij);
                 fp_loss += loss_term;
                 fp_count++;
                 break;

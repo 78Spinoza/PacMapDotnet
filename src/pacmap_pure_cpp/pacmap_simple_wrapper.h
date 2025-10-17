@@ -33,7 +33,7 @@ extern "C" {
 #define PACMAP_ERROR_FITTING_FAILED -10
 
 // Version information
-#define PACMAP_WRAPPER_VERSION_STRING "2.8.27"
+#define PACMAP_WRAPPER_VERSION_STRING "2.8.29"
 
 // Distance metrics
     typedef enum {
@@ -205,9 +205,10 @@ extern "C" {
 
 // Forward declarations for implementation namespaces
 namespace transform_utils {
-    int pacmap_transform(PacMapModel* model, float* new_data, int n_new_obs, int n_dim, float* embedding);
-    int pacmap_transform_detailed(PacMapModel* model, float* new_data, int n_new_obs, int n_dim, float* embedding,
-        int* nn_indices, float* nn_distances, float* confidence_score, int* outlier_level, float* percentile_rank, float* z_score);
+    // Internal double versions (used by C API)
+    int internal_pacmap_transform(PacMapModel* model, double* new_data, int n_new_obs, int n_dim, double* embedding);
+    int internal_pacmap_transform_detailed(PacMapModel* model, double* new_data, int n_new_obs, int n_dim, double* embedding,
+        int* nn_indices, double* nn_distances, double* confidence_score, int* outlier_level, double* percentile_rank, double* z_score);
 }
 
 }

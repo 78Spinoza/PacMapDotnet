@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.15)
-project(pacmap VERSION 2.8.27 LANGUAGES C CXX)
+project(pacmap VERSION 2.8.28 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

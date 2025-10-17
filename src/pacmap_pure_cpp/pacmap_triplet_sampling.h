@@ -28,7 +28,7 @@ extern std::unique_ptr<hnswlib::HierarchicalNSW<float>> create_hnsw_index(
 // Triplet validation and filtering
 extern bool is_valid_triplet(const Triplet& triplet, int n_samples);
 extern void filter_invalid_triplets(std::vector<Triplet>& triplets, int n_samples);
-extern void filter_invalid_triplets_flat(std::vector<uint32_t>& triplets, int n_samples);
+extern void filter_invalid_triplets_flat(std::vector<uint64_t>& triplets, int n_samples);
 extern void deduplicate_triplets(std::vector<Triplet>& triplets);
 
 // Sampling strategy utilities
