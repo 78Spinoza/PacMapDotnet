@@ -30,7 +30,7 @@ namespace PacMapBenchmarks
         static void RunQuickBenchmark(int nSamples, int nFeatures)
         {
             // Generate test data
-            float[,] data = GenerateTestData(nSamples, nFeatures);
+            double[,] data = GenerateTestData(nSamples, nFeatures);
 
             // Memory before
             long memoryBefore = GC.GetTotalMemory(true);
@@ -40,16 +40,16 @@ namespace PacMapBenchmarks
 
             // Benchmark fitting
             var sw = Stopwatch.StartNew();
-            float[,] embedding = model.Fit(data, embeddingDimension: 2, nNeighbors: 10);
+            double[,] embedding = model.Fit(data, embeddingDimension: 2, nNeighbors: 10);
             sw.Stop();
             long fitTime = sw.ElapsedMilliseconds;
 
             // Generate transform test data
-            float[,] newData = GenerateTestData(100, nFeatures);
+            double[,] newData = GenerateTestData(100, nFeatures);
 
             // Benchmark transformation
             sw.Restart();
-            float[,] newEmbedding = model.Transform(newData);
+            double[,] newEmbedding = model.Transform(newData);
             sw.Stop();
             long transformTime = sw.ElapsedMilliseconds;
 
@@ -66,16 +66,16 @@ namespace PacMapBenchmarks
             GC.WaitForPendingFinalizers();
         }
 
-        static float[,] GenerateTestData(int nSamples, int nFeatures)
+        static double[,] GenerateTestData(int nSamples, int nFeatures)
         {
-            float[,] data = new float[nSamples, nFeatures];
+            double[,] data = new double[nSamples, nFeatures];
             Random rand = new Random(42);
 
             for (int i = 0; i < nSamples; i++)
             {
                 for (int j = 0; j < nFeatures; j++)
                 {
-                    data[i, j] = (float)rand.NextDouble() * 10.0f - 5.0f;
+                    data[i, j] = rand.NextDouble() * 10.0 - 5.0;
                 }
             }
 

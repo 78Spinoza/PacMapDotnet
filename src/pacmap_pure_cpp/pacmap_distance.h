@@ -9,7 +9,7 @@
 namespace distance_metrics {
 
     // FIX17.md Step 6: Inlined distance metric functions for performance
-    // FIX22 Tier 1: Use std::sqrtf for float operations to avoid casting
+    // Note: Using std::sqrt for cross-platform compatibility
     // FIX22 Tier 2: Add const pointers for better compiler optimization
     inline float euclidean_distance(const float* a, const float* b, int dim) {
         float dist = 0.0f;
@@ -17,7 +17,7 @@ namespace distance_metrics {
             float diff = a[i] - b[i];
             dist += diff * diff;
         }
-        return std::sqrtf(dist);
+        return std::sqrt(dist);
     }
 
     inline float cosine_distance(const float* a, const float* b, int dim) {
@@ -29,9 +29,9 @@ namespace distance_metrics {
             norm_b += b[i] * b[i];
         }
 
-        // FIX22 Tier 1: Use std::sqrtf for float operations
-        norm_a = std::sqrtf(norm_a);
-        norm_b = std::sqrtf(norm_b);
+        // Note: Using std::sqrt for cross-platform compatibility
+        norm_a = std::sqrt(norm_a);
+        norm_b = std::sqrt(norm_b);
 
         if (norm_a < 1e-10f || norm_b < 1e-10f) return 1.0f;
 
@@ -69,8 +69,8 @@ namespace distance_metrics {
 
         if (den_a < 1e-10f || den_b < 1e-10f) return 1.0f;
 
-        // FIX22 Tier 1: Use std::sqrtf for float operations
-        float correlation = num / std::sqrtf(den_a * den_b);
+        // Note: Using std::sqrt for cross-platform compatibility
+        float correlation = num / std::sqrt(den_a * den_b);
         correlation = std::max(-1.0f, std::min(1.0f, correlation));
 
         return 1.0f - correlation;
