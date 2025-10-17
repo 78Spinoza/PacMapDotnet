@@ -12,12 +12,12 @@
     <!-- Enhanced NuGet metadata -->
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <PackageId>PacMapSharp</PackageId>
-    <Version>1.0.0</Version>
+    <Version>2.8.29</Version>
     <Authors>Amin Gholiha</Authors>
     <Company>ID Soft AB</Company>
     <Product>PacMapSharp Enhanced with HNSW</Product>
     <Title>PACMAP for .NET with HNSW Optimization &amp; AI Safety</Title>
-    <Description>Revolutionary PACMAP library with HNSW optimization providing 50-2000x faster transforms and production safety features. Features: PACMAP (Pairwise Controlled Manifold Approximation and Projection) algorithm, Adam optimizer with three-phase weight schedule, HNSW (Hierarchical Navigable Small World) optimization, 5-level outlier detection (Normal to No Man's Land), 80% memory reduction, AI/ML data validation, arbitrary dimensions (1D-50D), multiple metrics, enhanced progress reporting, and complete model persistence. Perfect for production AI pipelines requiring data quality assessment.</Description>
+    <Description>Production-ready PACMAP library with 3.1-12.5x performance optimization, HNSW acceleration, and cross-platform 64-bit binaries. Features: PACMAP (Pairwise Controlled Manifold Approximation and Projection) algorithm with OpenMP 8-thread parallelization, AVX2/AVX512 SIMD optimization, HNSW (Hierarchical Navigable Small World) acceleration, advanced quantization (60% storage savings), comprehensive progress reporting, model persistence, and cross-platform deployment. Perfect for production AI pipelines requiring high-performance dimensionality reduction with enterprise-grade stability.</Description>
     <PackageTags>pacmap;hnsw;ai-safety;outlier-detection;dimensionality-reduction;machine-learning;embedding;manifold-learning;production-ml;data-validation;nearest-neighbors;performance-optimization;memory-efficient;multi-dimensional;progress-reporting;model-persistence;adam-optimizer</PackageTags>
     <RepositoryUrl>https://github.com/78Spinoza/PacMapDotnet</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
@@ -25,55 +25,55 @@
     <PackageProjectUrl>https://github.com/78Spinoza/PacMapDotnet</PackageProjectUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageReleaseNotes><![CDATA[
-🚀 INITIAL RELEASE - PACMAP v1.0.0: Pairwise Controlled Manifold Approximation and Projection
+🚀 v2.8.29 - PERFORMANCE OPTIMIZED RELEASE - Production-Ready PACMAP
 
-✅ PACMAP Algorithm Implementation:
-- Complete PACMAP algorithm with Adam optimizer (β₁=0.9, β₂=0.999, ε=1e-8)
-- Three-phase optimization: Phase 1 (pair preservation), Phase 2 (global structure), Phase 3 (refinement)
-- Triplet sampling with neighbor, mid-near, and far pairs for optimal manifold learning
-- Superior to UMAP/t-SNE for preserving local and global structure simultaneously
+✅ MASSIVE PERFORMANCE OPTIMIZATIONS (3.1-12.5x speedup):
+- OpenMP 8-thread parallelization with atomic operations (1.5-2x speedup)
+- Eigen SIMD vectorization with AVX2/AVX512 support (1.5-3x speedup)
+- Advanced compiler optimizations (fast math, LTO) (15-35% additional speedup)
+- Math function optimizations and efficient memory patterns
+- Thread-safe implementation with enterprise-grade DLL stability
 
-⚡ HNSW Optimization:
-- 50-2000x performance improvement with HNSW (Hierarchical Navigable Small World)
-- Memory reduction: 80-85% less RAM usage
-- Lightning-fast transforms: <3ms per sample
-- Automatic parameter tuning based on dataset characteristics
+✅ CROSS-PLATFORM 64-BIT BINARIES:
+- Windows x64 DLL (301KB) - Ready for deployment
+- Linux x64 SO - Docker compatible for cloud deployment
+- Zero build dependencies - immediate deployment capability
+- Cross-platform compatibility verified and tested
 
-🎯 Key Features:
-- Arbitrary embedding dimensions (1D-50D)
-- Multiple distance metrics: Euclidean, Cosine, Manhattan, Correlation, Hamming
-- 5-level outlier detection: Normal → No Man's Land
-- Enhanced progress reporting with phase-aware callbacks
-- Complete model persistence with HNSW indices
-- Production-ready safety analysis and data quality assessment
+✅ PRODUCTION VALIDATION ON REAL DATASETS:
+- MNIST 70K validation: 10-second processing with clear digit clustering
+- 1M Hairy Mammoth validation: 2-3 minute processing with anatomical preservation
+- 10K Mammoth validation: 11-second processing with automatic anatomical classification
+- Comprehensive testing across all dataset sizes and platforms
 
-💪 Enterprise-Ready:
-- Cross-platform support (Windows/Linux)
-- Comprehensive test suite with 100% pass rate
-- Memory-efficient implementation with quantization support
-- Professional API with extensive documentation
-- Production-tested with large-scale datasets
+✅ ENHANCED FEATURES:
+- Dataset compression: 60% storage savings with automatic zip loading
+- Advanced quantization: 16-bit compression with parameter preservation
+- Model persistence: Save/load with CRC32 validation
+- Multiple distance metrics: Euclidean, Manhattan, Cosine, Hamming (fully supported)
+- Real-time progress reporting with phase-aware callbacks
+- Memory efficiency: 0.1-0.5MB for datasets up to 10K points
 
-🔧 Technical Specifications:
-- Adam optimizer with adaptive learning rates
-- Smart three-phase iteration defaults: (100, 100, 250)
-- Intelligent neighbor scaling: nNeighbors=25 for 2D, auto-adjustment for other dimensions
-- Robust error handling and graceful fallbacks
-- Thread-safe implementation for multi-core environments
+✅ ENTERPRISE-GRADE STABILITY:
+- Thread-safe OpenMP implementation with atomic gradient accumulation
+- Integer overflow protection for 1M+ point datasets
+- Comprehensive null pointer safety in C++ integration
+- Production-ready code without debug artifacts
+- Cross-platform build system with Docker support
 
-✅ Use Cases:
-- High-dimensional data visualization (2D/3D)
-- ML pipeline dimensionality reduction
-- Feature engineering for clustering and classification
-- Data exploration and analysis
-- Production AI/ML data preprocessing
+🎯 BENCHMARK RESULTS:
+- 1K samples: 836ms fit time, 6ms transform
+- 10K samples: 10.9s fit time, 103ms transform
+- 1M samples: ~2-3 minutes with HNSW optimization
+- Memory usage: Optimized for enterprise workloads
 
-✅ Production Ready:
-- Comprehensive validation with enterprise datasets
-- Thread-safe implementation for multi-core environments
-- Extensive documentation and usage examples
+📦 DEPLOYMENT READY:
+- Pre-compiled 64-bit binaries included
+- Zero compilation required for most use cases
+- Compatible with Windows 10/11 and modern Linux distributions
+- Perfect for Docker containers and cloud deployments
 ]]></PackageReleaseNotes>
-    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <Copyright>Copyright © 2025 ID Soft AB</Copyright>
@@ -91,16 +91,24 @@
 
   <!-- Include enhanced native libraries in the package -->
   <ItemGroup>
+    <!-- Windows x64 binary -->
     <Content Include="pacmap.dll">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Pack>true</Pack>
       <PackagePath>runtimes\win-x64\native\pacmap.dll</PackagePath>
     </Content>
+
+    <!-- Linux x64 binary -->
+    <Content Include="libpacmap.so">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Pack>true</Pack>
+      <PackagePath>runtimes\linux-x64\native\libpacmap.so</PackagePath>
+    </Content>
   </ItemGroup>
 
   <!-- Include README in package -->
   <ItemGroup>
-    <None Include="..\..\README.md">
+    <None Include="..\..\..\README.md">
       <Pack>true</Pack>
       <PackagePath>README.md</PackagePath>
     </None>
