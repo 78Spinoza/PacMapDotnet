@@ -6,7 +6,7 @@ namespace model_utils {
 
     PacMapModel* create_model() {
         try {
-            PacMapModel* model = new PacMapModel();
+            auto model = new PacMapModel();
             return model;
         }
         catch (const std::bad_alloc& e) {

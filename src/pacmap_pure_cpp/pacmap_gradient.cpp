@@ -8,10 +8,10 @@
 #include <iostream>
 #include <chrono>
 
-// ERROR14 Step 3: Eigen SIMD vectorization for distance calculations
+// Eigen SIMD vectorization for distance calculations
 #include <Eigen/Dense>
 
-// FIX17.md Step 4: Aligned memory allocation for SIMD
+// Aligned memory allocation for SIMD
 #ifdef _WIN32
 #include <xmmintrin.h>  // For _mm_malloc/_mm_free on Windows
 #else
@@ -25,7 +25,7 @@
 static std::chrono::high_resolution_clock::time_point gradient_start_time;
 
 std::tuple<float, float, float> get_weights(int current_iter, int phase1_iters, int phase2_iters) {
-    // FIX21: CRITICAL - Use iteration-based phase boundaries to match Python EXACTLY!
+    // Use iteration-based phase boundaries to match Python EXACTLY!
     // Python reference (pacmap.py lines 337-353) uses explicit iteration counts, NOT percentages
     //
     // PREVIOUS BUG: C++ used percentage-based boundaries (10%, 40%, 100%)
@@ -57,7 +57,7 @@ std::tuple<float, float, float> get_weights(int current_iter, int phase1_iters, 
 }
 
 std::tuple<float, float, float, std::string> get_weights_with_phase_info(int current_iter, int phase1_iters, int phase2_iters) {
-    // FIX21: Updated to match iteration-based phase boundaries
+    // Updated to match iteration-based phase boundaries
     float w_n, w_mn;
     float w_f = 1.0f;
     std::string current_phase_name;
@@ -118,26 +118,25 @@ bool validate_gradients(const std::vector<double>& gradients, const std::string&
 }
 
 
-// REMOVED: Old compute_gradients function - replaced by compute_gradients_flat
 
 void compute_gradients_flat(const std::vector<double>& embedding, const std::vector<uint64_t>& triplets_flat,
                            std::vector<double>& gradients, float w_n, float w_mn, float w_f, int n_components,
                            pacmap_progress_callback_internal callback) {
 
-    // FIX21 Cleanup: Removed verbose overflow detection debug output
+    // Cleanup: Removed verbose overflow detection debug output
     // Root cause fixed (200k index rejection removed), uint64_t provides adequate range
     // Bounds checking retained at line 200-205 for memory safety
     size_t embedding_size = embedding.size();
     size_t num_triplets = triplets_flat.size() / 3;
 
-    // MEMORY FIX: Reserve memory to avoid reallocations
+    // Reserve memory to avoid reallocations
     gradients.assign(embedding.size(), 0.0);
 
-    // MEMORY FIX: Check if SIMD is available via runtime detection
+    // Check if SIMD is available via runtime detection
     bool use_simd = pacmap_simd::should_use_simd();
 
   
-    // FIX17.md Step 5: Use better OpenMP chunk size for cache locality
+    // Use better OpenMP chunk size for cache locality
     #pragma omp parallel for schedule(static, 1000)
     for (int idx = 0; idx < static_cast<int>(num_triplets); ++idx) {
         size_t triplet_offset = idx * 3;
@@ -147,7 +146,7 @@ void compute_gradients_flat(const std::vector<double>& embedding, const std::vec
         uint64_t neighbor = triplets_flat[triplet_offset + 1];
         uint64_t type = triplets_flat[triplet_offset + 2];
 
-        // FIX21: Removed harmful 200k limit check - uint64_t supports up to 18 quintillion indices
+        // Removed harmful 200k limit check - uint64_t supports up to 18 quintillion indices
         // The actual bounds check below provides adequate protection for memory safety
 
         size_t idx_a = static_cast<size_t>(anchor) * n_components;
@@ -158,7 +157,7 @@ void compute_gradients_flat(const std::vector<double>& embedding, const std::vec
             continue; // Skip this triplet to prevent memory corruption
         }
 
-        // FIX17.md Step 3: Fused distance computation with NaN/Inf check
+        // Fused distance computation with NaN/Inf check
         double d_ij = 1.0;
         if (use_simd && n_components >= 4) {
             // Vectorized path using Eigen (AVX2/AVX512)
@@ -174,13 +173,13 @@ void compute_gradients_flat(const std::vector<double>& embedding, const std::vec
             }
         }
 
-        // FIX17.md Step 3: Inline NaN/Inf check - skip if distance is not finite
+        // Inline NaN/Inf check - skip if distance is not finite
         if (!std::isfinite(d_ij)) {
             continue;
         }
 
         // Calculate gradient magnitude based on triplet type
-        // FIX22 Tier 1: Replace std::pow with multiplication for performance
+        // Replace std::pow with multiplication for performance
         double grad_magnitude = 0.0;
         switch (static_cast<TripletType>(type)) {
             case NEIGHBOR:
@@ -203,12 +202,12 @@ void compute_gradients_flat(const std::vector<double>& embedding, const std::vec
                 break;
         }
 
-        // FIX17.md Step 3: Inline NaN/Inf check - skip if gradient magnitude is not finite
+        // Inline NaN/Inf check - skip if gradient magnitude is not finite
         if (!std::isfinite(grad_magnitude)) {
             continue;
         }
 
-        // MEMORY FIX: Use atomic operations for thread safety with flat storage
+        // Use atomic operations for thread safety with flat storage
         if (use_simd && n_components >= 4) {
             Eigen::Map<const Eigen::VectorXd> vec_a(embedding.data() + idx_a, n_components);
             Eigen::Map<const Eigen::VectorXd> vec_n(embedding.data() + idx_n, n_components);
@@ -240,7 +239,6 @@ void compute_gradients_flat(const std::vector<double>& embedding, const std::vec
     }
 }  // End compute_gradients_flat function
 
-// REMOVED: Old compute_pacmap_loss function - replaced by compute_pacmap_loss_flat
 
 double compute_pacmap_loss_flat(const std::vector<double>& embedding, const std::vector<uint64_t>& triplets_flat,
                                float w_n, float w_mn, float w_f, int n_components,
@@ -278,7 +276,7 @@ double compute_pacmap_loss_flat(const std::vector<double>& embedding, const std:
             continue;
         }
 
-        // FIX21: Match Python loss formulas EXACTLY (Python pacmap.py lines 275, 288, 301)
+        // Match Python loss formulas EXACTLY (Python pacmap.py lines 275, 288, 301)
         // Remove extra multipliers (20.0, 20000.0, 2.0) that belong in gradient, not loss
         double loss_term = 0.0;
         switch (static_cast<TripletType>(type)) {
@@ -430,7 +428,6 @@ size_t get_gradient_memory_usage(int n_samples, int n_components) {
 
 
 
-// REMOVED: Old compute_second_order_info function - would need flat storage adaptation
 
 void adaptive_learning_rate_adjustment(float& learning_rate, const std::vector<float>& loss_history) {
     if (loss_history.size() < 10) return;

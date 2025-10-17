@@ -10,7 +10,7 @@
 #include <cmath>
 #include <chrono>
 
-// ERROR14 Step 3: Eigen SIMD vectorization for Adam optimizer
+// Eigen SIMD vectorization for Adam optimizer
 #include <Eigen/Dense>
 
 void optimize_embedding(PacMapModel* model, double* embedding_out, pacmap_progress_callback_internal callback) {
@@ -54,14 +54,14 @@ void optimize_embedding(PacMapModel* model, double* embedding_out, pacmap_progre
 
     // Main optimization loop with three phases
     for (int iter = 0; iter < total_iters; ++iter) {
-        // FIX21: Get three-phase weights using iteration-based boundaries (matching Python exactly)
+        // Get three-phase weights using iteration-based boundaries (matching Python exactly)
         auto [w_n, w_mn, w_f] = get_weights(iter, model->phase1_iters, model->phase2_iters);
 
-        // MEMORY FIX: Compute gradients using flat triplet storage to prevent allocation failures
+        // Compute gradients using flat triplet storage to prevent allocation failures
         compute_gradients_flat(embedding, model->triplets_flat, gradients,
                              w_n, w_mn, w_f, model->n_components, callback);
 
-        // ERROR13 FIX: Choose optimizer based on Python reference vs Adam optimization
+        // Choose optimizer based on Python reference vs Adam optimization
         // Python reference uses simple SGD: embedding -= learning_rate * gradients
         // Our implementation defaults to Adam but allows SGD for exact Python matching
 
@@ -78,11 +78,11 @@ void optimize_embedding(PacMapModel* model, double* embedding_out, pacmap_progre
                            std::sqrt(1.0 - std::pow(static_cast<double>(model->adam_beta2), iter + 1)) /
                            (1.0 - std::pow(static_cast<double>(model->adam_beta1), iter + 1));
 
-            // ERROR14 Step 3: Check if SIMD is available via runtime detection
+            // Check if SIMD is available via runtime detection
             bool use_simd = pacmap_simd::should_use_simd() && model->n_components >= 4;
 
             if (use_simd) {
-                // FIX17.md Step 5: SIMD-optimized Adam optimizer using Eigen with better chunk size
+                // SIMD-optimized Adam optimizer using Eigen with better chunk size
                 // Process samples in parallel, but vectorize within each sample's dimensions
                 #pragma omp parallel for schedule(static, 1000)
                 for (int sample = 0; sample < model->n_samples; ++sample) {
@@ -94,7 +94,7 @@ void optimize_embedding(PacMapModel* model, double* embedding_out, pacmap_progre
                     Eigen::Map<Eigen::VectorXd> m_vec(model->adam_m.data() + sample_offset, model->n_components);
                     Eigen::Map<Eigen::VectorXd> v_vec(model->adam_v.data() + sample_offset, model->n_components);
 
-                    // ERROR14 Step 3: Vectorized Adam state updates
+                    // Vectorized Adam state updates
                     // First check for NaN/Inf in gradients (deterministic order)
                     bool has_finite_gradients = true;
                     for (int d = 0; d < model->n_components; ++d) {
@@ -143,11 +143,11 @@ void optimize_embedding(PacMapModel* model, double* embedding_out, pacmap_progre
                     }
                 }
             } else {
-                // FIX17.md Step 5: Scalar fallback for non-AVX2 CPUs or small dimensions
+                // Scalar fallback for non-AVX2 CPUs or small dimensions
                 // Use schedule(static, 1000) for better cache locality
                 #pragma omp parallel for schedule(static, 1000)
                 for (int i = 0; i < static_cast<int>(embedding.size()); ++i) {
-                    // ERROR13: NaN safety - skip non-finite gradients to prevent Adam state corruption
+                    // NaN safety - skip non-finite gradients to prevent Adam state corruption
                     if (!std::isfinite(gradients[i])) {
                         continue;
                     }
@@ -160,7 +160,7 @@ void optimize_embedding(PacMapModel* model, double* embedding_out, pacmap_progre
                     model->adam_v[i] = static_cast<double>(model->adam_beta2) * model->adam_v[i] +
                                             (1.0 - static_cast<double>(model->adam_beta2)) * gradients[i] * gradients[i];
 
-                    // ERROR13: Ensure adam_v stays non-negative (numerical safety check)
+                    // Ensure adam_v stays non-negative (numerical safety check)
                     if (model->adam_v[i] < 0.0) {
                         model->adam_v[i] = 0.0;
                     }
@@ -169,7 +169,7 @@ void optimize_embedding(PacMapModel* model, double* embedding_out, pacmap_progre
                     double adam_update = adam_lr * model->adam_m[i] /
                                         (std::sqrt(model->adam_v[i]) + static_cast<double>(model->adam_eps));
 
-                    // ERROR13: Check if Adam update is finite before applying (prevents NaN spreading)
+                    // Check if Adam update is finite before applying (prevents NaN spreading)
                     if (!std::isfinite(adam_update)) {
                         continue;
                     }
@@ -177,7 +177,7 @@ void optimize_embedding(PacMapModel* model, double* embedding_out, pacmap_progre
                     // Update parameters (pure double precision)
                     embedding[i] -= adam_update;
 
-                    // ERROR13: Final safety - reset embedding coordinate if it becomes non-finite
+                    // Final safety - reset embedding coordinate if it becomes non-finite
                     if (!std::isfinite(embedding[i])) {
                         // Reset to small random value if it becomes non-finite
                         embedding[i] = 0.01 * ((i % 2 == 0) ? 1.0 : -1.0);
@@ -188,7 +188,7 @@ void optimize_embedding(PacMapModel* model, double* embedding_out, pacmap_progre
             // Simple SGD optimizer (exact Python reference match)
             // Python line 351-352: embedding -= learning_rate * gradients
 
-            // ERROR14 Step 3: Check if SIMD is available via runtime detection
+            // Check if SIMD is available via runtime detection
             bool use_simd = pacmap_simd::should_use_simd() && model->n_components >= 4;
 
             if (use_simd) {
@@ -202,7 +202,7 @@ void optimize_embedding(PacMapModel* model, double* embedding_out, pacmap_progre
                     Eigen::Map<Eigen::VectorXd> emb_vec(embedding.data() + sample_offset, model->n_components);
                     Eigen::Map<Eigen::VectorXd> grad_vec(gradients.data() + sample_offset, model->n_components);
 
-                    // ERROR14 Step 3: Vectorized SGD update
+                    // Vectorized SGD update
                     // First check for NaN/Inf in gradients (deterministic order)
                     bool has_finite_gradients = true;
                     for (int d = 0; d < model->n_components; ++d) {
@@ -225,7 +225,7 @@ void optimize_embedding(PacMapModel* model, double* embedding_out, pacmap_progre
                     }
                 }
             } else {
-                // FIX17.md Step 5: Scalar fallback for non-AVX2 CPUs or small dimensions
+                // Scalar fallback for non-AVX2 CPUs or small dimensions
                 // Use schedule(static, 1000) for better cache locality
                 #pragma omp parallel for schedule(static, 1000)
                 for (int i = 0; i < static_cast<int>(embedding.size()); ++i) {
@@ -249,55 +249,12 @@ void optimize_embedding(PacMapModel* model, double* embedding_out, pacmap_progre
         bool should_report = (model->n_samples > 100000) || (iter % 10 == 0 || iter == total_iters - 1);
 
         if (should_report) {
-            // MEMORY FIX: Use flat storage loss computation to prevent allocation failures
+            // Use flat storage loss computation to prevent allocation failures
             double loss = compute_pacmap_loss_flat(embedding, model->triplets_flat,
                                                   w_n, w_mn, w_f, model->n_components);
             loss_history.push_back(static_cast<float>(loss));
 
-            // DEBUG: Check embedding spread for large datasets (cross pattern detection)
-            if (model->n_samples > 50000 && (iter == 0 || iter == 100 || iter == 500 || iter % 1000 == 0)) {
-                double min_x = embedding[0], max_x = embedding[0], min_y = embedding[1], max_y = embedding[1];
-                double sum_x = 0.0, sum_y = 0.0;
-
-                for (int i = 0; i < model->n_samples; ++i) {
-                    double x = embedding[i * 2];
-                    double y = embedding[i * 2 + 1];
-
-                    min_x = std::min(min_x, x);
-                    max_x = std::max(max_x, x);
-                    min_y = std::min(min_y, y);
-                    max_y = std::max(max_y, y);
-
-                    sum_x += x;
-                    sum_y += y;
-                }
-
-                double center_x = sum_x / model->n_samples;
-                double center_y = sum_y / model->n_samples;
-                double spread_x = max_x - min_x;
-                double spread_y = max_y - min_y;
-
-                // Check for cross pattern: points clustered in cross formation
-                double cross_score = 0.0;
-                int points_near_axes = 0;
-                for (int i = 0; i < model->n_samples; ++i) {
-                    double x = embedding[i * 2];
-                    double y = embedding[i * 2 + 1];
-
-                    // Distance from center
-                    double dx = x - center_x;
-                    double dy = y - center_y;
-
-                    // Check if point is near either axis (characteristic of cross pattern)
-                    if (std::abs(dx) < 0.1 * spread_x || std::abs(dy) < 0.1 * spread_y) {
-                        points_near_axes++;
-                    }
-                }
-
-                double axis_ratio = static_cast<double>(points_near_axes) / model->n_samples;
-
-              }
-
+  
 
             monitor_optimization_progress(iter, total_iters, loss, get_current_phase(iter, model->phase1_iters, model->phase2_iters), callback);
 
@@ -358,8 +315,6 @@ void initialize_random_embedding(std::vector<float>& embedding, int n_samples, i
 }
 
 
-// REMOVED: run_optimization_phase function - unused dead code that took unused Adam state parameters
-// REMOVED: Old AdaGrad optimization functions - now using Adam optimizer in main optimize_embedding function
 
 std::vector<OptimizationPhase> get_optimization_phases(int phase1_iters, int phase2_iters, int phase3_iters) {
     std::vector<OptimizationPhase> phases;
@@ -482,8 +437,8 @@ void apply_optimization_strategy(PacMapModel* model, OptimizationStrategy strate
 
         case OptimizationStrategy::MEMORY_EFFICIENT:
             // Reduce triplet counts for memory efficiency
-            // ERROR11-FIX-DETERMINISTIC: Do not modify mn_ratio - it should come from C# interface
-            // model->mn_ratio *= 0.8f;  // REMOVED: Prevents C# parameter control
+            // Do not modify mn_ratio - it should come from C# interface
+            // model->mn_ratio *= 0.8f;  // Prevents C# parameter control
             model->fp_ratio *= 0.8f;
             break;
 
@@ -548,10 +503,10 @@ OptimizationDiagnostics run_optimization_with_diagnostics(PacMapModel* model,
     }
 
     // Store initial loss
-    // FIX21: Use iteration-based weight function
+    // Use iteration-based weight function
     int total_iters = model->phase1_iters + model->phase2_iters + model->phase3_iters;
     auto [w_n, w_mn, w_f] = get_weights(0, model->phase1_iters, model->phase2_iters);
-    // MEMORY FIX: Use flat storage loss computation for diagnostics
+    // Use flat storage loss computation for diagnostics
     diagnostics.initial_loss = static_cast<float>(compute_pacmap_loss_flat(embedding_double, model->triplets_flat,
                                                   w_n, w_mn, w_f, model->n_components));
 
@@ -567,7 +522,7 @@ OptimizationDiagnostics run_optimization_with_diagnostics(PacMapModel* model,
     diagnostics.optimization_time_ms = std::chrono::duration<double, std::milli>(end_time - start_time).count();
 
     // Store final loss and compute reduction
-    // MEMORY FIX: Use flat storage loss computation for diagnostics
+    // Use flat storage loss computation for diagnostics
     diagnostics.final_loss = static_cast<float>(compute_pacmap_loss_flat(embedding_double, model->triplets_flat,
                                                 w_n, w_mn, w_f, model->n_components));
     diagnostics.loss_reduction = diagnostics.initial_loss - diagnostics.final_loss;
@@ -594,7 +549,6 @@ void assess_embedding_quality(const std::vector<float>& embedding, const PacMapM
     float quality = compute_embedding_quality(embedding, model->triplets_flat, model->n_components);
 }
 
-// REMOVED: compute_trustworthiness function - would need flat storage adaptation if needed
 
 void optimize_for_dataset_size(PacMapModel* model, int n_samples) {
     if (n_samples > 10000) {

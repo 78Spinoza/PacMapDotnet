@@ -77,6 +77,8 @@ namespace PACMAPCSharp.Tests
 
         /// <summary>
         /// Test HNSW vs Exact accuracy comparison
+        /// Validates that HNSW approximation provides similar results to exact computation
+        /// while maintaining performance benefits. Uses smaller dataset for faster execution.
         /// </summary>
         [TestMethod]
         public void Test_HNSW_vs_Exact_Accuracy()
@@ -111,6 +113,8 @@ namespace PACMAPCSharp.Tests
 
         /// <summary>
         /// Test all distance metrics with HNSW support
+        /// Validates that the main distance metrics (Euclidean, Cosine, Manhattan)
+        /// work correctly with HNSW acceleration for improved performance.
         /// </summary>
         [TestMethod]
         public void Test_Multi_Metric_Support()
@@ -144,7 +148,10 @@ namespace PACMAPCSharp.Tests
         }
 
         /// <summary>
-        /// Test unsupported metrics (should fall back to exact or handle limitations gracefully)
+        /// Test unsupported metrics fallback behavior
+        /// Validates that metrics not fully supported by HNSW (Correlation, Hamming)
+        /// gracefully fall back to exact computation or handle dataset limitations appropriately.
+        /// Some metrics require specific dataset characteristics to work effectively.
         /// </summary>
         [TestMethod]
         public void Test_Unsupported_Metrics_Fallback()

@@ -3,6 +3,7 @@ bin/
 obj/
 out/
 build/
+build-*/
 dist/
 target/
 *.exe
@@ -121,6 +122,10 @@ Coverage/
 *.swo
 *~
 
+# All tmp directories
+tmp/
+**/tmp/
+
 # Node.js (if any)
 node_modules/
 npm-debug.log*
@@ -194,6 +199,7 @@ secrets/
 .claude/
 docs/CLAUDE.md
 CLAUDE.md
+.claude.md
 
 # Build directories and temporary files
 src/pacmap_pure_cpp/CMakeFiles/

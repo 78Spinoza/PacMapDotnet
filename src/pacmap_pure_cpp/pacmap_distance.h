@@ -8,9 +8,9 @@
 // Distance metric implementations for UMAP
 namespace distance_metrics {
 
-    // FIX17.md Step 6: Inlined distance metric functions for performance
+    // Inlined distance metric functions for performance
     // Note: Using std::sqrt for cross-platform compatibility
-    // FIX22 Tier 2: Add const pointers for better compiler optimization
+    // Add const pointers for better compiler optimization
     inline float euclidean_distance(const float* a, const float* b, int dim) {
         float dist = 0.0f;
         for (int i = 0; i < dim; ++i) {
@@ -86,7 +86,7 @@ namespace distance_metrics {
         return static_cast<float>(different) / static_cast<float>(dim);
     }
 
-    // FIX17.md Step 6: Inlined distance metric functions (double precision)
+    // Inlined distance metric functions (double precision)
     inline double euclidean_distance(const double* a, const double* b, int dim) {
         double dist = 0.0;
         for (int i = 0; i < dim; ++i) {
@@ -161,7 +161,7 @@ namespace distance_metrics {
     }
 
     // Unified distance computation based on metric type
-    // FIX22 Tier 2: Add const pointers for better compiler optimization
+    // Add const pointers for better compiler optimization
     float compute_distance(const float* a, const float* b, int dim, PacMapMetric metric);
     double compute_distance(const double* a, const double* b, int dim, PacMapMetric metric);
 

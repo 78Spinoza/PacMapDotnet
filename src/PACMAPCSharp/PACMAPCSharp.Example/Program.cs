@@ -153,7 +153,7 @@ namespace PACMAPExample
 
                 var startTime = DateTime.Now;
 
-                float[,] embedding;
+                double[,] embedding;
                 if (progressCallback != null)
                 {
                     embedding = model.FitWithProgress(
@@ -442,10 +442,10 @@ namespace PACMAPExample
             Console.WriteLine();
         }
 
-        static float[,] GenerateExtremeOutliers(int nSamples, int nFeatures, int seed = 999)
+        static double[,] GenerateExtremeOutliers(int nSamples, int nFeatures, int seed = 999)
         {
             var random = new Random(seed);
-            var data = new float[nSamples, nFeatures];
+            var data = new double[nSamples, nFeatures];
 
             for (int i = 0; i < nSamples; i++)
             {
@@ -453,17 +453,17 @@ namespace PACMAPExample
                 {
                     // Generate extreme values far from typical training data
                     var sign = random.NextDouble() < 0.5 ? -1 : 1;
-                    data[i, j] = sign * (float)(10 + random.NextDouble() * 5); // Values in range [-15, -10] or [10, 15]
+                    data[i, j] = sign * (10 + random.NextDouble() * 5); // Values in range [-15, -10] or [10, 15]
                 }
             }
 
             return data;
         }
 
-        static float[,] GenerateTestData(int nSamples, int nFeatures, DataPattern pattern, int seed = 42)
+        static double[,] GenerateTestData(int nSamples, int nFeatures, DataPattern pattern, int seed = 42)
         {
             var random = new Random(seed);
-            var data = new float[nSamples, nFeatures];
+            var data = new double[nSamples, nFeatures];
 
             switch (pattern)
             {
@@ -473,7 +473,7 @@ namespace PACMAPExample
                     {
                         for (int j = 0; j < nFeatures; j++)
                         {
-                            data[i, j] = (float)GenerateNormal(random);
+                            data[i, j] = GenerateNormal(random);
                         }
                     }
                     break;
@@ -485,8 +485,8 @@ namespace PACMAPExample
                         for (int j = 0; j < nFeatures; j++)
                         {
                             data[i, j] = random.NextDouble() < 0.2
-                                ? (float)GenerateNormal(random)
-                                : 0.0f;
+                                ? GenerateNormal(random)
+                                : 0.0;
                         }
                     }
                     break;
@@ -497,20 +497,20 @@ namespace PACMAPExample
                     {
                         for (int j = 0; j < nFeatures; j++)
                         {
-                            data[i, j] = random.NextDouble() < 0.5 ? 1.0f : 0.0f;
+                            data[i, j] = random.NextDouble() < 0.5 ? 1.0 : 0.0;
                         }
                     }
                     break;
 
                 case DataPattern.Clustered:
                     // Clustered data
-                    var centers = new[] { -2.0f, 0.0f, 2.0f };
+                    var centers = new[] { -2.0, 0.0, 2.0 };
                     for (int i = 0; i < nSamples; i++)
                     {
                         var center = centers[random.Next(centers.Length)];
                         for (int j = 0; j < nFeatures; j++)
                         {
-                            data[i, j] = center + (float)GenerateNormal(random) * 0.5f;
+                            data[i, j] = center + GenerateNormal(random) * 0.5;
                         }
                     }
                     break;
@@ -519,11 +519,11 @@ namespace PACMAPExample
                     // Correlated features
                     for (int i = 0; i < nSamples; i++)
                     {
-                        var baseValue = (float)GenerateNormal(random);
+                        var baseValue = GenerateNormal(random);
                         for (int j = 0; j < nFeatures; j++)
                         {
-                            var correlation = 0.7f;
-                            var noise = (float)GenerateNormal(random) * (1.0f - correlation);
+                            var correlation = 0.7;
+                            var noise = GenerateNormal(random) * (1.0 - correlation);
                             data[i, j] = baseValue * correlation + noise;
                         }
                     }
@@ -553,7 +553,7 @@ namespace PACMAPExample
             return normal;
         }
 
-        static void ShowEmbeddingStats(float[,] embedding, string title, int maxDims = 5)
+        static void ShowEmbeddingStats(double[,] embedding, string title, int maxDims = 5)
         {
             var nSamples = embedding.GetLength(0);
             var nDims = embedding.GetLength(1);
@@ -562,7 +562,7 @@ namespace PACMAPExample
 
             for (int d = 0; d < Math.Min(maxDims, nDims); d++)
             {
-                float min = float.MaxValue, max = float.MinValue, sum = 0;
+                double min = double.MaxValue, max = double.MinValue, sum = 0;
 
                 for (int i = 0; i < nSamples; i++)
                 {
@@ -612,7 +612,7 @@ namespace PACMAPExample
             Console.WriteLine("\n2. Custom PACMAP Parameters Comparison (2D Visualization):");
 
             var testData = GenerateTestData(200, 50, DataPattern.Clustered);
-            var testValues = new[] { 1.0f, 2.5f, 5.0f, 8.0f };
+            var testValues = new[] { 1.0, 2.5, 5.0, 8.0 };
 
             foreach (var spread in testValues)
             {
@@ -665,20 +665,20 @@ namespace PACMAPExample
             Console.WriteLine("  - Override with custom numIters/(phase1,phase2,phase3) for fine-tuning");
         }
 
-        private static float CalculateSpreadScore(float[,] embedding)
+        private static double CalculateSpreadScore(double[,] embedding)
         {
             // Simple metric: average distance from origin (higher = more spread out)
-            float totalDist = 0;
+            double totalDist = 0;
             int nSamples = embedding.GetLength(0);
 
             for (int i = 0; i < nSamples; i++)
             {
-                float dist = 0;
+                double dist = 0;
                 for (int j = 0; j < embedding.GetLength(1); j++)
                 {
                     dist += embedding[i, j] * embedding[i, j];
                 }
-                totalDist += (float)Math.Sqrt(dist);
+                totalDist += Math.Sqrt(dist);
             }
 
             return totalDist / nSamples;

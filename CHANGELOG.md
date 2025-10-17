@@ -5,6 +5,29 @@ All notable changes to PacMapDotnet will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.29] - 2025-10-18
+
+### Changed
+- **Code Cleanup**: Removed debug-related comments and code throughout the codebase
+  - Eliminated ERROR/FIX/MEMORY FIX/REMOVED comments from optimization and gradient modules
+  - Removed debug code block for cross pattern detection in large datasets
+  - Cleaned up version-specific references while preserving meaningful technical comments
+  - Maintained all functional comments and documentation
+
+### Fixed
+- **C# Code**: Resolved type conversion errors in Example program (float[,] to double[,])
+- **C++ Code**: Applied clang-tidy modernization fixes throughout the codebase
+- **Build System**: Enhanced compatibility with modern C++ standards
+- **Documentation**: Updated comments to focus on technical functionality rather than implementation details
+
+### Technical
+- **Modernization**: Updated C++ syntax for better maintainability
+  - `typedef struct` → `using` declarations
+  - `std::mt19937` → `pcg64_fast` RNG integration
+  - Enhanced cross-platform compilation compatibility
+- **Build Verification**: All C# and C++ projects build successfully with 0 warnings, 0 errors
+- **DLL Distribution**: Updated native library distribution across all project directories
+
 ## [2.2.1] - 2025-10-09
 
 ### Added

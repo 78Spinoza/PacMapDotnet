@@ -68,15 +68,7 @@ namespace PACMAPCSharp.Tests
 
             // Validation Assertions (account for system variance and measurement noise)
             // With larger datasets (10k+), HNSW should show clear benefits
-            if (LargeSampleCount >= 10000)
-            {
-                Assert.IsTrue(speedup >= 1.2, $"HNSW should be faster for large datasets (speedup: {speedup:F2}x, expected ≥1.2x)");
-            }
-            else
-            {
-                // For smaller datasets, just ensure HNSW is competitive (within 20% of exact)
-                Assert.IsTrue(speedup >= 0.8, $"HNSW should be competitive with exact (speedup: {speedup:F2}x, allowing 20% variance for small datasets)");
-            }
+            Assert.IsTrue(speedup >= 1.2, $"HNSW should be faster for large datasets (speedup: {speedup:F2}x, expected ≥1.2x)");
 
             // Memory usage should be better with HNSW (though measurement may vary)
             Console.WriteLine($"✅ Performance benchmark completed - {speedup:F2}x speedup achieved");

@@ -235,10 +235,10 @@ namespace PacMapSharp
                                                         double[] percentileRank, double[] zScore);
 
         [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_save_model")]
-        private static extern int WindowsSaveModel(IntPtr model, [MarshalAs(UnmanagedType.LPStr)] string filename);
+        private static extern int WindowsSaveModel(IntPtr model, [MarshalAs(UnmanagedType.LPWStr)] string filename);
 
         [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_load_model")]
-        private static extern IntPtr WindowsLoadModel([MarshalAs(UnmanagedType.LPStr)] string filename);
+        private static extern IntPtr WindowsLoadModel([MarshalAs(UnmanagedType.LPWStr)] string filename);
 
         [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_destroy")]
         private static extern void WindowsDestroy(IntPtr model);
@@ -284,10 +284,10 @@ namespace PacMapSharp
                                                       double[] percentileRank, double[] zScore);
 
         [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_save_model")]
-        private static extern int LinuxSaveModel(IntPtr model, [MarshalAs(UnmanagedType.LPStr)] string filename);
+        private static extern int LinuxSaveModel(IntPtr model, [MarshalAs(UnmanagedType.LPWStr)] string filename);
 
         [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_load_model")]
-        private static extern IntPtr LinuxLoadModel([MarshalAs(UnmanagedType.LPStr)] string filename);
+        private static extern IntPtr LinuxLoadModel([MarshalAs(UnmanagedType.LPWStr)] string filename);
 
         [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_destroy")]
         private static extern void LinuxDestroy(IntPtr model);
@@ -427,6 +427,7 @@ namespace PacMapSharp
                                           p25Distance, p75Distance, adamEps);
             }
         }
+        private static readonly char[] separator = new[] { ' ', '\t' };
 
         #endregion
 
@@ -598,8 +599,7 @@ namespace PacMapSharp
                                        int hnswEfConstruction = 150,
                                        int hnswEfSearch = 100)
         {
-            if (progressCallback == null)
-                throw new ArgumentNullException(nameof(progressCallback));
+            ArgumentNullException.ThrowIfNull(progressCallback);
 
             return Fit(data, embeddingDimension, nNeighbors, mnRatio, fpRatio,
                       numIters, metric, forceExactKnn, hnswM, hnswEfConstruction, hnswEfSearch,
@@ -616,8 +616,7 @@ namespace PacMapSharp
         /// <exception cref="ArgumentException">Thrown when feature dimensions don't match training data</exception>
         public double[,] Transform(double[,] newData)
         {
-            if (newData == null)
-                throw new ArgumentNullException(nameof(newData));
+            ArgumentNullException.ThrowIfNull(newData);
 
             if (!IsFitted)
                 throw new InvalidOperationException("Model must be fitted before transforming new data");
@@ -661,8 +660,7 @@ namespace PacMapSharp
         /// <exception cref="ArgumentException">Thrown when feature dimensions don't match training data</exception>
         public TransformResult[] TransformWithSafety(double[,] newData)
         {
-            if (newData == null)
-                throw new ArgumentNullException(nameof(newData));
+            ArgumentNullException.ThrowIfNull(newData);
 
             if (!IsFitted)
                 throw new InvalidOperationException("Model must be fitted before transforming new data");
@@ -778,8 +776,7 @@ namespace PacMapSharp
                                    float learningRate = 1.0f,
                                    bool useQuantization = false)
         {
-            if (data == null)
-                throw new ArgumentNullException(nameof(data));
+            ArgumentNullException.ThrowIfNull(data);
 
             var nSamples = data.GetLength(0);
             var nFeatures = data.GetLength(1);
@@ -1115,9 +1112,9 @@ namespace PacMapSharp
                             var lines = output.Split('\n');
                             foreach (var line in lines)
                             {
-                                if (line.ToLower().Contains("version"))
+                                if (line.Contains("version", StringComparison.CurrentCultureIgnoreCase))
                                 {
-                                    var parts = line.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+                                    var parts = line.Split(separator, StringSplitOptions.RemoveEmptyEntries);
                                     foreach (var part in parts)
                                     {
                                         if (part.Contains('.'))
