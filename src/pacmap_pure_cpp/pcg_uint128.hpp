@@ -67,11 +67,13 @@
         #define PCG_LITTLE_ENDIAN 0
     #elif __x86_64 || __x86_64__ || __i386 || __i386__
         #define PCG_LITTLE_ENDIAN 1
+    #elif defined(_WIN32) || defined(_WIN64)
+        #define PCG_LITTLE_ENDIAN 1
     #elif __powerpc__ || __POWERPC__ || __ppc__ || __PPC__ \
           || __m68k__ || __mc68000__
         #define PCG_LITTLE_ENDIAN 0
     #else
-        #error Unable to determine target endianness
+        #define PCG_LITTLE_ENDIAN 1  // Default to little endian for Windows
     #endif
 #endif
 

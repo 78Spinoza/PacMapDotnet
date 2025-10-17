@@ -23,6 +23,7 @@ namespace PacMapDemo
         private const string MammothDataFile = "mammoth_data.csv";
         private const string HairyMammothDataFile = "mammoth_a.csv";
 
+      
         /// <summary>
         /// Entry point for the PACMAP demo application.
         /// </summary>
@@ -210,7 +211,7 @@ namespace PacMapDemo
         /// </summary>
         private static void UnifiedProgressCallback(string phase, int current, int total, float percent, string? message)
         {
-            Console.Write($"\r{new string(' ', 180)}\r   [{phase}] Progress: {current}/{total} ({percent:F1}%) {message}");
+            Console.Write($"\r{new string(' ', 120)}\r[{phase}] {current}/{total} ({percent:F1}%) {message}");
         }
 
         /// <summary>
@@ -245,6 +246,7 @@ namespace PacMapDemo
             };
         }
 
+    
 
 
         /// <summary>
@@ -282,7 +284,21 @@ namespace PacMapDemo
             Console.WriteLine($"✅ Model saved: {modelPath}");
 
             // Create visualization with complete model info
-            CreateVisualizations(embedding, data, new int[data.GetLength(0)], pacmap, stopwatch.Elapsed.TotalSeconds);
+            // Load actual labels for visualization
+            var (fullData, fullLabels) = LoadMammothData();
+            CreateVisualizations(embedding, data, fullLabels, pacmap, stopwatch.Elapsed.TotalSeconds);
+        }
+
+        /// <summary>
+        /// Calculates optimal neighbor count using the adaptive formula
+        /// </summary>
+        private static int CalculateOptimalNeighbors(int nSamples)
+        {
+            // Adaptive formula: n_neighbors = 10 + 15 * (log10(n_samples) - 4)
+            // This gives 10 for 10,000 samples and scales appropriately
+            double log10Samples = Math.Log10(nSamples);
+            int optimalNeighbors = (int)(10 + 15 * (log10Samples - 4));
+            return Math.Max(10, Math.Min(optimalNeighbors, 100)); // Clamp between 10-100
         }
 
         /// <summary>
@@ -299,38 +315,78 @@ namespace PacMapDemo
             }
 
             var (data, labels) = DataLoaders.LoadMammothWithLabels(csvPath);
+
             Console.WriteLine($"   Loaded: {data.GetLength(0)} points, {data.GetLength(1)} dimensions");
+
+            // Check if we have enough data for 50k subsample (test run)
+            int availableSamples = data.GetLength(0);
+            int requestedSamples = 100000;  // Changed from 200k to 100k
+
+            if (availableSamples < requestedSamples)
+            {
+                Console.WriteLine($"   ⚠️ Warning: Only {availableSamples:N0} samples available, using all instead of {requestedSamples:N0}");
+                requestedSamples = availableSamples;
+            }
+
+            Console.WriteLine($"   Subsampling {requestedSamples:N0} points for PACMAP processing (TEST RUN)...");
+            var (data2, labels2) = DataLoaders.SampleRandomPoints(data, labels, requestedSamples);
+            Console.WriteLine($"   Subsampled: {data2.GetLength(0)} points, {data2.GetLength(1)} dimensions");
+
+            // Calculate optimal neighbors and check warning
+            int actualSamples = data2.GetLength(0);
+            int optimalNeighbors = CalculateOptimalNeighbors(actualSamples);
+            int chosenNeighbors = Math.Min(optimalNeighbors, 60); // Cap at 60 for performance
+
+            // Show neighbor calculation with formula
+            Console.WriteLine($"   📊 Neighbor Count Calculation:");
+            Console.WriteLine($"      Formula: n_neighbors = 10 + 15 × (log₁₀(samples) - 4)");
+            Console.WriteLine($"      Values: n_neighbors = 10 + 15 × (log₁₀({actualSamples:N0}) - {Math.Log10(actualSamples):F1})");
+            Console.WriteLine($"      Calculation: n_neighbors = 10 + 15 × ({Math.Log10(actualSamples) - 4:F1})");
+            Console.WriteLine($"      Optimal: {optimalNeighbors}, Chosen: {chosenNeighbors}");
+
+            if (chosenNeighbors < optimalNeighbors)
+            {
+                Console.WriteLine($"      ⚠️ Using reduced neighbor count for performance - quality may be slightly reduced");
+            }
+            else
+            {
+                Console.WriteLine($"      ✅ Using optimal neighbor count");
+            }
 
             var pacmap = new PacMapModel();
             var stopwatch = Stopwatch.StartNew();
             var embedding = pacmap.Fit(
-                data: data,
+                data: data2,
                 embeddingDimension: 2,
-                nNeighbors: 60,  // For 1M samples: adaptive formula gives 40, using 60 for better structure
+                nNeighbors: chosenNeighbors,
                 mnRatio: 0.5f,
-                fpRatio: 2.0f,   // CORRECT: FP = 4 × MN (2.0 = 4 × 0.5)
+                fpRatio: 2f,   // CORRECT: FP = 4 × MN (2.0 = 4 × 0.5)
                 learningRate: 1.0f,
                 numIters: (100, 100, 250),
                 forceExactKnn: false,
                 autoHNSWParam: false,  // MANUAL: More reliable than auto-discovery
-                hnswM: 32,                   // good connectivity
-                hnswEfConstruction: 600,     // strong index quality without bloating build time
-                hnswEfSearch: 200,            // high recall, low latency
+                hnswM: 48,
+                hnswEfSearch: 300,            // high recall for large dataset
+                hnswEfConstruction: 800,     // strong index quality for 500k samples
                 randomSeed: 42,
                 progressCallback: UnifiedProgressCallback
             );
+
+
+
+
             stopwatch.Stop();
             Console.WriteLine();
-            Console.WriteLine($"   ✅ 1M Embedding created: {embedding.GetLength(0)} x {embedding.GetLength(1)}");
+            Console.WriteLine($"   ✅ Hairy Mammoth Embedding created: {embedding.GetLength(0):N0} x {embedding.GetLength(1)}");
             Console.WriteLine($"   ⏱️ Execution time: {stopwatch.Elapsed.TotalSeconds:F2}s");
 
             // === SAVE PACMAP MODEL ===
             Console.WriteLine("   Saving PaCMAP model...");
 
-            string resultsDir = Path.Combine(ResultsDir, "HairyMammoth_1M");
+            string resultsDir = Path.Combine(ResultsDir, $"HairyMammoth_{embedding.GetLength(0)}");
             Directory.CreateDirectory(resultsDir);
 
-            var modelPath = Path.Combine(resultsDir, "pacmap_1m_model.pmm");
+            var modelPath = Path.Combine(resultsDir, $"pacmap_{embedding.GetLength(0)}_model.pmm");
 
             // Save the trained model
             pacmap.Save(modelPath);
@@ -340,15 +396,24 @@ namespace PacMapDemo
             // === VISUALIZATION (Actual PaCMAP 2D Embedding with Hyperparameters) ===
             Console.WriteLine("   Creating 2D visualizations of PaCMAP embedding...");
 
-            var title2D = $"Flagship 1M Hairy Mammoth - PaCMAP 2D Embedding (Labeled)\n" + BuildVisualizationTitle(pacmap);
-            var outputPath2D = Path.Combine(resultsDir, "hairy_mammoth_1m_pacmap_2d.png");
-            var outputPath2D_BW = Path.Combine(resultsDir, "hairy_mammoth_1m_pacmap_2d_bw.png");
+            var sampleCount = embedding.GetLength(0);
+            var title2D = $"Hairy Mammoth {sampleCount:N0} Points - PaCMAP 2D Embedding (Labeled)\n" + BuildVisualizationTitle(pacmap);
+            var outputPath2D = Path.Combine(resultsDir, $"hairy_mammoth_{sampleCount}_pacmap_2d.png");
+            var outputPath2D_BW = Path.Combine(resultsDir, $"hairy_mammoth_{sampleCount}_pacmap_2d_bw.png");
 
             // Create colored version with anatomical labels and hyperparameters
-            Visualizer.PlotMammothPacMAP(embedding, data, title2D, outputPath2D);
+            try
+            {
+                Visualizer.PlotMammothPacMAP(embedding, labels2, title2D, outputPath2D);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"   ⚠️ Visualization failed: {ex.Message}");
+                Console.WriteLine("   Continuing with other outputs...");
+            }
 
             // Create true black and white version with hyperparameters (no labels)
-            var titleBW = $"Flagship 1M Hairy Mammoth - PaCMAP 2D Embedding (Black & White)\n" + BuildVisualizationTitle(pacmap);
+            var titleBW = $"Hairy Mammoth {sampleCount:N0} Points - PaCMAP 2D Embedding (Black & White)\n" + BuildVisualizationTitle(pacmap);
             Visualizer.PlotSimplePacMAP(embedding, titleBW, outputPath2D_BW, null);
 
             Console.WriteLine($"   ✅ PaCMAP 2D labeled visualization created: {Path.GetFileName(outputPath2D)}");
@@ -372,7 +437,7 @@ namespace PacMapDemo
                 var paramInfo = CreateFitParamInfo(pacmap, executionTime, "Main_Demo");
 
                 var title = BuildVisualizationTitle(pacmap);
-                Visualizer.PlotMammothPacMAP(embedding, originalData, title, pacmapPath, paramInfo);
+                Visualizer.PlotMammothPacMAP(embedding, labels, title, pacmapPath, paramInfo);
                 Console.WriteLine($"   ✅ Created: {Path.GetFileName(pacmapPath)}");
                 Console.WriteLine($"   📊 KNN Mode: {paramInfo["KNN_Mode"]}");
                 Console.WriteLine($"   🚀 HNSW Status: {(modelInfo.ForceExactKnn ? "DISABLED" : "ACTIVE")}");
@@ -520,8 +585,8 @@ phases=({model.NumIters.phase1}, {model.NumIters.phase2}, {model.NumIters.phase3
             var title1 = BuildVisualizationTitle(model, "PACMAP Reproducibility Test - Embedding 1");
             var title2 = BuildVisualizationTitle(model, "PACMAP Reproducibility Test - Embedding 2");
 
-            Visualizer.PlotMammothPacMAP(embedding1, data, title1, Path.Combine(outputDir, "embedding1.png"), paramInfo1);
-            Visualizer.PlotMammothPacMAP(embedding2, data, title2, Path.Combine(outputDir, "embedding2.png"), paramInfo2);
+            Visualizer.PlotMammothPacMAP(embedding1, labels, title1, Path.Combine(outputDir, "embedding1.png"), paramInfo1);
+            Visualizer.PlotMammothPacMAP(embedding2, labels, title2, Path.Combine(outputDir, "embedding2.png"), paramInfo2);
             GenerateConsistencyPlot(embedding1, embedding2, labels, "Embedding Consistency (X)", Path.Combine(outputDir, "consistency_x.png"));
             GenerateHeatmapPlot(embedding1, embedding2, "Pairwise Distance Difference Heatmap", Path.Combine(outputDir, "distance_heatmap.png"));
             Console.WriteLine("   ✅ Visualizations generated");
@@ -614,7 +679,7 @@ phases=({model.NumIters.phase1}, {model.NumIters.phase2}, {model.NumIters.phase3
                 var outputPath = Path.Combine(experimentDir, $"{(nNeighbors - 5) / 2 + 1:D4}.png");
                 var modelInfo = model.ModelInfo;
                 var title = $"Neighbor Experiment: n={modelInfo.Neighbors}\n" + BuildVisualizationTitle(model, "Neighbor Experiment");
-                Visualizer.PlotMammothPacMAP(embedding, data, title, outputPath, paramInfo);
+                Visualizer.PlotMammothPacMAP(embedding, labels, title, outputPath, paramInfo);
                 Console.WriteLine($"   📈 Saved: {Path.GetFileName(outputPath)}");
             }
 
@@ -671,7 +736,7 @@ phases=({model.NumIters.phase1}, {model.NumIters.phase2}, {model.NumIters.phase3
                 var outputPath = Path.Combine(experimentDir, $"{imageNumber:D4}.png");
                 var modelInfo = model.ModelInfo;
                 var title = $"Learning Rate Experiment: lr={learningRate:F1}\n" + BuildVisualizationTitle(model, "Learning Rate Experiment");
-                Visualizer.PlotMammothPacMAP(embedding, data, title, outputPath, paramInfo);
+                Visualizer.PlotMammothPacMAP(embedding, labels, title, outputPath, paramInfo);
                 Console.WriteLine($"   📈 Saved: {Path.GetFileName(outputPath)}");
             }
 
@@ -734,7 +799,7 @@ phases=({model.NumIters.phase1}, {model.NumIters.phase2}, {model.NumIters.phase3
                 var outputPath = Path.Combine(experimentDir, $"{imageNumber:D4}.png");
                 var modelInfo = model.ModelInfo;
                 var title = $"Init Std Dev Experiment: {modelInfo.InitializationStdDev:E0}\n" + BuildVisualizationTitle(model, "Init Std Dev Experiment");
-                Visualizer.PlotMammothPacMAP(embedding, data, title, outputPath, paramInfo);
+                Visualizer.PlotMammothPacMAP(embedding, labels, title, outputPath, paramInfo);
                 Console.WriteLine($"   📈 Saved: {Path.GetFileName(outputPath)}");
             }
 
@@ -807,7 +872,7 @@ phases=({model.NumIters.phase1}, {model.NumIters.phase2}, {model.NumIters.phase3
                 var imageNumber = Array.IndexOf(mnRatioTests, mnRatio) + 1;
                 var outputPath = Path.Combine(experimentDir, $"{imageNumber:D2}_MN_{mnRatio:F1}.png");
                 var title = $"MN Ratio Experiment: MN={mnRatio:F1}, FP={fpRatio}\n" + BuildVisualizationTitle(model, "MN Ratio Experiment");
-                Visualizer.PlotMammothPacMAP(embedding, data, title, outputPath, paramInfo);
+                Visualizer.PlotMammothPacMAP(embedding, labels, title, outputPath, paramInfo);
                 Console.WriteLine($"   📈 Saved: {Path.GetFileName(outputPath)}");
             }
 

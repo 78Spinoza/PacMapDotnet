@@ -87,23 +87,16 @@
 #include <locale>
 #include <new>
 #include <stdexcept>
-
-/*
- * The pcg_extras namespace contains some support code that is likley to
- * be useful for a variety of RNGs, including:
- *      - 128-bit int support for platforms where it isn't available natively
- *      - bit twiddling operations
- *      - I/O of 128-bit and 8-bit integers
- *      - Handling the evilness of SeedSeq
- *      - Support for efficiently producing random numbers less than a given
- *        bound
- */
-
-// #include "pcg_extras.hpp"  // Not needed for basic PCG functionality
+#include <random>
+#include "pcg_extras.hpp"
 
 namespace pcg_detail {
 
 using namespace pcg_extras;
+
+// Use pcg_extras types
+
+// Use pcg_extras functions
 
 /*
  * The LCG generators need some constants to function.  This code lets you
@@ -1203,7 +1196,7 @@ public:
         return baseclass::period_pow2() + table_size*extvalclass::period_pow2();
     }
 
-    __attribute__((always_inline)) result_type operator()()
+    result_type operator()()
     {
         result_type rhs = get_extended_value();
         result_type lhs = this->baseclass::operator()();

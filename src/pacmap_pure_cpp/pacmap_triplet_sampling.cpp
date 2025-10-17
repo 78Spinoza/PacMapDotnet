@@ -60,8 +60,8 @@ void sample_triplets(PacMapModel* model, double* data, pacmap_progress_callback_
         }
     }
 
-    // Initialize std::mt19937 RNG for deterministic behavior
-    model->rng = get_seeded_mt19937(model->random_seed);
+    // Initialize PCG RNG for deterministic behavior
+    model->rng = get_seeded_pcg64(model->random_seed);
 
     // Sample three types of triplets
     std::vector<Triplet> neighbor_triplets, mn_triplets, fp_triplets;
@@ -69,25 +69,24 @@ void sample_triplets(PacMapModel* model, double* data, pacmap_progress_callback_
     // Neighbor pairs using HNSW
     sample_neighbors_pair(model, normalized_data, neighbor_triplets, callback);
 
-    // FIX13: CRITICAL FIX - Correct triplet count calculation to match Python reference exactly
+    // FIX19: Integer overflow fixes for large datasets (1M+ points)
     // Python reference (lines 169-174): n_MN = int(self.n_neighbors * self.MN_ratio)  // PER POINT, not total
-    // Previous BUG: Was multiplying by n_samples creating orders of magnitude too many triplets
-    int n_mn_per_point = static_cast<int>(model->n_neighbors * model->mn_ratio);
-    int n_mn = n_mn_per_point * model->n_samples;  // Total = per_point * n_samples
-    // Cap to prevent infeasible targets (max possible pairs)
     // Use int64_t to prevent overflow for large datasets
+    int64_t n_mn_per_point = static_cast<int64_t>(model->n_neighbors * model->mn_ratio);
+    int64_t n_mn = n_mn_per_point * model->n_samples;  // Total = per_point * n_samples
+    // Cap to prevent infeasible targets (max possible pairs) - use int64_t throughout
     int64_t max_possible_pairs = static_cast<int64_t>(model->n_samples) * (model->n_samples - 1) / 2;
-    n_mn = std::min(n_mn, static_cast<int>(std::min(max_possible_pairs, static_cast<int64_t>(INT_MAX))));
+    n_mn = std::min(n_mn, std::min(max_possible_pairs, static_cast<int64_t>(MAX_VECTOR_SIZE)));
 
     
     sample_MN_pair(model, normalized_data, mn_triplets, n_mn, callback);
 
-    // FIX13: CRITICAL FIX - Correct far pair count calculation to match Python reference exactly
+    // FIX19: Integer overflow fixes for large datasets (1M+ points)
     // Python reference (lines 173-174): n_FP = int(self.n_neighbors * self.FP_ratio)  // PER POINT, not total
-    int n_fp_per_point = static_cast<int>(model->n_neighbors * model->fp_ratio);
-    int n_fp = n_fp_per_point * model->n_samples;  // Total = per_point * n_samples
-    // Cap to prevent infeasible targets
-    n_fp = std::min(n_fp, static_cast<int>(std::min(max_possible_pairs, static_cast<int64_t>(INT_MAX))));
+    int64_t n_fp_per_point = static_cast<int64_t>(model->n_neighbors * model->fp_ratio);
+    int64_t n_fp = n_fp_per_point * model->n_samples;  // Total = per_point * n_samples
+    // Cap to prevent infeasible targets - use int64_t throughout
+    n_fp = std::min(n_fp, std::min(max_possible_pairs, static_cast<int64_t>(MAX_VECTOR_SIZE)));
 
         sample_FP_pair(model, normalized_data, neighbor_triplets, fp_triplets, n_fp, callback);
 
@@ -97,7 +96,7 @@ void sample_triplets(PacMapModel* model, double* data, pacmap_progress_callback_
     size_t total_triplets = neighbor_triplets.size() + mn_triplets.size() + fp_triplets.size();
     if (model->n_samples <= 20000) {
         // Only reserve for smaller datasets where allocation won't fail
-        model->triplets_flat.reserve(std::min(total_triplets * 3, MAX_VECTOR_SIZE));
+        model->triplets_flat.reserve(std::min(total_triplets * 3, static_cast<size_t>(MAX_VECTOR_SIZE)));
     }
     // Add triplets using flat storage
     for (const auto& t : neighbor_triplets) {
@@ -236,7 +235,7 @@ void sample_neighbors_pair(PacMapModel* model, const std::vector<double>& normal
 
     
     // STEP 1: Calculate n_neighbors_extra (Python: n_neighbors + 50)
-    int n_neighbors_extra = std::min(model->n_neighbors + 50, model->n_samples - 1);
+    int n_neighbors_extra = static_cast<int>(std::min(model->n_neighbors + 50, model->n_samples - 1));
 
     // STEP 2: Fetch extra neighbors and calculate sigma for all points
     // Store KNN indices and distances for later scaling
@@ -260,7 +259,7 @@ void sample_neighbors_pair(PacMapModel* model, const std::vector<double>& normal
         knn_distances.resize(model->n_samples);
     }
 
-    int report_interval = std::max(50, model->n_samples / 100); // Report every 1% (min 50 samples for performance)
+    int report_interval = std::max(50, static_cast<int>(model->n_samples / 100)); // Report every 1% (min 50 samples for performance)
     std::atomic<int> completed(0);
 
     if (callback) {
@@ -405,7 +404,7 @@ void sample_neighbors_pair(PacMapModel* model, const std::vector<double>& normal
        }
 
 void sample_MN_pair(PacMapModel* model, const std::vector<double>& normalized_data,
-                   std::vector<Triplet>& mn_triplets, int n_mn, pacmap_progress_callback_internal callback) {
+                   std::vector<Triplet>& mn_triplets, int64_t n_mn, pacmap_progress_callback_internal callback) {
 
     mn_triplets.clear();
 
@@ -418,8 +417,8 @@ void sample_MN_pair(PacMapModel* model, const std::vector<double>& normalized_da
     // Python reference: sample_MN_pair in pacmap.py lines 146-168
     // Previous C++ implementation was COMPLETELY WRONG!
     
-    // Calculate per-point target exactly like Python
-    int n_MN_per_point = n_mn / model->n_samples;
+    // Calculate per-point target exactly like Python - use int64_t for safety
+    int64_t n_MN_per_point = n_mn / model->n_samples;
 
     // MEMORY FIX: Remove aggressive reservations for large datasets
     // Only reserve for smaller datasets where allocation won't fail
@@ -428,11 +427,11 @@ void sample_MN_pair(PacMapModel* model, const std::vector<double>& normalized_da
     }
     // For large datasets, let the vector grow naturally
 
-    // Thread-safe std::mt19937 RNG for deterministic behavior
-    std::mt19937 rng = get_seeded_mt19937(model->random_seed + 2000);
+    // Thread-safe PCG RNG for deterministic behavior
+    pcg64_fast rng = get_seeded_pcg64(model->random_seed + 2000);
     std::uniform_int_distribution<int> dist(0, model->n_samples - 1);
 
-    int report_interval = std::max(50, model->n_samples / 100); // Report every 1% (min 50 samples for performance)
+    int report_interval = std::max(50, static_cast<int>(model->n_samples / 100)); // Report every 1% (min 50 samples for performance)
 
     //  PYTHON EXACT: Sequential processing like numba.prange (but without OpenMP to match Python exactly)
     for (int i = 0; i < model->n_samples; ++i) {
@@ -502,8 +501,8 @@ void sample_MN_pair(PacMapModel* model, const std::vector<double>& normalized_da
         if (callback && ((i + 1) % report_interval == 0 || (i + 1) == model->n_samples)) {
             float percent = (float)(i + 1) / model->n_samples * 100.0f;
             char progress_msg[128];
-            snprintf(progress_msg, sizeof(progress_msg), "Processed %d/%d samples, generated %zu triplets",
-                     i + 1, model->n_samples, mn_triplets.size());
+            snprintf(progress_msg, sizeof(progress_msg), "Processed %d/%jd samples, generated %zu triplets",
+                     i + 1, (intmax_t)model->n_samples, mn_triplets.size());
             callback("Sampling Mid-Near Pairs", i + 1, model->n_samples, percent, progress_msg);
         }
     }
@@ -519,7 +518,7 @@ void sample_MN_pair(PacMapModel* model, const std::vector<double>& normalized_da
 
 void sample_FP_pair(PacMapModel* model, const std::vector<double>& normalized_data,
                    const std::vector<Triplet>& neighbor_triplets,
-                   std::vector<Triplet>& fp_triplets, int n_fp, pacmap_progress_callback_internal callback) {
+                   std::vector<Triplet>& fp_triplets, int64_t n_fp, pacmap_progress_callback_internal callback) {
 
     fp_triplets.clear();
 
@@ -532,8 +531,8 @@ void sample_FP_pair(PacMapModel* model, const std::vector<double>& normalized_da
     // Python reference: sample_FP in pacmap.py lines 37-56
     // Previous C++ implementation had 4 CRITICAL discrepancies from Python!
     
-    // Calculate per-point target exactly like Python
-    int n_FP_per_point = n_fp / model->n_samples;
+    // Calculate per-point target exactly like Python - use int64_t for safety
+    int64_t n_FP_per_point = n_fp / model->n_samples;
 
     // MEMORY FIX: Remove aggressive reservations for large datasets
     // Only reserve for smaller datasets where allocation won't fail
@@ -569,13 +568,13 @@ void sample_FP_pair(PacMapModel* model, const std::vector<double>& normalized_da
         }
     }
 
-    int report_interval = std::max(50, model->n_samples / 100); // Report every 1% (min 50 samples for performance)
+    int report_interval = std::max(50, static_cast<int>(model->n_samples / 100)); // Report every 1% (min 50 samples for performance)
 
     // PYTHON EXACT: Sequential processing like Python numba.prange
     for (int i = 0; i < model->n_samples; ++i) {
         // FIX 1: PER-POINT deterministic seeding (Python: per-point RNG seeding)
         // Python uses deterministic per-point seeding, not thread-local seeding
-        std::mt19937 rng = get_seeded_mt19937(model->random_seed + 3000 + i);
+        pcg64_fast rng = get_seeded_pcg64(model->random_seed + 3000 + i);
         std::uniform_int_distribution<int> dist(0, model->n_samples - 1);
 
         std::unordered_set<int> sampled_indices;
@@ -617,8 +616,8 @@ void sample_FP_pair(PacMapModel* model, const std::vector<double>& normalized_da
         if (callback && ((i + 1) % report_interval == 0 || (i + 1) == model->n_samples)) {
             float percent = (float)(i + 1) / model->n_samples * 100.0f;
             char progress_msg[128];
-            snprintf(progress_msg, sizeof(progress_msg), "Processed %d/%d samples, generated %zu triplets",
-                     i + 1, model->n_samples, fp_triplets.size());
+            snprintf(progress_msg, sizeof(progress_msg), "Processed %d/%jd samples, generated %zu triplets",
+                     i + 1, (intmax_t)model->n_samples, fp_triplets.size());
             callback("Sampling Far Pairs", i + 1, model->n_samples, percent, progress_msg);
         }
     }

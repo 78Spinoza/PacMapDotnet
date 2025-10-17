@@ -8,19 +8,153 @@
 // Distance metric implementations for UMAP
 namespace distance_metrics {
 
-    // Individual distance metric functions (float)
-    float euclidean_distance(const float* a, const float* b, int dim);
-    float cosine_distance(const float* a, const float* b, int dim);
-    float manhattan_distance(const float* a, const float* b, int dim);
-    float correlation_distance(const float* a, const float* b, int dim);
-    float hamming_distance(const float* a, const float* b, int dim);
+    // FIX17.md Step 6: Inlined distance metric functions for performance
+    inline float euclidean_distance(const float* a, const float* b, int dim) {
+        float dist = 0.0f;
+        for (int i = 0; i < dim; ++i) {
+            float diff = a[i] - b[i];
+            dist += diff * diff;
+        }
+        return std::sqrt(dist);
+    }
 
-    // Individual distance metric functions (double)
-    double euclidean_distance(const double* a, const double* b, int dim);
-    double cosine_distance(const double* a, const double* b, int dim);
-    double manhattan_distance(const double* a, const double* b, int dim);
-    double correlation_distance(const double* a, const double* b, int dim);
-    double hamming_distance(const double* a, const double* b, int dim);
+    inline float cosine_distance(const float* a, const float* b, int dim) {
+        float dot = 0.0f, norm_a = 0.0f, norm_b = 0.0f;
+
+        for (int i = 0; i < dim; ++i) {
+            dot += a[i] * b[i];
+            norm_a += a[i] * a[i];
+            norm_b += b[i] * b[i];
+        }
+
+        norm_a = std::sqrt(norm_a);
+        norm_b = std::sqrt(norm_b);
+
+        if (norm_a < 1e-10f || norm_b < 1e-10f) return 1.0f;
+
+        float cosine_sim = dot / (norm_a * norm_b);
+        cosine_sim = std::max(-1.0f, std::min(1.0f, cosine_sim));
+
+        return 1.0f - cosine_sim;
+    }
+
+    inline float manhattan_distance(const float* a, const float* b, int dim) {
+        float dist = 0.0f;
+        for (int i = 0; i < dim; ++i) {
+            dist += std::abs(a[i] - b[i]);
+        }
+        return dist;
+    }
+
+    inline float correlation_distance(const float* a, const float* b, int dim) {
+        float mean_a = 0.0f, mean_b = 0.0f;
+        for (int i = 0; i < dim; ++i) {
+            mean_a += a[i];
+            mean_b += b[i];
+        }
+        mean_a /= static_cast<float>(dim);
+        mean_b /= static_cast<float>(dim);
+
+        float num = 0.0f, den_a = 0.0f, den_b = 0.0f;
+        for (int i = 0; i < dim; ++i) {
+            float diff_a = a[i] - mean_a;
+            float diff_b = b[i] - mean_b;
+            num += diff_a * diff_b;
+            den_a += diff_a * diff_a;
+            den_b += diff_b * diff_b;
+        }
+
+        if (den_a < 1e-10f || den_b < 1e-10f) return 1.0f;
+
+        float correlation = num / std::sqrt(den_a * den_b);
+        correlation = std::max(-1.0f, std::min(1.0f, correlation));
+
+        return 1.0f - correlation;
+    }
+
+    inline float hamming_distance(const float* a, const float* b, int dim) {
+        int different = 0;
+        for (int i = 0; i < dim; ++i) {
+            if (std::abs(a[i] - b[i]) > 1e-6f) {
+                different++;
+            }
+        }
+        return static_cast<float>(different) / static_cast<float>(dim);
+    }
+
+    // FIX17.md Step 6: Inlined distance metric functions (double precision)
+    inline double euclidean_distance(const double* a, const double* b, int dim) {
+        double dist = 0.0;
+        for (int i = 0; i < dim; ++i) {
+            double diff = a[i] - b[i];
+            dist += diff * diff;
+        }
+        return std::sqrt(dist);
+    }
+
+    inline double cosine_distance(const double* a, const double* b, int dim) {
+        double dot = 0.0, norm_a = 0.0, norm_b = 0.0;
+
+        for (int i = 0; i < dim; ++i) {
+            dot += a[i] * b[i];
+            norm_a += a[i] * a[i];
+            norm_b += b[i] * b[i];
+        }
+
+        norm_a = std::sqrt(norm_a);
+        norm_b = std::sqrt(norm_b);
+
+        if (norm_a < 1e-10 || norm_b < 1e-10) return 1.0;
+
+        double cosine_sim = dot / (norm_a * norm_b);
+        cosine_sim = std::max(-1.0, std::min(1.0, cosine_sim));
+
+        return 1.0 - cosine_sim;
+    }
+
+    inline double manhattan_distance(const double* a, const double* b, int dim) {
+        double dist = 0.0;
+        for (int i = 0; i < dim; ++i) {
+            dist += std::abs(a[i] - b[i]);
+        }
+        return dist;
+    }
+
+    inline double correlation_distance(const double* a, const double* b, int dim) {
+        double mean_a = 0.0, mean_b = 0.0;
+        for (int i = 0; i < dim; ++i) {
+            mean_a += a[i];
+            mean_b += b[i];
+        }
+        mean_a /= static_cast<double>(dim);
+        mean_b /= static_cast<double>(dim);
+
+        double num = 0.0, den_a = 0.0, den_b = 0.0;
+        for (int i = 0; i < dim; ++i) {
+            double diff_a = a[i] - mean_a;
+            double diff_b = b[i] - mean_b;
+            num += diff_a * diff_b;
+            den_a += diff_a * diff_a;
+            den_b += diff_b * diff_b;
+        }
+
+        if (den_a < 1e-10 || den_b < 1e-10) return 1.0;
+
+        double correlation = num / std::sqrt(den_a * den_b);
+        correlation = std::max(-1.0, std::min(1.0, correlation));
+
+        return 1.0 - correlation;
+    }
+
+    inline double hamming_distance(const double* a, const double* b, int dim) {
+        int different = 0;
+        for (int i = 0; i < dim; ++i) {
+            if (std::abs(a[i] - b[i]) > 1e-6) {
+                different++;
+            }
+        }
+        return static_cast<double>(different) / static_cast<double>(dim);
+    }
 
     // Unified distance computation based on metric type
     float compute_distance(const float* a, const float* b, int dim, PacMapMetric metric);

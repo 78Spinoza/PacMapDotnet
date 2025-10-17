@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.15)
-project(pacmap VERSION 2.8.24 LANGUAGES CXX)
+project(pacmap VERSION 2.8.27 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -29,6 +29,7 @@ add_library(pacmap SHARED
     pacmap_quantization.cpp
     pacmap_crc32.cpp
     pacmap_hnsw_utils.cpp
+    stop_condition.cpp
 
     # Headers (included for compilation)
     pacmap_fit.h
@@ -116,8 +117,8 @@ if(CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebI
     if(MSVC)
         # MSVC optimizations
         target_compile_options(pacmap PRIVATE /O2 /Ob2 /DNDEBUG)
-        # Temporarily disable AVX2 to debug C++ test segfault
-        # target_compile_options(pacmap PRIVATE /arch:AVX2)
+        # Re-enable AVX2 optimization for performance (FIX17.md Step 1)
+        target_compile_options(pacmap PRIVATE /arch:AVX2)
     else()
         # GCC/Clang optimizations
         target_compile_options(pacmap PRIVATE -O3 -DNDEBUG)

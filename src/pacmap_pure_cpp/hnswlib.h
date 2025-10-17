@@ -221,6 +221,46 @@ AlgorithmInterface<dist_t>::searchKnnCloserFirst(const void* query_data, size_t 
 }
 }  // namespace hnswlib
 
+// Forward declarations for inner product distance functions
+#if defined(USE_AVX) || defined(USE_SSE)
+namespace hnswlib {
+    // Inner product distance functions
+    float InnerProductDistance(const void* a, const void* b, const void* dim_ptr);
+
+    // SIMD extensions for inner product - declare as extern to prevent multiple definitions
+    extern float (*InnerProductSIMD16Ext)(const void* a, const void* b, const void* dim_ptr);
+    extern float (*InnerProductSIMD4Ext)(const void* a, const void* b, const void* dim_ptr);
+    extern float (*InnerProductDistanceSIMD16Ext)(const void* a, const void* b, const void* dim_ptr);
+    extern float (*InnerProductDistanceSIMD4Ext)(const void* a, const void* b, const void* dim_ptr);
+    extern float (*InnerProductSIMD16ExtAVX)(const void* a, const void* b, const void* dim_ptr);
+    extern float (*InnerProductSIMD4ExtAVX)(const void* a, const void* b, const void* dim_ptr);
+    extern float (*InnerProductDistanceSIMD16ExtAVX)(const void* a, const void* b, const void* dim_ptr);
+    extern float (*InnerProductDistanceSIMD4ExtAVX)(const void* a, const void* b, const void* dim_ptr);
+
+    #if defined(USE_AVX512)
+    extern float (*InnerProductSIMD16ExtAVX512)(const void* a, const void* b, const void* dim_ptr);
+    extern float (*InnerProductDistanceSIMD16ExtAVX512)(const void* a, const void* b, const void* dim_ptr);
+    #endif
+
+    extern float (*InnerProductDistanceSIMD16ExtResiduals)(const void* a, const void* b, const void* dim_ptr);
+    extern float (*InnerProductDistanceSIMD4ExtResiduals)(const void* a, const void* b, const void* dim_ptr);
+
+    // L2 distance function pointers - use different names to avoid conflicts
+    extern float (*L2SqrSIMD16Ext_Ptr)(const void* a, const void* b, const void* dim_ptr);
+    extern float (*L2SqrSIMD4Ext_Ptr)(const void* a, const void* b, const void* dim_ptr);
+    extern float (*L2SqrSIMD16ExtResiduals_Ptr)(const void* a, const void* b, const void* dim_ptr);
+    extern float (*L2SqrSIMD4ExtResiduals_Ptr)(const void* a, const void* b, const void* dim_ptr);
+
+    #if defined(USE_AVX512)
+    extern float (*L2SqrSIMD16ExtAVX512_Ptr)(const void* a, const void* b, const void* dim_ptr);
+    #endif
+
+    #if defined(USE_AVX)
+    extern float (*L2SqrSIMD16ExtAVX_Ptr)(const void* a, const void* b, const void* dim_ptr);
+    #endif
+}
+#endif
+
 #include "space_l2.h"
 #include "space_ip.h"
 #include "stop_condition.h"

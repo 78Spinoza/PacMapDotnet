@@ -238,7 +238,33 @@ namespace PacMapDemo
         }
 
         /// <summary>
-        /// Sample random points from dataset
+        /// Sample random points from dataset (double precision version)
+        /// </summary>
+        public static (double[,] data, int[] labels) SampleRandomPoints(double[,] data, int[] labels, int numPoints)
+        {
+            var random = new Random(42);
+            var indices = Enumerable.Range(0, data.GetLength(0))
+                .OrderBy(x => random.Next())
+                .Take(numPoints)
+                .ToArray();
+
+            var sampledData = new double[numPoints, data.GetLength(1)];
+            var sampledLabels = new int[numPoints];
+
+            for (int i = 0; i < numPoints; i++)
+            {
+                for (int j = 0; j < data.GetLength(1); j++)
+                {
+                    sampledData[i, j] = data[indices[i], j];
+                }
+                sampledLabels[i] = labels[indices[i]];
+            }
+
+            return (sampledData, sampledLabels);
+        }
+
+        /// <summary>
+        /// Sample random points from dataset (float precision version)
         /// </summary>
         public static (float[,] data, int[] labels) SampleRandomPoints(float[,] data, int[] labels, int numPoints)
         {

@@ -257,22 +257,39 @@ namespace PacMapDemo
         /// <summary>
         /// Create PacMAP 2D embedding visualization with anatomical part coloring
         /// </summary>
-        public static void PlotMammothPacMAP(double[,] embedding, double[,] originalData, string title, string outputPath)
+        public static void PlotMammothPacMAP(double[,] embedding, int[] labels, string title, string outputPath)
         {
-            PlotMammothPacMAP(embedding, originalData, title, outputPath, null, true);
+            PlotMammothPacMAP(embedding, labels, title, outputPath, null, true);
         }
 
         /// <summary>
         /// Create PacMAP 2D embedding visualization with anatomical part coloring and parameters
         /// </summary>
-        public static void PlotMammothPacMAP(double[,] embedding, double[,] originalData, string title, string outputPath, Dictionary<string, object>? paramInfo, bool autoFitAxes = true)
+        public static void PlotMammothPacMAP(double[,] embedding, int[] labels, string title, string outputPath, Dictionary<string, object>? paramInfo, bool autoFitAxes = true)
         {
             try
             {
                 Console.WriteLine($"   Creating PacMAP embedding plot: {title}");
 
-                int numPoints = originalData.GetLength(0);
-                var parts = AssignMammothParts(originalData);
+                int numPoints = embedding.GetLength(0);
+
+                // Map integer labels back to anatomical part names
+                var uniqueLabels = labels.Distinct().ToArray();
+                var partNames = new[] { "body", "feet", "legs", "head", "trunk", "tusks" }; // Default ordering from AssignMammothParts
+                var parts = new string[numPoints];
+
+                for (int i = 0; i < numPoints; i++)
+                {
+                    int labelIndex = labels[i];
+                    if (labelIndex >= 0 && labelIndex < partNames.Length)
+                    {
+                        parts[i] = partNames[labelIndex];
+                    }
+                    else
+                    {
+                        parts[i] = "body"; // Fallback
+                    }
+                }
 
                 var partColors = new Dictionary<string, OxyColor>
                 {

@@ -7,11 +7,12 @@
 #include <algorithm>
 #include <cmath>
 #include <iostream>
+#include "pcg_random.hpp"
 
 // Parameter validation functions
 extern int validate_parameters(PacMapModel* model);
 extern void validate_metric_data(const float* data, int n_obs, int n_dim, PacMapMetric metric);
-extern bool check_memory_requirements(int n_samples, int n_features, int n_neighbors);
+extern bool check_memory_requirements(int64_t n_samples, int64_t n_features, int64_t n_neighbors);
 extern void auto_tune_parameters(PacMapModel* model, int n_samples);
 
 // Edge case detection
@@ -24,15 +25,14 @@ extern void start_performance_timer(PacMapModel* model);
 extern void record_performance_stats(PacMapModel* model, const std::string& operation);
 extern PerformanceStats get_performance_stats(const PacMapModel* model);
 
-// Distance computation utilities
-extern float compute_distance(const float* x, const float* y, int n_features, PacMapMetric metric);
+// Distance computation utilities - now in pacmap_distance.cpp
 
 // Data normalization and preprocessing
 extern void normalize_data(std::vector<float>& data, int n_samples, int n_features, PacMapMetric metric);
 extern void standardize_data(std::vector<float>& data, int n_samples, int n_features);
 
 // Random number generation utilities
-extern std::mt19937 get_seeded_mt19937(int seed);
+extern pcg64_fast get_seeded_pcg64(int seed);
 extern void set_random_seed(PacMapModel* model, int seed);
 
 // Memory management utilities
@@ -60,3 +60,8 @@ extern void print_performance_stats(const PerformanceStats& stats);
 extern void send_warning_to_callback(const char* message);
 extern void send_error_to_callback(const char* message);
 extern void set_global_callback(pacmap_progress_callback_v2 callback);
+
+// FIX19: Safe arithmetic functions for large dataset support
+extern size_t safe_multiply_size_t(int64_t a, int64_t b, bool* overflow);
+extern size_t safe_multiply_size_t(size_t a, size_t b, bool* overflow);
+extern int64_t safe_multiply_int64(int64_t a, int64_t b, bool* overflow);

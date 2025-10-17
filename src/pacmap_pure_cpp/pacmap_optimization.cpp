@@ -22,8 +22,8 @@ void optimize_embedding(PacMapModel* model, double* embedding_out, pacmap_progre
     // Python reference: np.random.normal(size=[n, n_dims]).astype(np.float32) * 0.0001
     if (callback) {
         char init_msg[256];
-        snprintf(init_msg, sizeof(init_msg), "INITIALIZATION: Using std_dev=%.6f for %d samples x %d components",
-                model->initialization_std_dev, model->n_samples, model->n_components);
+        snprintf(init_msg, sizeof(init_msg), "INITIALIZATION: Using std_dev=%.6f for %jd samples x %jd components",
+                model->initialization_std_dev, (intmax_t)model->n_samples, (intmax_t)model->n_components);
         callback("Initialization", 0, 0, 0.0f, init_msg);
     }
     initialize_random_embedding_double(embedding, model->n_samples, model->n_components, model->rng, model->initialization_std_dev);
@@ -82,9 +82,9 @@ void optimize_embedding(PacMapModel* model, double* embedding_out, pacmap_progre
             bool use_simd = pacmap_simd::should_use_simd() && model->n_components >= 4;
 
             if (use_simd) {
-                // ERROR14 Step 3: SIMD-optimized Adam optimizer using Eigen
+                // FIX17.md Step 5: SIMD-optimized Adam optimizer using Eigen with better chunk size
                 // Process samples in parallel, but vectorize within each sample's dimensions
-                #pragma omp parallel for schedule(static)
+                #pragma omp parallel for schedule(static, 1000)
                 for (int sample = 0; sample < model->n_samples; ++sample) {
                     size_t sample_offset = static_cast<size_t>(sample) * model->n_components;
 
@@ -143,9 +143,9 @@ void optimize_embedding(PacMapModel* model, double* embedding_out, pacmap_progre
                     }
                 }
             } else {
-                // Scalar fallback for non-AVX2 CPUs or small dimensions
-                // ERROR14 Step 1: Use schedule(static) for deterministic loop partitioning across runs
-                #pragma omp parallel for schedule(static)
+                // FIX17.md Step 5: Scalar fallback for non-AVX2 CPUs or small dimensions
+                // Use schedule(static, 1000) for better cache locality
+                #pragma omp parallel for schedule(static, 1000)
                 for (int i = 0; i < static_cast<int>(embedding.size()); ++i) {
                     // ERROR13: NaN safety - skip non-finite gradients to prevent Adam state corruption
                     if (!std::isfinite(gradients[i])) {
@@ -192,9 +192,9 @@ void optimize_embedding(PacMapModel* model, double* embedding_out, pacmap_progre
             bool use_simd = pacmap_simd::should_use_simd() && model->n_components >= 4;
 
             if (use_simd) {
-                // ERROR14 Step 3: SIMD-optimized SGD optimizer using Eigen
+                // FIX17.md Step 5: SIMD-optimized SGD optimizer using Eigen with better chunk size
                 // Process samples in parallel, but vectorize within each sample's dimensions
-                #pragma omp parallel for schedule(static)
+                #pragma omp parallel for schedule(static, 1000)
                 for (int sample = 0; sample < model->n_samples; ++sample) {
                     size_t sample_offset = static_cast<size_t>(sample) * model->n_components;
 
@@ -225,9 +225,9 @@ void optimize_embedding(PacMapModel* model, double* embedding_out, pacmap_progre
                     }
                 }
             } else {
-                // Scalar fallback for non-AVX2 CPUs or small dimensions
-                // ERROR14 Step 1: Use schedule(static) for deterministic loop partitioning
-                #pragma omp parallel for schedule(static)
+                // FIX17.md Step 5: Scalar fallback for non-AVX2 CPUs or small dimensions
+                // Use schedule(static, 1000) for better cache locality
+                #pragma omp parallel for schedule(static, 1000)
                 for (int i = 0; i < static_cast<int>(embedding.size()); ++i) {
                     // NaN safety check
                     if (!std::isfinite(gradients[i])) {
@@ -245,8 +245,10 @@ void optimize_embedding(PacMapModel* model, double* embedding_out, pacmap_progre
             }
         }
 
-        // Monitor progress and compute loss
-        if (iter % 10 == 0 || iter == total_iters - 1) {
+        // Enhanced progress monitoring for large datasets - report every epoch for >100k samples
+        bool should_report = (model->n_samples > 100000) || (iter % 10 == 0 || iter == total_iters - 1);
+
+        if (should_report) {
             // MEMORY FIX: Use flat storage loss computation to prevent allocation failures
             double loss = compute_pacmap_loss_flat(embedding, model->triplets_flat,
                                                   w_n, w_mn, w_f, model->n_components);
@@ -331,8 +333,8 @@ void optimize_embedding(PacMapModel* model, double* embedding_out, pacmap_progre
     if (callback) callback("Optimization Complete", total_iters, total_iters, 100.0f, nullptr);
 }
 
-void initialize_random_embedding_double(std::vector<double>& embedding, int n_samples, int n_components, std::mt19937& rng, float std_dev) {
-    // std::mt19937-based random initialization
+void initialize_random_embedding_double(std::vector<double>& embedding, int n_samples, int n_components, pcg64_fast& rng, float std_dev) {
+    // pcg64_fast-based random initialization
     std::normal_distribution<double> normal_dist(0.0, static_cast<double>(std_dev));
 
     for (int i = 0; i < n_samples; ++i) {
@@ -344,8 +346,8 @@ void initialize_random_embedding_double(std::vector<double>& embedding, int n_sa
 }
 
 
-void initialize_random_embedding(std::vector<float>& embedding, int n_samples, int n_components, std::mt19937& rng, float std_dev) {
-    // std::mt19937-based random initialization using double precision internally
+void initialize_random_embedding(std::vector<float>& embedding, int n_samples, int n_components, pcg64_fast& rng, float std_dev) {
+    // pcg64_fast-based random initialization using double precision internally
     std::vector<double> embedding_double(n_samples * n_components);
     initialize_random_embedding_double(embedding_double, n_samples, n_components, rng, std_dev);
 
@@ -380,7 +382,7 @@ void compute_safety_stats(PacMapModel* model, const std::vector<double>& embeddi
     std::vector<float> embedding_distances;
 
     // Sample distances for efficiency (similar to UMAP approach)
-    int sample_size = std::min(model->n_samples, 1000);
+    int sample_size = static_cast<int>(std::min(model->n_samples, static_cast<int64_t>(1000)));
     for (int i = 0; i < sample_size; ++i) {
         for (int j = i + 1; j < sample_size; ++j) {
             // Compute distance in double precision, store as float for stats

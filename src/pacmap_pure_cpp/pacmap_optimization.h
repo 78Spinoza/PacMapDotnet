@@ -8,8 +8,8 @@
 extern void optimize_embedding(PacMapModel* model, double* embedding_out, pacmap_progress_callback_v2 callback);
 
 // Initialization utilities
-extern void initialize_random_embedding(std::vector<float>& embedding, int n_samples, int n_components, std::mt19937& rng, float std_dev);
-extern void initialize_random_embedding_double(std::vector<double>& embedding, int n_samples, int n_components, std::mt19937& rng, float std_dev);
+extern void initialize_random_embedding(std::vector<float>& embedding, int n_samples, int n_components, pcg64_fast& rng, float std_dev);
+extern void initialize_random_embedding_double(std::vector<double>& embedding, int n_samples, int n_components, pcg64_fast& rng, float std_dev);
 
 // REMOVED: run_optimization_phase function declaration - unused dead code
 
@@ -28,7 +28,7 @@ extern std::vector<OptimizationPhase> get_optimization_phases(int phase1_iters, 
 // Safety and monitoring
 extern void compute_safety_stats(PacMapModel* model, const std::vector<double>& embedding);
 extern void monitor_optimization_progress(int iter, int total_iters, float loss,
-                                         const std::string& phase, pacmap_progress_callback_v2 callback);
+                                         const std::string& phase, pacmap_progress_callback_internal callback);
 
 // Convergence and quality metrics
 // REMOVED: Old compute_embedding_quality - replaced by flat storage version

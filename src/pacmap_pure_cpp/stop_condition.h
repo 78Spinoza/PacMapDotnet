@@ -25,25 +25,30 @@ class MultiVectorL2Space : public BaseMultiVectorSpace<DOCIDTYPE> {
  public:
     MultiVectorL2Space(size_t dim) {
         fstdistfunc_ = L2Sqr;
+
+        // Initialize function pointers based on CPU capabilities
 #if defined(USE_SSE) || defined(USE_AVX) || defined(USE_AVX512)
     #if defined(USE_AVX512)
-        if (AVX512Capable())
-            L2SqrSIMD16Ext = L2SqrSIMD16ExtAVX512;
-        else if (AVXCapable())
-            L2SqrSIMD16Ext = L2SqrSIMD16ExtAVX;
+        if (AVX512Capable()) {
+            if (L2SqrSIMD16ExtAVX512_Ptr) L2SqrSIMD16Ext_Ptr = L2SqrSIMD16ExtAVX512_Ptr;
+        } else if (AVXCapable()) {
+            if (L2SqrSIMD16ExtAVX_Ptr) L2SqrSIMD16Ext_Ptr = L2SqrSIMD16ExtAVX_Ptr;
+        }
     #elif defined(USE_AVX)
-        if (AVXCapable())
-            L2SqrSIMD16Ext = L2SqrSIMD16ExtAVX;
+        if (AVXCapable()) {
+            if (L2SqrSIMD16ExtAVX_Ptr) L2SqrSIMD16Ext_Ptr = L2SqrSIMD16ExtAVX_Ptr;
+        }
     #endif
 
-        if (dim % 16 == 0)
-            fstdistfunc_ = L2SqrSIMD16Ext;
-        else if (dim % 4 == 0)
-            fstdistfunc_ = L2SqrSIMD4Ext;
-        else if (dim > 16)
-            fstdistfunc_ = L2SqrSIMD16ExtResiduals;
-        else if (dim > 4)
-            fstdistfunc_ = L2SqrSIMD4ExtResiduals;
+        // Choose the best distance function based on dimensionality
+        if (dim % 16 == 0 && L2SqrSIMD16Ext_Ptr)
+            fstdistfunc_ = L2SqrSIMD16Ext_Ptr;
+        else if (dim % 4 == 0 && L2SqrSIMD4Ext_Ptr)
+            fstdistfunc_ = L2SqrSIMD4Ext_Ptr;
+        else if (dim > 16 && L2SqrSIMD16ExtResiduals_Ptr)
+            fstdistfunc_ = L2SqrSIMD16ExtResiduals_Ptr;
+        else if (dim > 4 && L2SqrSIMD4ExtResiduals_Ptr)
+            fstdistfunc_ = L2SqrSIMD4ExtResiduals_Ptr;
 #endif
         dim_ = dim;
         vector_size_ = dim * sizeof(float);
@@ -84,35 +89,42 @@ class MultiVectorInnerProductSpace : public BaseMultiVectorSpace<DOCIDTYPE> {
  public:
     MultiVectorInnerProductSpace(size_t dim) {
         fstdistfunc_ = InnerProductDistance;
+
+        // Initialize function pointers based on CPU capabilities
 #if defined(USE_AVX) || defined(USE_SSE) || defined(USE_AVX512)
     #if defined(USE_AVX512)
         if (AVX512Capable()) {
-            InnerProductSIMD16Ext = InnerProductSIMD16ExtAVX512;
-            InnerProductDistanceSIMD16Ext = InnerProductDistanceSIMD16ExtAVX512;
+            // These will be assigned in stop_condition.cpp
+            if (InnerProductSIMD16ExtAVX512) InnerProductSIMD16Ext = InnerProductSIMD16ExtAVX512;
+            if (InnerProductDistanceSIMD16ExtAVX512) InnerProductDistanceSIMD16Ext = InnerProductDistanceSIMD16ExtAVX512;
         } else if (AVXCapable()) {
-            InnerProductSIMD16Ext = InnerProductSIMD16ExtAVX;
-            InnerProductDistanceSIMD16Ext = InnerProductDistanceSIMD16ExtAVX;
+            // These will be assigned in stop_condition.cpp
+            if (InnerProductSIMD16ExtAVX) InnerProductSIMD16Ext = InnerProductSIMD16ExtAVX;
+            if (InnerProductDistanceSIMD16ExtAVX) InnerProductDistanceSIMD16Ext = InnerProductDistanceSIMD16ExtAVX;
         }
     #elif defined(USE_AVX)
         if (AVXCapable()) {
-            InnerProductSIMD16Ext = InnerProductSIMD16ExtAVX;
-            InnerProductDistanceSIMD16Ext = InnerProductDistanceSIMD16ExtAVX;
+            // These will be assigned in stop_condition.cpp
+            if (InnerProductSIMD16ExtAVX) InnerProductSIMD16Ext = InnerProductSIMD16ExtAVX;
+            if (InnerProductDistanceSIMD16ExtAVX) InnerProductDistanceSIMD16Ext = InnerProductDistanceSIMD16ExtAVX;
         }
     #endif
     #if defined(USE_AVX)
         if (AVXCapable()) {
-            InnerProductSIMD4Ext = InnerProductSIMD4ExtAVX;
-            InnerProductDistanceSIMD4Ext = InnerProductDistanceSIMD4ExtAVX;
+            // These will be assigned in stop_condition.cpp
+            if (InnerProductSIMD4ExtAVX) InnerProductSIMD4Ext = InnerProductSIMD4ExtAVX;
+            if (InnerProductDistanceSIMD4ExtAVX) InnerProductDistanceSIMD4Ext = InnerProductDistanceSIMD4ExtAVX;
         }
     #endif
 
-        if (dim % 16 == 0)
+        // Choose the best distance function based on dimensionality
+        if (dim % 16 == 0 && InnerProductDistanceSIMD16Ext)
             fstdistfunc_ = InnerProductDistanceSIMD16Ext;
-        else if (dim % 4 == 0)
+        else if (dim % 4 == 0 && InnerProductDistanceSIMD4Ext)
             fstdistfunc_ = InnerProductDistanceSIMD4Ext;
-        else if (dim > 16)
+        else if (dim > 16 && InnerProductDistanceSIMD16ExtResiduals)
             fstdistfunc_ = InnerProductDistanceSIMD16ExtResiduals;
-        else if (dim > 4)
+        else if (dim > 4 && InnerProductDistanceSIMD4ExtResiduals)
             fstdistfunc_ = InnerProductDistanceSIMD4ExtResiduals;
 #endif
         vector_size_ = dim * sizeof(float);

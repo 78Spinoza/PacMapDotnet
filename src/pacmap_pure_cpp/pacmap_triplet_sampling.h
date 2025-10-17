@@ -9,10 +9,10 @@ extern void sample_triplets(PacMapModel* model, double* data, pacmap_progress_ca
 extern void sample_neighbors_pair(PacMapModel* model, const std::vector<double>& normalized_data,
                                  std::vector<Triplet>& neighbor_triplets, pacmap_progress_callback_internal callback = nullptr);
 extern void sample_MN_pair(PacMapModel* model, const std::vector<double>& normalized_data,
-                         std::vector<Triplet>& mn_triplets, int n_mn, pacmap_progress_callback_internal callback = nullptr);
+                         std::vector<Triplet>& mn_triplets, int64_t n_mn, pacmap_progress_callback_internal callback = nullptr);
 extern void sample_FP_pair(PacMapModel* model, const std::vector<double>& normalized_data,
                          const std::vector<Triplet>& neighbor_triplets,
-                         std::vector<Triplet>& fp_triplets, int n_fp, pacmap_progress_callback_internal callback = nullptr);
+                         std::vector<Triplet>& fp_triplets, int64_t n_fp, pacmap_progress_callback_internal callback = nullptr);
 
 // Distance-based sampling helpers
 extern void distance_based_sampling(PacMapModel* model, const std::vector<double>& data,

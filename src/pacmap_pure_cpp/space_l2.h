@@ -144,13 +144,13 @@ L2SqrSIMD16ExtSSE(const void *pVect1v, const void *pVect2v, const void *qty_ptr)
 #endif
 
 #if defined(USE_SSE) || defined(USE_AVX) || defined(USE_AVX512)
-static DISTFUNC<float> L2SqrSIMD16Ext = L2SqrSIMD16ExtSSE;
+// L2SqrSIMD16Ext will be defined in stop_condition.cpp
 
 static float
-L2SqrSIMD16ExtResiduals(const void *pVect1v, const void *pVect2v, const void *qty_ptr) {
+L2SqrSIMD16ExtResiduals_impl(const void *pVect1v, const void *pVect2v, const void *qty_ptr) {
     size_t qty = *((size_t *) qty_ptr);
     size_t qty16 = qty >> 4 << 4;
-    float res = L2SqrSIMD16Ext(pVect1v, pVect2v, &qty16);
+    float res = L2SqrSIMD16Ext_Ptr(pVect1v, pVect2v, &qty16);
     float *pVect1 = (float *) pVect1v + qty16;
     float *pVect2 = (float *) pVect2v + qty16;
 
@@ -163,7 +163,7 @@ L2SqrSIMD16ExtResiduals(const void *pVect1v, const void *pVect2v, const void *qt
 
 #if defined(USE_SSE)
 static float
-L2SqrSIMD4Ext(const void *pVect1v, const void *pVect2v, const void *qty_ptr) {
+L2SqrSIMD4Ext_impl(const void *pVect1v, const void *pVect2v, const void *qty_ptr) {
     float PORTABLE_ALIGN32 TmpRes[8];
     float *pVect1 = (float *) pVect1v;
     float *pVect2 = (float *) pVect2v;
@@ -190,11 +190,11 @@ L2SqrSIMD4Ext(const void *pVect1v, const void *pVect2v, const void *qty_ptr) {
 }
 
 static float
-L2SqrSIMD4ExtResiduals(const void *pVect1v, const void *pVect2v, const void *qty_ptr) {
+L2SqrSIMD4ExtResiduals_impl(const void *pVect1v, const void *pVect2v, const void *qty_ptr) {
     size_t qty = *((size_t *) qty_ptr);
     size_t qty4 = qty >> 2 << 2;
 
-    float res = L2SqrSIMD4Ext(pVect1v, pVect2v, &qty4);
+    float res = L2SqrSIMD4Ext_Ptr(pVect1v, pVect2v, &qty4);
     size_t qty_left = qty - qty4;
 
     float *pVect1 = (float *) pVect1v + qty4;
@@ -213,25 +213,17 @@ class L2Space : public SpaceInterface<float> {
  public:
     L2Space(size_t dim) {
         fstdistfunc_ = L2Sqr;
-#if defined(USE_SSE) || defined(USE_AVX) || defined(USE_AVX512)
-    #if defined(USE_AVX512)
-        if (AVX512Capable())
-            L2SqrSIMD16Ext = L2SqrSIMD16ExtAVX512;
-        else if (AVXCapable())
-            L2SqrSIMD16Ext = L2SqrSIMD16ExtAVX;
-    #elif defined(USE_AVX)
-        if (AVXCapable())
-            L2SqrSIMD16Ext = L2SqrSIMD16ExtAVX;
-    #endif
 
-        if (dim % 16 == 0)
-            fstdistfunc_ = L2SqrSIMD16Ext;
-        else if (dim % 4 == 0)
-            fstdistfunc_ = L2SqrSIMD4Ext;
-        else if (dim > 16)
-            fstdistfunc_ = L2SqrSIMD16ExtResiduals;
-        else if (dim > 4)
-            fstdistfunc_ = L2SqrSIMD4ExtResiduals;
+        // Choose best distance function based on dimensionality and CPU capabilities
+#if defined(USE_SSE) || defined(USE_AVX) || defined(USE_AVX512)
+        if (dim % 16 == 0 && L2SqrSIMD16Ext_Ptr)
+            fstdistfunc_ = L2SqrSIMD16Ext_Ptr;
+        else if (dim % 4 == 0 && L2SqrSIMD4Ext_Ptr)
+            fstdistfunc_ = L2SqrSIMD4Ext_Ptr;
+        else if (dim > 16 && L2SqrSIMD16ExtResiduals_Ptr)
+            fstdistfunc_ = L2SqrSIMD16ExtResiduals_Ptr;
+        else if (dim > 4 && L2SqrSIMD4ExtResiduals_Ptr)
+            fstdistfunc_ = L2SqrSIMD4ExtResiduals_Ptr;
 #endif
         dim_ = dim;
         data_size_ = dim * sizeof(float);

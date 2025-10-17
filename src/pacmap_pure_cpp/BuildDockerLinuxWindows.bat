@@ -118,8 +118,8 @@ REM Convert Windows path to Unix path for Docker
 set UNIX_PATH=%cd:\=/%
 set UNIX_PATH=%UNIX_PATH:C:=/c%
 
-REM Run Docker build with corrected paths
-docker run --rm -v "%UNIX_PATH%":/src -w /src ubuntu:22.04 bash -c "apt-get update && apt-get install -y build-essential cmake libstdc++-11-dev libomp-dev && mkdir -p build-linux && cd build-linux && cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON -DBUILD_TESTS=ON -DCMAKE_POSITION_INDEPENDENT_CODE=ON && make pacmap run_all_tests test_minimal_standalone test_simple_minimal test_basic_integration -j4 && echo Build completed && ls -la && if [ -f lib/libpacmap.so ]; then cp lib/libpacmap.so libpacmap_backup.so && echo Library backup created; fi && echo Linux build finished successfully"
+REM Run Docker build with corrected paths and proper C/C++ compilers
+docker run --rm -v "%UNIX_PATH%":/src -w /src ubuntu:22.04 bash -c "apt-get update -qq && apt-get install -y build-essential cmake gcc g++ libomp-dev && echo 'Linux packages installed successfully' && mkdir -p build-linux && cd build-linux && echo 'Starting CMake configuration...' && cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON -DBUILD_TESTS=ON -DCMAKE_POSITION_INDEPENDENT_CODE=ON && echo 'CMake configuration completed, starting build...' && make pacmap run_all_tests test_minimal_standalone test_simple_minimal test_basic_integration -j4 && echo 'Build completed successfully' && ls -la && if [ -f lib/libpacmap.so ]; then cp lib/libpacmap.so libpacmap_backup.so && echo 'Library backup created'; elif [ -f libpacmap.so ]; then cp libpacmap.so libpacmap_backup.so && echo 'Library backup created from root'; else echo 'Warning: No library found to backup'; fi && echo 'Linux build finished successfully'"
 
 REM Check if Docker build succeeded by looking for key indicators
 if exist "build-linux\lib\libpacmap.so" (

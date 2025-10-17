@@ -4,6 +4,7 @@
 #include "pacmap_simple_wrapper.h"
 #include "pacmap_distance.h"
 #include "pacmap_system_info.h"
+#include "pacmap_utils.h"
 #include <iostream>
 #include <algorithm>
 #include <numeric>
@@ -11,10 +12,11 @@
 #include <random>
 #include <chrono>
 #include <cmath>
+#include <cstring>
 
 namespace fit_utils {
 
-    // Validate n_neighbors parameter and issue warning for adaptive formula recommendation
+    // Validate n_neighbors parameter and issue warning only if below optimal value
     void validate_n_neighbors_parameter(int n_neighbors, int n_samples, pacmap_progress_callback_internal progress_callback) {
         if (n_samples >= 10000) {
             // Calculate recommended n_neighbors using adaptive formula
@@ -25,21 +27,20 @@ namespace fit_utils {
             // Clamp to reasonable bounds
             recommended_neighbors = std::max(10, std::min(100, recommended_neighbors));
 
-            if (n_neighbors != recommended_neighbors) {
-                std::string warning_msg = "Parameter Warning: n_neighbors=" + std::to_string(n_neighbors) +
-                                       " is not optimal for " + std::to_string(n_samples) + " samples. " +
-                                       "Recommended: n_neighbors=" + std::to_string(recommended_neighbors) +
-                                       " (using formula: 10 + 15 * (log10(" + std::to_string(n_samples) + ") - 4) = " +
-                                       std::to_string(recommended_neighbors) + ")";
+            // Only warn if n_neighbors is less than minimum recommended
+            if (n_neighbors < recommended_neighbors) {
+                std::string warning_msg = "Warning: n_neighbors=" + std::to_string(n_neighbors) +
+                                       " < " + std::to_string(recommended_neighbors) + " recommended for " +
+                                       std::to_string(n_samples) + " samples (formula: 10 + 15*log10(n/10000))";
 
                 if (progress_callback) {
                     progress_callback("Parameter Warning", 0, 1, 0.0f, warning_msg.c_str());
                 }
             }
         }
-        else if (n_samples < 10000 && n_neighbors != 10) {
-            std::string warning_msg = std::string("Parameter Warning: For small datasets (<10,000 samples), recommended n_neighbors=10, ") +
-                                   "but you used n_neighbors=" + std::to_string(n_neighbors);
+        else if (n_samples < 10000 && n_neighbors < 10) {
+            std::string warning_msg = "Warning: n_neighbors=" + std::to_string(n_neighbors) +
+                                   " < 10 recommended for small datasets (<10000 samples)";
 
             if (progress_callback) {
                 progress_callback("Parameter Warning", 0, 1, 0.0f, warning_msg.c_str());
@@ -102,9 +103,9 @@ namespace fit_utils {
             callback("HNSW Auto-Tuning", 0, 100, 0.0f, msg.c_str());
         }
 
-        // Sample random points using std::mt19937
+        // Sample random points using consistent PCG RNG (get_seeded_pcg64)
         std::vector<float> subsample(static_cast<size_t>(subsample_size) * static_cast<size_t>(n_dim));
-        std::mt19937 rng(model->random_seed >= 0 ? model->random_seed : 42);
+        pcg64_fast rng = get_seeded_pcg64(model->random_seed >= 0 ? model->random_seed : 42);
         std::uniform_int_distribution<int> dist(0, n_obs - 1);
 
         for (int i = 0; i < subsample_size; i++) {

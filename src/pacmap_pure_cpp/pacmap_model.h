@@ -8,6 +8,7 @@
 #include <chrono>
 #include <numeric>
 #include "hnswlib.h"
+#include "pcg_random.hpp"
 
 #include "pacmap_simple_wrapper.h"
 
@@ -21,15 +22,15 @@ enum TripletType {
     FURTHER = 2     // Far pairs (uniform distribution)
 };
 
-// Unified triplet structure (review-optimized)
+// Unified triplet structure (review-optimized) - FIX19: Use int64_t for large dataset support
 struct Triplet {
-    int anchor;         // Anchor point index
-    int neighbor;       // Neighbor point index
-    TripletType type;   // Type of triplet
+    int64_t anchor;         // Anchor point index
+    int64_t neighbor;       // Neighbor point index
+    TripletType type;       // Type of triplet
     float weight = 1.0f;
 
     Triplet() : anchor(-1), neighbor(-1), type(NEIGHBOR), weight(1.0f) {}
-    Triplet(int a, int n, TripletType t, float w = 1.0f) : anchor(a), neighbor(n), type(t), weight(w) {}
+    Triplet(int64_t a, int64_t n, TripletType t, float w = 1.0f) : anchor(a), neighbor(n), type(t), weight(w) {}
 };
 
 
@@ -54,13 +55,13 @@ struct PerformanceStats {
     std::vector<OperationRecord> operation_history;
 };
 
-// Enhanced PACMAP Model Structure (Pure PACMAP Implementation)
+// Enhanced PACMAP Model Structure (Pure PACMAP Implementation) - FIX19: Large dataset support
 struct PacMapModel {
-    // Core PACMAP parameters
-    int n_samples = 0;
-    int n_features = 0;
-    int n_components = 2;
-    int n_neighbors = 10;
+    // Core PACMAP parameters - use int64_t for large dataset support (1M+ points)
+    int64_t n_samples = 0;
+    int64_t n_features = 0;
+    int64_t n_components = 2;
+    int64_t n_neighbors = 10;
     float mn_ratio = 0.5f;     // Mid-near pair ratio
     float fp_ratio = 2.0f;     // Far pair ratio
     float learning_rate = 1.0f; // Adam optimizer learning rate
@@ -77,11 +78,11 @@ struct PacMapModel {
     int hnsw_ef_search = 200;
     bool use_quantization = false;
 
-    // PACMAP algorithm state
-    int total_triplets = 0;
-    int neighbor_triplets = 0;
-    int mid_near_triplets = 0;
-    int far_triplets = 0;
+    // PACMAP algorithm state - use int64_t for large dataset support
+    int64_t total_triplets = 0;
+    int64_t neighbor_triplets = 0;
+    int64_t mid_near_triplets = 0;
+    int64_t far_triplets = 0;
 
     // Dual HNSW information for enhanced persistence
     uint32_t original_space_crc = 0;
@@ -162,8 +163,8 @@ struct PacMapModel {
     std::vector<uint8_t> pq_codes;
     std::vector<float> pq_centroids;
 
-    // Standard Mersenne Twister RNG for random operations
-    std::mt19937 rng;
+    // PCG RNG for random operations (consistent everywhere)
+    pcg64_fast rng;
 
     // Error handling (review addition)
     int last_error_code = 0;
@@ -179,7 +180,7 @@ struct PacMapModel {
 
     // Constructor
     PacMapModel() {
-        // Initialize RNG with seed if provided
+        // Initialize PCG RNG with seed if provided
         if (random_seed >= 0) {
             rng.seed(random_seed);
         }
@@ -192,8 +193,8 @@ struct PacMapModel {
         triplets_flat.push_back(type);
     }
 
-    inline uint32_t get_triplet_count() const {
-        return static_cast<uint32_t>(triplets_flat.size() / 3);
+    inline uint64_t get_triplet_count() const {
+        return static_cast<uint64_t>(triplets_flat.size() / 3);
     }
 
     inline void clear_triplets() {

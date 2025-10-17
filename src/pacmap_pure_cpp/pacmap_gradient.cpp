@@ -11,6 +11,13 @@
 // ERROR14 Step 3: Eigen SIMD vectorization for distance calculations
 #include <Eigen/Dense>
 
+// FIX17.md Step 4: Aligned memory allocation for SIMD
+#ifdef _WIN32
+#include <xmmintrin.h>  // For _mm_malloc/_mm_free on Windows
+#else
+#include <cstdlib>      // For aligned_alloc on Linux/macOS
+#endif
+
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
@@ -132,8 +139,8 @@ void compute_gradients_flat(const std::vector<double>& embedding, const std::vec
     size_t num_triplets = triplets_flat.size() / 3;
 
   
-    // MEMORY FIX: Use OpenMP for parallel processing with flat storage
-    #pragma omp parallel for schedule(static)
+    // FIX17.md Step 5: Use better OpenMP chunk size for cache locality
+    #pragma omp parallel for schedule(static, 1000)
     for (int idx = 0; idx < static_cast<int>(num_triplets); ++idx) {
         size_t triplet_offset = idx * 3;
 
@@ -145,7 +152,7 @@ void compute_gradients_flat(const std::vector<double>& embedding, const std::vec
         size_t idx_a = static_cast<size_t>(anchor) * n_components;
         size_t idx_n = static_cast<size_t>(neighbor) * n_components;
 
-        // MEMORY FIX: SIMD-optimized distance computation using Eigen
+        // FIX17.md Step 3: Fused distance computation with NaN/Inf check
         double d_ij = 1.0;
         if (use_simd && n_components >= 4) {
             // Vectorized path using Eigen (AVX2/AVX512)
@@ -159,6 +166,11 @@ void compute_gradients_flat(const std::vector<double>& embedding, const std::vec
                 double diff = embedding[idx_a + d] - embedding[idx_n + d];
                 d_ij += diff * diff;
             }
+        }
+
+        // FIX17.md Step 3: Inline NaN/Inf check - skip if distance is not finite
+        if (!std::isfinite(d_ij)) {
+            continue;
         }
 
         // Calculate gradient magnitude based on triplet type
@@ -175,8 +187,7 @@ void compute_gradients_flat(const std::vector<double>& embedding, const std::vec
                 break;
         }
 
-  
-        // Numerical safety: Skip if non-finite
+        // FIX17.md Step 3: Inline NaN/Inf check - skip if gradient magnitude is not finite
         if (!std::isfinite(grad_magnitude)) {
             continue;
         }

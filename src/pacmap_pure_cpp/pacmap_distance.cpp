@@ -1,80 +1,11 @@
 #include "pacmap_distance.h"
+#include "pacmap_utils.h"  // For safe multiplication functions
 #include <cstdio>  // For fprintf warnings
 
 namespace distance_metrics {
 
-    float euclidean_distance(const float* a, const float* b, int dim) {
-        float dist = 0.0f;
-        for (int i = 0; i < dim; ++i) {
-            float diff = a[i] - b[i];
-            dist += diff * diff;
-        }
-        return std::sqrt(dist);
-    }
-
-    float cosine_distance(const float* a, const float* b, int dim) {
-        float dot = 0.0f, norm_a = 0.0f, norm_b = 0.0f;
-
-        for (int i = 0; i < dim; ++i) {
-            dot += a[i] * b[i];
-            norm_a += a[i] * a[i];
-            norm_b += b[i] * b[i];
-        }
-
-        norm_a = std::sqrt(norm_a);
-        norm_b = std::sqrt(norm_b);
-
-        if (norm_a < 1e-10f || norm_b < 1e-10f) return 1.0f;
-
-        float cosine_sim = dot / (norm_a * norm_b);
-        cosine_sim = std::max(-1.0f, std::min(1.0f, cosine_sim));
-
-        return 1.0f - cosine_sim;
-    }
-
-    float manhattan_distance(const float* a, const float* b, int dim) {
-        float dist = 0.0f;
-        for (int i = 0; i < dim; ++i) {
-            dist += std::abs(a[i] - b[i]);
-        }
-        return dist;
-    }
-
-    float correlation_distance(const float* a, const float* b, int dim) {
-        float mean_a = 0.0f, mean_b = 0.0f;
-        for (int i = 0; i < dim; ++i) {
-            mean_a += a[i];
-            mean_b += b[i];
-        }
-        mean_a /= static_cast<float>(dim);
-        mean_b /= static_cast<float>(dim);
-
-        float num = 0.0f, den_a = 0.0f, den_b = 0.0f;
-        for (int i = 0; i < dim; ++i) {
-            float diff_a = a[i] - mean_a;
-            float diff_b = b[i] - mean_b;
-            num += diff_a * diff_b;
-            den_a += diff_a * diff_a;
-            den_b += diff_b * diff_b;
-        }
-
-        if (den_a < 1e-10f || den_b < 1e-10f) return 1.0f;
-
-        float correlation = num / std::sqrt(den_a * den_b);
-        correlation = std::max(-1.0f, std::min(1.0f, correlation));
-
-        return 1.0f - correlation;
-    }
-
-    float hamming_distance(const float* a, const float* b, int dim) {
-        int different = 0;
-        for (int i = 0; i < dim; ++i) {
-            if (std::abs(a[i] - b[i]) > 1e-6f) {
-                different++;
-            }
-        }
-        return static_cast<float>(different) / static_cast<float>(dim);
-    }
+    // FIX17.md Step 6: Inline distance functions are in header, but compute_distance functions remain here
+    // (switch statements are not ideal for inlining)
 
     float compute_distance(const float* a, const float* b, int dim, PacMapMetric metric) {
         switch (metric) {
@@ -91,80 +22,6 @@ namespace distance_metrics {
         default:
             return euclidean_distance(a, b, dim);
         }
-    }
-
-    // Double precision distance functions
-    double euclidean_distance(const double* a, const double* b, int dim) {
-        double dist = 0.0;
-        for (int i = 0; i < dim; ++i) {
-            double diff = a[i] - b[i];
-            dist += diff * diff;
-        }
-        return std::sqrt(dist);
-    }
-
-    double cosine_distance(const double* a, const double* b, int dim) {
-        double dot = 0.0, norm_a = 0.0, norm_b = 0.0;
-
-        for (int i = 0; i < dim; ++i) {
-            dot += a[i] * b[i];
-            norm_a += a[i] * a[i];
-            norm_b += b[i] * b[i];
-        }
-
-        norm_a = std::sqrt(norm_a);
-        norm_b = std::sqrt(norm_b);
-
-        if (norm_a < 1e-10 || norm_b < 1e-10) return 1.0;
-
-        double cosine_sim = dot / (norm_a * norm_b);
-        cosine_sim = std::max(-1.0, std::min(1.0, cosine_sim));
-
-        return 1.0 - cosine_sim;
-    }
-
-    double manhattan_distance(const double* a, const double* b, int dim) {
-        double dist = 0.0;
-        for (int i = 0; i < dim; ++i) {
-            dist += std::abs(a[i] - b[i]);
-        }
-        return dist;
-    }
-
-    double correlation_distance(const double* a, const double* b, int dim) {
-        double mean_a = 0.0, mean_b = 0.0;
-        for (int i = 0; i < dim; ++i) {
-            mean_a += a[i];
-            mean_b += b[i];
-        }
-        mean_a /= static_cast<double>(dim);
-        mean_b /= static_cast<double>(dim);
-
-        double num = 0.0, den_a = 0.0, den_b = 0.0;
-        for (int i = 0; i < dim; ++i) {
-            double diff_a = a[i] - mean_a;
-            double diff_b = b[i] - mean_b;
-            num += diff_a * diff_b;
-            den_a += diff_a * diff_a;
-            den_b += diff_b * diff_b;
-        }
-
-        if (den_a < 1e-10 || den_b < 1e-10) return 1.0;
-
-        double correlation = num / std::sqrt(den_a * den_b);
-        correlation = std::max(-1.0, std::min(1.0, correlation));
-
-        return 1.0 - correlation;
-    }
-
-    double hamming_distance(const double* a, const double* b, int dim) {
-        int different = 0;
-        for (int i = 0; i < dim; ++i) {
-            if (std::abs(a[i] - b[i]) > 1e-6) {
-                different++;
-            }
-        }
-        return static_cast<double>(different) / static_cast<double>(dim);
     }
 
     double compute_distance(const double* a, const double* b, int dim, PacMapMetric metric) {
@@ -368,27 +225,93 @@ namespace distance_metrics {
         return min_size > 0 ? (float)intersection / min_size : 0.0f;
     }
 
-    // Build distance matrix with progress reporting (all-to-all distances)
+    // FIX19: Build distance matrix with overflow protection for large datasets
     void build_distance_matrix(const float* data, int n_obs, int n_dim, PacMapMetric metric,
                               float* distance_matrix, pacmap_progress_callback_v2 progress_callback,
                               int current_obs, int total_obs) {
 
-        int total_pairs = n_obs * (n_obs - 1) / 2;
-        int pairs_processed = 0;
+        // FIX19: Use int64_t for large dataset support (1M+ points)
+        // Calculate total pairs with overflow protection
+        if (n_obs <= 1) {
+            return;  // No pairs to compute
+        }
 
-        // Fill upper triangle of distance matrix
+        bool overflow = false;
+        int64_t n_obs_64 = static_cast<int64_t>(n_obs);
+
+        // Safe calculation: n_obs * (n_obs - 1) / 2
+        int64_t total_pairs = safe_multiply_int64(n_obs_64, n_obs_64 - 1, &overflow);
+        if (overflow || total_pairs < 0) {
+            if (progress_callback) {
+                progress_callback("ERROR", current_obs, total_obs, 0.0f,
+                               "Integer overflow in distance matrix calculation - dataset too large");
+            }
+            return;
+        }
+        total_pairs = total_pairs / 2;  // Divide by 2 for upper triangle only
+
+        // Check if total_pairs is reasonable (safety check)
+        const int64_t MAX_PAIRS = 1000000000LL;  // 1 billion pairs limit
+        if (total_pairs > MAX_PAIRS) {
+            if (progress_callback) {
+                progress_callback("ERROR", current_obs, total_obs, 0.0f,
+                               "Distance matrix too large - consider using approximation methods");
+            }
+            return;
+        }
+
+        int64_t pairs_processed = 0;
+        const int64_t REPORT_INTERVAL = 1000;  // Report every 1000 pairs
+
+        // Fill upper triangle of distance matrix with overflow-protected indexing
         for (int i = 0; i < n_obs; ++i) {
+            // Check for overflow in matrix indexing: i * n_obs + j
+            int64_t row_offset = safe_multiply_int64(static_cast<int64_t>(i), n_obs_64, &overflow);
+            if (overflow) {
+                if (progress_callback) {
+                    progress_callback("ERROR", current_obs + pairs_processed, total_obs, 0.0f,
+                                   "Matrix indexing overflow - dataset too large");
+                }
+                return;
+            }
+
             for (int j = i + 1; j < n_obs; ++j) {
+                // Safe matrix indexing
+                int64_t index_ij = row_offset + static_cast<int64_t>(j);
+                int64_t index_ji = safe_multiply_int64(static_cast<int64_t>(j), n_obs_64, &overflow) + static_cast<int64_t>(i);
+                if (overflow) {
+                    if (progress_callback) {
+                        progress_callback("ERROR", current_obs + pairs_processed, total_obs, 0.0f,
+                                       "Matrix indexing overflow - dataset too large");
+                    }
+                    return;
+                }
+
+                // Validate indices are within bounds
+                if (index_ij >= static_cast<int64_t>(n_obs * n_obs) ||
+                    index_ji >= static_cast<int64_t>(n_obs * n_obs)) {
+                    if (progress_callback) {
+                        progress_callback("ERROR", current_obs + pairs_processed, total_obs, 0.0f,
+                                       "Matrix index out of bounds");
+                    }
+                    return;
+                }
+
+                // Compute distance
                 float dist = compute_distance(data + i * n_dim, data + j * n_dim, n_dim, metric);
-                distance_matrix[i * n_obs + j] = dist;
-                distance_matrix[j * n_obs + i] = dist;  // Symmetric
+
+                // Store in symmetric matrix
+                distance_matrix[static_cast<size_t>(index_ij)] = dist;
+                distance_matrix[static_cast<size_t>(index_ji)] = dist;
 
                 pairs_processed++;
 
                 // Report progress if callback provided
-                if (progress_callback && (pairs_processed % 1000 == 0 || pairs_processed == total_pairs)) {
-                    float percent = (float)pairs_processed / total_pairs * 100.0f;
-                    progress_callback("Building Distance Matrix", current_obs + pairs_processed, total_obs, percent, nullptr);
+                if (progress_callback && (pairs_processed % REPORT_INTERVAL == 0 || pairs_processed == total_pairs)) {
+                    float percent = static_cast<float>(pairs_processed) / static_cast<float>(total_pairs) * 100.0f;
+                    progress_callback("Building Distance Matrix",
+                                    current_obs + static_cast<int>(pairs_processed),
+                                    total_obs, percent, nullptr);
                 }
             }
         }

@@ -8,6 +8,7 @@
 #include <chrono>
 #include <sstream>
 #include <iomanip>
+#include "pcg_random.hpp"
 
 // Callback functions for progress reporting and warnings
 static pacmap_progress_callback_v2 g_progress_callback = nullptr;
@@ -137,23 +138,127 @@ void validate_metric_data(const float* data, int n_obs, int n_dim, PacMapMetric 
     }
 }
 
-bool check_memory_requirements(int n_samples, int n_features, int n_neighbors) {
-    // Estimate memory requirements
-    size_t data_size = n_samples * n_features * sizeof(float);
-    size_t embedding_size = n_samples * 2 * sizeof(float);  // Assume 2D embedding
-    size_t triplet_size = n_samples * n_neighbors * 3 * sizeof(Triplet);  // Rough estimate
-    size_t hnsw_size = n_samples * n_neighbors * sizeof(int) * 2;  // Approximate HNSW memory
+bool check_memory_requirements(int64_t n_samples, int64_t n_features, int64_t n_neighbors) {
+    // FIX19: Memory safety validation for large datasets (1M+ points)
+    // Use safe multiplication with overflow checks
 
-    size_t total_memory = data_size + embedding_size + triplet_size + hnsw_size;
-
-    // Convert to MB and check against reasonable limit (e.g., 8GB)
-    size_t memory_mb = total_memory / (1024 * 1024);
-    const size_t max_memory_mb = 8 * 1024;  // 8GB limit
-
-    if (memory_mb > max_memory_mb) {
-        std::cerr << "Warning: Estimated memory usage (" << memory_mb
-                  << " MB) exceeds recommended limit (" << max_memory_mb << " MB)" << std::endl;
+    // Check for overflow in memory calculations
+    if (n_samples <= 0 || n_features <= 0 || n_neighbors <= 0) {
+        std::cerr << "Error: Invalid parameters for memory estimation" << std::endl;
         return false;
+    }
+
+    // Safely calculate data size: n_samples * n_features * sizeof(double)
+    // Use double precision for training data storage
+    bool overflow = false;
+    size_t data_size = safe_multiply_size_t(n_samples, n_features, &overflow);
+    if (overflow) {
+        std::cerr << "Error: Data size calculation overflow for "
+                  << n_samples << " x " << n_features << " dataset" << std::endl;
+        return false;
+    }
+    data_size = safe_multiply_size_t(data_size, sizeof(double), &overflow);
+    if (overflow) {
+        std::cerr << "Error: Data memory size overflow" << std::endl;
+        return false;
+    }
+
+    // Safely calculate embedding size: n_samples * n_components * sizeof(double)
+    size_t embedding_size = safe_multiply_size_t(n_samples, 2, &overflow);  // Assume 2D embedding
+    if (overflow) {
+        std::cerr << "Error: Embedding size overflow" << std::endl;
+        return false;
+    }
+    embedding_size = safe_multiply_size_t(embedding_size, sizeof(double), &overflow);
+    if (overflow) {
+        std::cerr << "Error: Embedding memory size overflow" << std::endl;
+        return false;
+    }
+
+    // FIX19: Use flat triplet storage for memory estimation
+    // Format: [anchor1, neighbor1, type1, anchor2, neighbor2, type2, ...]
+    // Total triplets = n_samples * n_neighbors * (1 + mn_ratio + fp_ratio) approximately
+    int64_t estimated_triplets = safe_multiply_int64(n_samples, n_neighbors, &overflow);
+    if (overflow) {
+        std::cerr << "Error: Triplet count overflow" << std::endl;
+        return false;
+    }
+
+    // Apply conservative multiplier for MN and FP triplets
+    estimated_triplets = safe_multiply_int64(estimated_triplets, 3, &overflow);  // Approximate total
+    if (overflow) {
+        std::cerr << "Error: Total triplet count overflow" << std::endl;
+        return false;
+    }
+
+    // Flat storage: 3 uint32_t values per triplet
+    size_t triplet_size = safe_multiply_size_t(estimated_triplets, 3, &overflow);
+    if (overflow) {
+        std::cerr << "Error: Triplet array size overflow" << std::endl;
+        return false;
+    }
+    triplet_size = safe_multiply_size_t(triplet_size, sizeof(uint32_t), &overflow);
+    if (overflow) {
+        std::cerr << "Error: Triplet memory size overflow" << std::endl;
+        return false;
+    }
+
+    // HNSW memory estimation (conservative)
+    size_t hnsw_size = safe_multiply_size_t(n_samples, n_neighbors, &overflow);
+    if (overflow) {
+        std::cerr << "Error: HNSW size overflow" << std::endl;
+        return false;
+    }
+    hnsw_size = safe_multiply_size_t(hnsw_size, sizeof(int) * 4, &overflow);  // Conservative estimate
+    if (overflow) {
+        std::cerr << "Error: HNSW memory size overflow" << std::endl;
+        return false;
+    }
+
+    // Additional Adam optimizer state memory (double precision)
+    size_t adam_state_size = safe_multiply_size_t(n_samples, 2, &overflow);  // 2D embedding
+    if (overflow) {
+        std::cerr << "Error: Adam state size overflow" << std::endl;
+        return false;
+    }
+    adam_state_size = safe_multiply_size_t(adam_state_size, sizeof(double) * 2, &overflow);  // m and v vectors
+    if (overflow) {
+        std::cerr << "Error: Adam state memory overflow" << std::endl;
+        return false;
+    }
+
+    // Calculate total memory with overflow protection
+    size_t total_memory = data_size + embedding_size + triplet_size + hnsw_size + adam_state_size;
+
+    // Check for addition overflow
+    if (total_memory < data_size || total_memory < embedding_size ||
+        total_memory < triplet_size || total_memory < hnsw_size ||
+        total_memory < adam_state_size) {
+        std::cerr << "Error: Total memory calculation overflow" << std::endl;
+        return false;
+    }
+
+    // Convert to GB for large datasets
+    double memory_gb = static_cast<double>(total_memory) / (1024.0 * 1024.0 * 1024.0);
+    const double max_memory_gb = 16.0;  // 16GB limit for large datasets
+
+    if (memory_gb > max_memory_gb) {
+        std::cerr << "Error: Estimated memory usage (" << std::fixed << std::setprecision(2)
+                  << memory_gb << " GB) exceeds safety limit (" << max_memory_gb << " GB)" << std::endl;
+        std::cerr << "Dataset: " << n_samples << " samples x " << n_features << " features" << std::endl;
+        std::cerr << "Breakdown:" << std::endl;
+        std::cerr << "  Data: " << format_bytes(data_size) << std::endl;
+        std::cerr << "  Embedding: " << format_bytes(embedding_size) << std::endl;
+        std::cerr << "  Triplets: " << format_bytes(triplet_size) << std::endl;
+        std::cerr << "  HNSW: " << format_bytes(hnsw_size) << std::endl;
+        std::cerr << "  Adam state: " << format_bytes(adam_state_size) << std::endl;
+        return false;
+    }
+
+    // Warning for large memory usage
+    if (memory_gb > 8.0) {
+        std::cout << "Warning: Large memory usage estimated (" << std::fixed << std::setprecision(2)
+                  << memory_gb << " GB). System with sufficient RAM required." << std::endl;
     }
 
     return true;
@@ -162,12 +267,12 @@ bool check_memory_requirements(int n_samples, int n_features, int n_neighbors) {
 void auto_tune_parameters(PacMapModel* model, int n_samples) {
     if (n_samples < 100) {
         // Small dataset: more conservative parameters
-        model->n_neighbors = std::min(model->n_neighbors, n_samples / 2);
+        model->n_neighbors = std::min(model->n_neighbors, static_cast<int64_t>(n_samples / 2));
         model->learning_rate = std::min(model->learning_rate, 0.5f);
         model->mn_ratio = std::max(model->mn_ratio, 0.2f);
     } else if (n_samples > 10000) {
         // Large dataset: more aggressive parameters
-        model->n_neighbors = std::min(model->n_neighbors, 50);
+        model->n_neighbors = std::min(model->n_neighbors, static_cast<int64_t>(50));
         model->hnsw_ef_construction = std::min(model->hnsw_ef_construction, 100);
         model->use_quantization = true;
     }
@@ -310,13 +415,13 @@ void standardize_data(std::vector<float>& data, int n_samples, int n_features) {
     }
 }
 
-std::mt19937 get_seeded_mt19937(int seed) {
-    return seed >= 0 ? std::mt19937(seed) : std::mt19937(std::random_device{}());
+pcg64_fast get_seeded_pcg64(int seed) {
+    return seed >= 0 ? pcg64_fast(seed) : pcg64_fast(std::random_device{}());
 }
 
 void set_random_seed(PacMapModel* model, int seed) {
     model->random_seed = seed;
-    model->rng = get_seeded_mt19937(seed);
+    model->rng = get_seeded_pcg64(seed);
 }
 
 void* aligned_malloc(size_t size, size_t alignment) {
@@ -364,6 +469,53 @@ std::string format_duration(double milliseconds) {
         int seconds = static_cast<int>((milliseconds - minutes * 60000.0) / 1000.0);
         return std::to_string(minutes) + " min " + std::to_string(seconds) + " s";
     }
+}
+
+// FIX19: Safe multiplication functions for large dataset support
+size_t safe_multiply_size_t(int64_t a, int64_t b, bool* overflow) {
+    if (overflow) *overflow = false;
+
+    if (a < 0 || b < 0) {
+        if (overflow) *overflow = true;
+        return 0;
+    }
+
+    // Check for potential overflow before multiplication
+    if (a > 0 && b > 0 && a > SIZE_MAX / b) {
+        if (overflow) *overflow = true;
+        return 0;
+    }
+
+    return static_cast<size_t>(a) * static_cast<size_t>(b);
+}
+
+size_t safe_multiply_size_t(size_t a, size_t b, bool* overflow) {
+    if (overflow) *overflow = false;
+
+    // Check for potential overflow before multiplication
+    if (a > 0 && b > 0 && a > SIZE_MAX / b) {
+        if (overflow) *overflow = true;
+        return 0;
+    }
+
+    return a * b;
+}
+
+int64_t safe_multiply_int64(int64_t a, int64_t b, bool* overflow) {
+    if (overflow) *overflow = false;
+
+    if (a < 0 || b < 0) {
+        if (overflow) *overflow = true;
+        return 0;
+    }
+
+    // Check for potential overflow before multiplication
+    if (a > 0 && b > 0 && a > INT64_MAX / b) {
+        if (overflow) *overflow = true;
+        return 0;
+    }
+
+    return a * b;
 }
 
 bool is_valid_parameter_combination(float mn_ratio, float fp_ratio, int n_neighbors) {
