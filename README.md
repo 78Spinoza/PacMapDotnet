@@ -14,7 +14,6 @@ This is a **high-performance** implementation of **PaCMAP** (Pairwise Controlled
 
 **✅ Working Solution**: We have a complete, functional implementation with Euclidean distance fully working. The solution includes comprehensive demo applications, parameter exploration with animations, and all core features implemented. Currently undergoing final optimization and validation testing before full production release.
 
-
 ---
 
 **My perspective on this is:**
@@ -129,9 +128,11 @@ Below is the result of the library that varies the only hyperparameter of PACMAP
 *YZ front view displaying the mammoth's anatomical proportions and features*
 
 ![Neighbor Experiments Animation](docs/Other/neighbor_experiments_animation_optimized.gif)
+
 *PaCMAP neighbor experiments animation showing the effect of n_neighbors parameter from 5 to 60 (300ms per frame) using our implementation*
 
-
+![HairyMamuth](docs/Other/hairy_mammoth_1M_pacmap_2d.png)
+*PaCMAP applied to 1M  massive 3d point 3d hairy mammoth. Using our library with excellent results.*
 
 ### **Key Quantitative Results from the PaCMAP Paper**
 > - **🌐 Superior Global Structure Preservation**: **PaCMAP performs comparably to TriMap**, excelling at maintaining inter-cluster distances and global relationships, unlike the "near-sighted" t-SNE and UMAP.
