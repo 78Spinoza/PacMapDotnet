@@ -180,16 +180,26 @@ void compute_gradients_flat(const std::vector<double>& embedding, const std::vec
         }
 
         // Calculate gradient magnitude based on triplet type
+        // FIX22 Tier 1: Replace std::pow with multiplication for performance
         double grad_magnitude = 0.0;
         switch (static_cast<TripletType>(type)) {
             case NEIGHBOR:
-                grad_magnitude = static_cast<double>(w_n) * 20.0 / std::pow(10.0 + d_ij, 2.0);
+                {
+                    double term_n = 10.0 + d_ij;
+                    grad_magnitude = static_cast<double>(w_n) * 20.0 / (term_n * term_n);
+                }
                 break;
             case MID_NEAR:
-                grad_magnitude = static_cast<double>(w_mn) * 20000.0 / std::pow(10000.0 + d_ij, 2.0);
+                {
+                    double term_mn = 10000.0 + d_ij;
+                    grad_magnitude = static_cast<double>(w_mn) * 20000.0 / (term_mn * term_mn);
+                }
                 break;
             case FURTHER:
-                grad_magnitude = -static_cast<double>(w_f) * 2.0 / std::pow(1.0 + d_ij, 2.0);
+                {
+                    double term_f = 1.0 + d_ij;
+                    grad_magnitude = -static_cast<double>(w_f) * 2.0 / (term_f * term_f);
+                }
                 break;
         }
 

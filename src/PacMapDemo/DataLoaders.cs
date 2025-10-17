@@ -5,6 +5,7 @@ using System.Globalization;
 using System.Linq;
 using NumSharp;
 using Microsoft.Data.Analysis;
+using System.IO.Compression;
 
 namespace PacMapDemo
 {
@@ -51,19 +52,50 @@ namespace PacMapDemo
         }
 
         /// <summary>
-        /// Load mammoth 3D point cloud data from CSV
+        /// Load mammoth 3D point cloud data from CSV (supports both .csv and .csv.zip files)
         /// </summary>
-        /// <param name="csvPath">Path to mammoth_data.csv file</param>
+        /// <param name="csvPath">Path to mammoth_data.csv file or mammoth_data.csv.zip file</param>
         /// <param name="maxSamples">Maximum number of samples to load (0 = all)</param>
         /// <returns>3D point cloud as double[,] array</returns>
         public static double[,] LoadMammothData(string csvPath, int maxSamples = 0)
         {
             try
             {
-                if (!File.Exists(csvPath))
-                    throw new FileNotFoundException($"Mammoth CSV file not found: {csvPath}");
+                string[] lines;
+                bool isZipFile = csvPath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase);
 
-                var lines = File.ReadAllLines(csvPath);
+                if (isZipFile)
+                {
+                    // Extract CSV from zip file
+                    if (!File.Exists(csvPath))
+                        throw new FileNotFoundException($"Mammoth ZIP file not found: {csvPath}");
+
+                    Console.WriteLine($"📦 Loading mammoth data from ZIP: {Path.GetFileName(csvPath)}");
+
+                    using (var archive = ZipFile.OpenRead(csvPath))
+                    {
+                        var csvEntry = archive.Entries.FirstOrDefault(e =>
+                            e.Name.EndsWith(".csv", StringComparison.OrdinalIgnoreCase));
+
+                        if (csvEntry == null)
+                            throw new InvalidDataException($"No CSV file found in ZIP: {csvPath}");
+
+                        using (var reader = new StreamReader(csvEntry.Open()))
+                        {
+                            var content = reader.ReadToEnd();
+                            lines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+                        }
+                    }
+                }
+                else
+                {
+                    // Load directly from CSV file
+                    if (!File.Exists(csvPath))
+                        throw new FileNotFoundException($"Mammoth CSV file not found: {csvPath}");
+
+                    lines = File.ReadAllLines(csvPath);
+                }
+
                 var dataLines = new List<string>();
 
                 // Skip header if present (first line might be "0,1,2" or similar)

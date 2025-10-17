@@ -21,7 +21,7 @@ namespace PacMapDemo
         private const string ResultsDir = "Results";
         private static readonly string DataDir = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "PacMapDemo", "Data"));
         private const string MammothDataFile = "mammoth_data.csv";
-        private const string HairyMammothDataFile = "mammoth_a.csv";
+        private const string HairyMammothDataFile = "mammoth_a.csv.zip";
 
       
         /// <summary>
@@ -98,15 +98,25 @@ namespace PacMapDemo
         }
 
         /// <summary>
-        /// Loads the mammoth dataset from a CSV file.
+        /// Loads the mammoth dataset from a CSV file (supports both .csv and .csv.zip files).
         /// </summary>
         private static (double[,] data, int[] labels) LoadMammothData()
         {
             Console.WriteLine("📥 Loading mammoth dataset...");
             string csvPath = Path.Combine(DataDir, MammothDataFile);
+
+            // Try CSV file first, then zip file
             if (!File.Exists(csvPath))
             {
-                throw new FileNotFoundException($"Mammoth data file not found: {csvPath}");
+                string zipPath = Path.ChangeExtension(csvPath, ".zip");
+                if (File.Exists(zipPath))
+                {
+                    csvPath = zipPath;
+                }
+                else
+                {
+                    throw new FileNotFoundException($"Mammoth data file not found: {csvPath} or {Path.ChangeExtension(csvPath, ".zip")}");
+                }
             }
             return DataLoaders.LoadMammothWithLabels(csvPath);
         }

@@ -119,11 +119,21 @@ if(CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebI
         target_compile_options(pacmap PRIVATE /O2 /Ob2 /DNDEBUG)
         # Re-enable AVX2 optimization for performance (FIX17.md Step 1)
         target_compile_options(pacmap PRIVATE /arch:AVX2)
+        # FIX22 Tier 1: Enable fast math for aggressive floating-point optimizations
+        target_compile_options(pacmap PRIVATE /fp:fast)
+        # FIX22 Tier 2: Enable Link-Time Optimization for whole-program optimization
+        target_compile_options(pacmap PRIVATE /GL)
+        set_target_properties(pacmap PROPERTIES LINK_OPTIONS /LTCG)
     else()
         # GCC/Clang optimizations
         target_compile_options(pacmap PRIVATE -O3 -DNDEBUG)
         # Enable native optimizations for better performance
         target_compile_options(pacmap PRIVATE -march=native)
+        # FIX22 Tier 1: Enable fast math for aggressive floating-point optimizations
+        target_compile_options(pacmap PRIVATE -ffast-math)
+        # FIX22 Tier 2: Enable Link-Time Optimization for whole-program optimization
+        target_compile_options(pacmap PRIVATE -flto)
+        set_property(TARGET pacmap PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
     endif()
 endif()
 
