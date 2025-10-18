@@ -1,4 +1,4 @@
-# PacMapDotnet: Production-Ready PaCMAP Implementation for C#/.NET
+# PacMapDotnet: Dimension Reduction PACMAP - Production-Ready PaCMAP Implementation for C#/.NET
 
 [![Build Status](https://img.shields.io/badge/build-working-green)](https://github.com/78Spinoza/PacMapDotnet)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
@@ -55,7 +55,9 @@ This C++/C# version bridges these gaps, making PaCMAP **production-ready** for A
 - **Enhances AI Pipelines**: Serves as a preprocessing step to improve model efficiency, reduce noise, and boost performance in tasks like classification, clustering, and anomaly detection.
 - **Facilitates Visualization**: Creates human-interpretable 2D/3D representations, aiding decision-making for data filtering and AI model validation.
 
-![3D UMAP Rotation](docs/Other/rot3DUMAP_alltp_360.gif)
+<div align="center">
+  <img src="docs/Other/rot3DUMAP_alltp_360.gif" alt="3D UMAP Rotation" width="600"/>
+</div>
 
 
 ## Evolution of Dimensionality Reduction Methods
