@@ -6,22 +6,22 @@
 [![C#](https://img.shields.io/badge/C%23-8.0+-blue)](https://github.com/78Spinoza/PacMapDotnet)
 [![Version](https://img.shields.io/badge/version-2.8.29--PERFORMANCE--OPTIMIZED-green)](https://github.com/78Spinoza/PacMapDotnet)
 
-**Technology invented 2021 available as production ready code!**
+**Technology invented in 2021, now available as production-ready code!**
 
 ## 🎉 **Project Status: Production Ready with Performance Optimizations**
 
 This is a **high-performance** implementation of **PaCMAP** (Pairwise Controlled Manifold Approximation and Projection) in native C++ with C#/.NET bindings, designed for **production use cases**. It includes features like model save/load, faster approximate fitting using **HNSW (Hierarchical Navigable Small World)** for efficient nearest neighbor search, advanced quantization, and optimizations for **large datasets**.
 ---
 
-**My perspective on this is:**
+**Perspective:**
 
-**PaCMAP** (introduced in 2021) represents a methodological advancement over **UMAP** (2018). One of the enduring challenges in machine learning is **hyperparameter tuning**, as model performance often depends critically on parameter configurations that are non-trivial to determine. While experts with a deep understanding of both the mathematical foundations and data characteristics can address this effectively, the process remains complex, time-consuming, and prone to error.
+**PaCMAP** (introduced in 2021) represents a methodological advancement over **UMAP** (2018). One enduring challenge in machine learning is **hyperparameter tuning**, as model performance often depends critically on parameter configurations that are non-trivial to determine. While experts with deep understanding of both the mathematical foundations and data characteristics can address this effectively, the process remains complex, time-consuming, and prone to error.
 
 In the context of **dimensionality reduction (DR)**, this issue creates a **classic chicken-and-egg problem**: DR is typically used to explore and structure data, yet the quality of the DR itself depends on carefully chosen hyperparameters. This interdependence can lead to **systematic biases** and **overconfidence** in the resulting low-dimensional embeddings.
 
-**“There can be only one!”** (a nod to the *Highlander* movie). Although PaCMAP does involve hyperparameters, they are **not highly sensitive**, and the effective tuning space is **reduced to a single key parameter**: the number of neighbors. This property substantially simplifies model configuration and enhances robustness across diverse datasets.
+**"There can be only one!"** (a nod to the *Highlander* movie). Although PaCMAP involves hyperparameters, they are **not highly sensitive**, and the effective tuning space is **reduced to a single key parameter**: the number of neighbors. This property substantially simplifies model configuration and enhances robustness across diverse datasets.
 
-Furthermore, most DR methods preceding PaCMAP relied on **PCA-based initialization**. Because PCA is inherently **linear** and fails to capture **non-linear** structures effectively, this introduces significant limitations. PaCMAP, in contrast, employs **random initialization**, removing the dependency on PCA and mitigating potential **initialization bias** in the embedding process.
+Furthermore, most DR methods preceding PaCMAP relied on **PCA-based initialization**. Because PCA is inherently **linear** and fails to capture **non-linear** structures effectively, these methods have significant limitations. PaCMAP, in contrast, employs **random initialization**, removing the dependency on PCA and mitigating potential **initialization bias** in the embedding process.
 
 ---
 
@@ -31,7 +31,7 @@ Furthermore, most DR methods preceding PaCMAP relied on **PCA-based initializati
 There were no C++/C# implementations of this technology invented in 2021 (as of 2025-10-12).
 The only existing implementations were in Python and Rust.
 
-Current PaCMAP implementations are mostly Python-based scientific tools lacking:
+Current PaCMAP implementations are mostly Python-based scientific tools that lack:
 - **Deterministic projection and fit using a fixed random seed**
 - **Save/load functionality** for trained models
 - **Fast approximate fitting** (e.g., via HNSW) for large-scale production
@@ -39,14 +39,14 @@ Current PaCMAP implementations are mostly Python-based scientific tools lacking:
 - **Safety features** like outlier detection and progress reporting
 - **Linux/Windows binaries for easy testing and cloud deployment**
 
-This C++/C# version bridges these gaps, making PaCMAP **production-ready** for AI pipelines. See also my previous [UMAP (invented 2018) implementation](https://github.com/78Spinoza/UMAP) that is the scientific predecessor of the improved PaCMAP.
+This C++/C# version bridges these gaps, making PaCMAP **production-ready** for AI pipelines. See also the previous [UMAP (invented 2018) implementation](https://github.com/78Spinoza/UMAP), which is the scientific predecessor of the improved PaCMAP.
 
 ## What is Dimensionality Reduction (DR)?
 
 **Dimensionality Reduction (DR)** is a technique used to reduce the number of variables or features in high-dimensional data while preserving as much critical information as possible. It transforms data from a high-dimensional space (e.g., thousands of features) into a lower-dimensional space (e.g., 2D or 3D) for easier **analysis**, **visualization**, and **processing**. Ideally, DR discovers linear and non-linear dependencies and unnecessary dimensions, reducing the data to a more informative dimensionality. DR is used to understand the underlying structure of the data.
 
 ![T-rex Render](docs/Other/T-rex_render.png)
-*Complex 3D structure showcasing the challenges of dimensionality reduction to 2D and difficulty of UMAP initialization giving different results*  
+*Complex 3D structure showcasing the challenges of dimensionality reduction to 2D and the difficulty of UMAP initialization giving different results*  
 ![T-rex Animation](docs/Other/t-rex-random.gif)
 
 ### Why DR is Crucial for Data Filtering and AI
@@ -64,7 +64,7 @@ Dimensionality reduction has evolved from basic linear methods to advanced non-l
 
 - **Before 2002**: The go-to method was **Principal Component Analysis (PCA)**, introduced by Karl Pearson in 1901 and formalized in the 1930s. PCA projects data onto linear components that maximize variance but struggles with non-linear manifolds in datasets like images or genomics.
 
-- **2002**: **Stochastic Neighbor Embedding (SNE)** was invented by **Geoffrey Hinton** (an AI pioneer) and **Sam Roweis**. SNE used a probabilistic approach to preserve local similarities via pairwise distances, marking a leap into non-linear DR. However, it faced issues like the "crowding problem" and optimization challenges.
+- **2002**: **Stochastic Neighbor Embedding (SNE)** was invented by **Geoffrey Hinton** (an AI pioneer) and **Sam Roweis**. SNE used a probabilistic approach to preserve local similarities via pairwise distances, marking a leap into non-linear DR. However, it faced issues such as the "crowding problem" and optimization challenges.
 
 - **2008**: **t-SNE (t-distributed Stochastic Neighbor Embedding)**, developed by **Laurens van der Maaten** and **Geoffrey Hinton**, improved on SNE. It used t-distributions in the low-dimensional space to address crowding and enhance cluster separation. While excellent for visualization, t-SNE is computationally heavy and weak at preserving global structures.
 
@@ -101,7 +101,7 @@ The difference becomes stark when comparing methods on the well-understood MNIST
 Notice how t-SNE creates misleading cluster size variations that don't reflect the actual balanced nature of MNIST digit classes. **This is why PaCMAP was revolutionary** - it preserves both local neighborhoods AND global structure without these artifacts.
 
 
-Even UMAP, a later version, is very **sensitive** to hyperparameters as you can see below:
+Even UMAP, a later version, is highly **sensitive** to hyperparameters, as demonstrated below:
 
 
 ![HairyMamuth](docs/Other/mammoth_render2.png)
@@ -129,14 +129,14 @@ Below is the result of the library that varies the only hyperparameter of PACMAP
 *PaCMAP neighbor experiments animation showing the effect of n_neighbors parameter from 5 to 60 (300ms per frame) using our implementation*
 
 ![HairyMamuth](docs/Other/hairy_mammoth_1M_pacmap_2d.png)
-*PaCMAP applied to 1M  massive 3d point 3d hairy mammoth. Using our library with excellent results.*
+*PaCMAP applied to 1M massive 3D point hairy mammoth dataset using this library with superior results.*
 
 ### **Key Quantitative Results from the PaCMAP Paper**
 > - **🌐 Superior Global Structure Preservation**: **PaCMAP performs comparably to TriMap**, excelling at maintaining inter-cluster distances and global relationships, unlike the "near-sighted" t-SNE and UMAP.
 > - **🔍 Excellent Local Structure Preservation**: **PaCMAP matches the performance of UMAP and t-SNE**, ensuring tight neighborhood structures are preserved for detailed local analysis.
 > - **⚡ Significantly Faster Computation**: **PaCMAP is much faster** than t-SNE, UMAP, and TriMap, leveraging efficient optimizations like HNSW for rapid processing.
 
-**t-SNE and UMAP** are often "near-sighted," prioritizing local neighborhoods at the expense of global structures. PaCMAP's balanced approach makes it a standout choice.
+**t-SNE and UMAP** are often "near-sighted," prioritizing local neighborhoods at the expense of global structures. PaCMAP's balanced approach makes it particularly advantageous.
 
 The critical insight is that these techniques need **production-ready implementations** to shine in real-world AI pipelines—this project delivers exactly that.
 
@@ -148,11 +148,11 @@ PaCMAP excels due to its balanced and efficient approach:
 - **Diversity**: Captures regimes and transitions that UMAP might miss, enhancing ensemble diversity when errors are uncorrelated.
 - **Global Faithfulness**: Preserves relative distances between clusters better, ideal for identifying smooth risk/return continua, not just tight clusters.
 - **Efficiency**: **Significantly lower computation time** than t-SNE, UMAP, and TriMap, especially with HNSW approximations.
-- **Versatility**: Perfect for visualization, feature extraction, and preprocessing in AI workflows.
+- **Versatility**: Highly suitable for visualization, feature extraction, and preprocessing in AI workflows.
 
 # The Mammoth Test: Ultimate Challenge for Dimensionality Reduction
 
-Projecting complex 3D structures like a mammoth into 2D space while preserving **all anatomical details** represents one of the most challenging tests for dimensionality reduction algorithms. The algorithm must manage intricate non-linearities with minimal guidance - essentially just one hyperparameter.
+Projecting complex 3D structures like a mammoth into 2D space while preserving **all anatomical details** represents one of the most challenging tests for dimensionality reduction algorithms. The algorithm must manage intricate non-linearities with minimal guidance - requiring only a single hyperparameter.
 
 ## Cognitive Parallel: How Our Brain Works
 
@@ -170,7 +170,7 @@ The projection quality is extraordinary. Here's the enlarged view showing the pr
 
 
 ![Mammoth PaCMAP Our lib](docs/Other/mammoth_pacmap_embedding.png)
-* Produced by our C# C++ library.*
+*Produced by our C# C++ library.*
 
 
 
@@ -195,34 +195,33 @@ PaCMAP excels with high-dimensional data. Here's the MNIST dataset projection wh
 
 ### MNIST Transform Visualizations Generated Using the Library
 
-Below are visualizations generated using this PaCMAP library implementation. As you can see in the animation, the PaCMAP dimensionality reduction is very forgiving when varying hyperparameters - the clusters jump around but still maintain their shape and internal structure. Additionally, the "hard-to-classify" letters can be separated from the fold, and things that are supposed to be close remain close while those that should be apart remain apart.  
+The following visualizations were generated using this PaCMAP library implementation. As demonstrated in the animation, the PaCMAP dimensionality reduction demonstrates considerable tolerance to hyperparameter variation - the clusters shift position while maintaining their shape and internal structure. Additionally, the "hard-to-classify" letters can be separated from the group, and items that are supposed to be close remain close while those that should be apart remain apart.  
 
 ![MNIST 2D Transform](docs/Other/mnist_2d_transform.png)
-*All projections have misplaced letters, it's only more visible here since I use different color and dot type. This demonstrates the inherent challenges in dimensionality reduction where some data points naturally get positioned in suboptimal regions of the low-dimensional manifold.*
+*All projections have some misplaced letters; this is more visible here since different colors and dot types are used. This demonstrates the inherent challenges in dimensionality reduction where some data points naturally get positioned in suboptimal regions of the low-dimensional manifold.*
 
-**Key Achievement**: Unlike t-SNE, the cluster sizes here actually reflect the balanced nature of MNIST classes, and the spatial relationships between digits (e.g., 4 and 9 being close, 8 and 3, etc ) make intuitive sense.
+**Key Achievement**: Unlike t-SNE, the cluster sizes accurately reflect the balanced nature of MNIST classes, and the spatial relationships between digits (e.g., 4 and 9 being close, 8 and 3, etc.) demonstrate logical consistency.
 
 
-### PACMAP Hyperpramater insensitivty on the 70k 28x28 MNIST dataset
+### PACMAP Hyperparameter Insensitivity on the 70k 28x28 MNIST Dataset
 
 ![MNIST Ratio Animation](docs/Other/MNSTMnRatio.gif)
-*Parameter optimization animation showing the effect of varying MN_ratio from 0.4 to 1.3 while maintaining FP_ratio = 4 × MN_ratio relationship. This visualize how parameter changes affect the embedding structure.*
+*Parameter optimization animation showing the effect of varying MN_ratio from 0.4 to 1.3 while maintaining FP_ratio = 4 × MN_ratio relationship. This visualizes how parameter changes affect the embedding structure.*
 
 ![Neighbor MSTI Animation](docs/Other/neighborMNSTI.gif)
-*Neighbor sampling strategy animation demonstrating  hyperparams in the PaCMAP algorithm. This animation shows how the triplet sampling strategy affects the final embedding quality. As you can see its very forgiving and stable except the blobs jumping around. *
+*Neighbor sampling strategy animation demonstrating hyperparameters in the PaCMAP algorithm. This animation illustrates how the triplet sampling strategy affects the final embedding quality. The method demonstrates considerable tolerance and stability, with only cluster positions shifting.*
 
 
-Below is a clean version where all the difficult letters are removed, making it easy for AI or any ML method to classify since they can be properly separated as seen with this powerful DR tool. 
+The following represents a refined version wherein all difficult letters have been removed, facilitating classification by artificial intelligence or machine learning methods since they can be properly segregated using this powerful DR tool. 
 
 ![MNIST 2D Transform Clean](docs/Other/mnist_2d_transform_clean.png)
-*Here is the cleaned one using the library's SafeTransform method, which provides enhanced classification by filtering out difficult samples and using weighted nearest neighbor voting for improved robustness.*
+*The cleaned version using the library's SafeTransform method, which provides enhanced classification by filtering out difficult samples and using weighted nearest neighbor voting for improved robustness.*
 
-Below are the difficult letters identified, and we can understand why many of them are difficult to recognize even for the human eye. 
+The difficult letters identified below present challenges in recognition, even for human observation. 
 
                    ![MNIST 2D Transform Difficult](docs/Other/mnist_2d_transform_difficult.png)
 
-*These are the difficult letters since they are misplaced in the dimension manifold. Understandably so if you look at some of them - these represent samples that are inherently ambiguous or lie in challenging regions of the 
-feature space where clear separation is difficult.*
+*These letters are classified as difficult due to their misplacement within the dimensional manifold. This classification is understandable, as these samples represent inherently ambiguous cases or reside in challenging regions of the feature space where clear separation proves difficult.*
 
 
 
@@ -258,7 +257,7 @@ This production implementation includes advanced features not found in typical r
 - ✅ **Comprehensive Test Suite**: Validation ensuring production quality
 
 
-*GIF animations referenced above were adapted from the excellent UMAP examples repository: https://github.com/MNoichl/UMAP-examples-mammoth-/tree/master*
+*GIF animations referenced above were adapted from the high-quality UMAP examples repository: https://github.com/MNoichl/UMAP-examples-mammoth-/tree/master*
 
 ## Architecture
 
@@ -301,7 +300,7 @@ dotnet run
 
 **✅ Pre-built binaries included** - No C++ compilation required! The native PACMAP libraries for both Windows (`pacmap.dll`) and Linux (`libpacmap.so`) are included in this repository.
 
-**📦 Eigen Library**: This project uses Eigen 3.4.0 (header-only) as a git submodule for SIMD optimizations. The submodule is automatically downloaded when you clone with `--recurse-submodules`. If building from source, Eigen headers are required.
+**📦 Eigen Library**: This project uses Eigen 3.4.0 (header-only) as a git submodule for SIMD optimizations. The submodule is automatically downloaded when cloning with `--recurse-submodules`. If building from source, Eigen headers are required.
 
 ## 🎛 Hyperparameters
 
@@ -315,7 +314,7 @@ The number of neighbors considered in the k-Nearest Neighbor graph. For optimal 
 - **Small datasets (n < 10,000)**: Use `n_neighbors = 10`
 - **Large datasets (n ≥ 10,000)**: Use `n_neighbors = 10 + 15 * (log₁₀(n) - 4)`
 
-**This adaptive formula is a very good rule of thumb** for optimizing PaCMAP performance across different dataset sizes. It automatically scales the neighborhood size to maintain the proper balance between local and global structure preservation as your dataset grows.
+**This adaptive formula serves as an optimal guideline** for optimizing PaCMAP performance across different dataset sizes. It automatically scales the neighborhood size to maintain the proper balance between local and global structure preservation as the dataset grows.
 
 **Examples:**
 - 1,000 samples → 10 neighbors
@@ -443,16 +442,16 @@ PaCMAP Enhanced includes comprehensive progress reporting across all operations:
 
 ## Latest Performance Optimizations (v2.8.29)
 
-### 🚀 Performance Optimizations - COMPLETED ✅
+### 🚀 Performance Optimizations - Completed
 
 **Major Performance Improvements**: Implemented 15 targeted optimizations with **15-35% cumulative speedup**:
 
-#### Tier 1 Optimizations (Easy Wins - 10-20% improvement) ✅
+#### Tier 1 Optimizations (Easy Wins - 10-20% improvement)
 - **Math Function Optimization**: Eliminated expensive function calls in gradient computation
 - **Float-Specific Operations**: Optimized square root calculations avoiding double casting overhead
 - **Fast Math Compiler Flags**: Aggressive floating-point optimizations for maximum performance
 
-#### Tier 2 Optimizations (Low-Hanging Fruit - 5-15% improvement) ✅
+#### Tier 2 Optimizations (Low-Hanging Fruit - 5-15% improvement)
 - **Memory Access Optimization**: Enhanced compiler optimization through const correctness
 - **Link-Time Optimization**: Whole-program optimization across compilation units
 - **Efficient Memory Patterns**: Optimized weight normalization and data access
@@ -462,7 +461,7 @@ PaCMAP Enhanced includes comprehensive progress reporting across all operations:
 - **Compiler Optimizations**: Fast math, LTO, memory access patterns
 - **Validation**: All tests passing with identical results, 15-35% performance gain
 
-### 📦 Dataset Compression Support - COMPLETED ✅
+### 📦 Dataset Compression Support - Completed
 
 **Storage Optimization**: Implemented automatic zip file loading for large datasets:
 - **Mammoth Dataset**: Compressed from 23MB → 9.5MB (60% savings)
@@ -470,7 +469,7 @@ PaCMAP Enhanced includes comprehensive progress reporting across all operations:
 - **Backward Compatibility**: Maintains support for direct .csv files
 - **Zero Performance Impact**: No slowdown during processing
 
-### 🏃 Performance Benchmarks - COMPLETED ✅
+### 🏃 Performance Benchmarks - Completed
 
 **Built-in Benchmark Suite**: `PacMapBenchmarks` program provides performance metrics:
 
@@ -480,15 +479,15 @@ PaCMAP Enhanced includes comprehensive progress reporting across all operations:
 | 5,000     | 100      | 5,107 ms        | 11 ms             | 0.3 MB      |
 | 10,000    | 300      | 10,855 ms       | 103 ms            | 0.5 MB      |
 
-**System Features**: OpenMP 8 threads, AVX2 SIMD, FIX22 optimizations active
+**System Features**: OpenMP 8 threads, AVX2 SIMD, compiler optimizations active
 
 ### Previous Optimizations (v2.8.18)
 
-### Optimization Roadmap - COMPLETE ✅
+### Optimization Roadmap - Complete
 
-We've completed all three steps of the ERROR14 performance optimization roadmap with significant improvements:
+All three steps of the performance optimization roadmap have been completed with significant improvements:
 
-#### Step 1: OpenMP Adam Loop Optimization ✅
+#### Step 1: OpenMP Adam Loop Optimization
 - **Impact**: 1.5-2x speedup on multi-core systems
 - **Implementation**: Added `schedule(static)` to Adam and SGD optimizer loops
 - **Benefits**:
@@ -496,7 +495,7 @@ We've completed all three steps of the ERROR14 performance optimization roadmap 
   - Maintains reproducibility with fixed random seeds
   - Scales linearly with CPU cores (3-4x on 8-core systems)
 
-#### Step 2: Triplet Batching and Cache Locality ✅
+#### Step 2: Triplet Batching and Cache Locality
 - **Impact**: 1.2-1.5x additional speedup
 - **Implementation**: Process triplets in 10k batches tuned for L2/L3 cache
 - **Benefits**:
@@ -504,7 +503,7 @@ We've completed all three steps of the ERROR14 performance optimization roadmap 
   - Reduced memory bandwidth pressure
   - 10-20% reduction in memory allocator overhead
 
-#### Step 3: Eigen SIMD Vectorization ✅
+#### Step 3: Eigen SIMD Vectorization
 - **Impact**: 1.5-3x additional speedup on modern CPUs
 - **Implementation**: Runtime AVX2/AVX512 detection with scalar fallback
 - **Benefits**:
@@ -513,7 +512,7 @@ We've completed all three steps of the ERROR14 performance optimization roadmap 
   - Maintains determinism across all CPU generations
   - Zero configuration required
 
-#### C++ Integration Bug Fixes ✅
+#### C++ Integration Bug Fixes
 - **Impact**: Fixed critical segfaults in C++ integration tests
 - **Implementation**: Null callback safety, function signature consistency, code cleanup
 - **Benefits**:
@@ -521,7 +520,7 @@ We've completed all three steps of the ERROR14 performance optimization roadmap 
   - Production-ready code without debug artifacts
   - Thread-safe callback handling in parallel sections
 
-#### OpenMP Thread Safety Fix ✅ (v2.8.18)
+#### OpenMP Thread Safety Fix (v2.8.18)
 - **Impact**: Fixed OpenMP DLL unload segfaults while maintaining full optimization
 - **Implementation**: Atomic operations, explicit cleanup handlers, deterministic scheduling
 - **Benefits**:
@@ -531,7 +530,7 @@ We've completed all three steps of the ERROR14 performance optimization roadmap 
   - **Production Ready**: Enterprise-grade DLL stability for deployment
 
 #### Combined Performance Gain (All Optimizations)
-- **ERROR14 Optimizations**: 2.7-9x speedup (OpenMP + SIMD + batching)
+- **v2.8.18 Optimizations**: 2.7-9x speedup (OpenMP + SIMD + batching)
 - **Latest Optimizations**: 15-35% additional speedup (compiler + math optimizations)
 - **Total Cumulative Speedup**: 3.1-12.5x from all optimizations
 - **CPU Dependent**:
@@ -542,7 +541,7 @@ We've completed all three steps of the ERROR14 performance optimization roadmap 
 - **Determinism**: All optimizations maintain reproducibility
 - **Testing**: All 15 unit tests passing + C++ integration tests verified + benchmarks validated
 
-**Technical Details**: See [FIX14.md](FIX14.md) for complete optimization documentation.
+**Technical Details**: See optimization documentation for complete implementation details.
 
 ## Performance Benchmarks
 
@@ -611,7 +610,7 @@ dotnet run
 - **Multiple Dimensions**: 1D to 50D embeddings
 - **Transform Capability**: Project new data using fitted models
 - **Outlier Detection**: 5-level safety analysis
-- **ERROR14 Performance Optimizations**: Complete implementation with 2.7-9x speedup
+- **v2.8.18 Performance Optimizations**: Complete implementation with 2.7-9x speedup
   - **OpenMP Parallelization**: Deterministic scheduling (1.5-2x speedup)
   - **Triplet Batching**: Cache locality optimization (1.2-1.5x speedup)
   - **Eigen SIMD Vectorization**: AVX2/AVX512 support (1.5-3x speedup)
@@ -632,7 +631,7 @@ dotnet run
   - **Enterprise Ready**: Production-grade stability for deployment
 - **C++ Integration**: Robust native API with comprehensive null callback safety
 - **Production Code**: Clean implementation without debug artifacts
-- **FIX19 Integer Overflow Protection**: Safe support for 1M+ point datasets
+- **Integer Overflow Protection**: Safe support for 1M+ point datasets
   - **Safe Arithmetic**: int64_t calculations prevent overflow in triplet counts
   - **Memory Safety**: Comprehensive validation with detailed memory usage estimation
   - **Distance Matrix Protection**: Overflow-safe indexing and progress reporting
@@ -643,7 +642,7 @@ dotnet run
 - **Streaming Processing**: Enhanced large dataset processing capabilities
 
 ### ⚠️ **Known Limitations**
-- All resolved in v2.8.26 - FIX19 addresses integer overflow issues completely
+- All resolved in v2.8.26 - comprehensive fix addresses integer overflow issues completely
 - Minor edge cases in distance calculations under investigation (non-critical)
 
 ## Build Instructions
@@ -776,7 +775,7 @@ Install-Package PacMapSharp -Version 2.8.29
 
 | Feature | Performance | Details |
 |---------|-------------|---------|
-| **Total Speedup** | **3.1-12.5x** | ERROR14 (2.7-9x) + Latest (15-35%) |
+| **Total Speedup** | **3.1-12.5x** | Previous optimizations (2.7-9x) + Latest (15-35%) |
 | **Threading** | 8-core OpenMP | Atomic operations, thread-safe |
 | **SIMD** | AVX2/AVX512 | Eigen vectorization with runtime detection |
 | **Memory** | 0.1-0.5 MB | Efficient for datasets up to 10K points |
@@ -885,7 +884,7 @@ If you use this implementation in your research, please cite the original PaCMAP
 
 ## 🗺️ Roadmap
 
-### ✅ v2.8.26 (Current) - LARGE DATASET INTEGER OVERFLOW FIX
+### ✅ v2.8.26 (Current) - Large Dataset Integer Overflow Resolution
 - ✅ **Integer Overflow Protection**: Safe arithmetic for 1M+ point datasets (COMPLETED)
 - ✅ **Memory Safety**: Comprehensive validation with detailed memory estimation (COMPLETED)
 - ✅ **Distance Matrix Protection**: Overflow-safe indexing and calculations (COMPLETED)
