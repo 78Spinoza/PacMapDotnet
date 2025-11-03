@@ -12,7 +12,7 @@
     <!-- Enhanced NuGet metadata -->
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <PackageId>PacMapSharp</PackageId>
-    <Version>2.8.30</Version>
+    <Version>2.8.31</Version>
     <Authors>Amin Gholiha</Authors>
     <Company>ID Soft AB</Company>
     <Product>PacMapSharp Enhanced with HNSW</Product>
@@ -25,17 +25,25 @@
     <PackageProjectUrl>https://github.com/78Spinoza/PacMapDotnet</PackageProjectUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageReleaseNotes><![CDATA[
+🚀 v2.8.31 - CRITICAL BUG FIX RELEASE - Early Termination Fixed
+
+🐛 CRITICAL FIX:
+- Fixed early termination bug that prevented PacMAP from completing all 3 phases
+- PacMAP now correctly runs Phase 1 (global), Phase 2 (balance), and Phase 3 (local refinement)
+- Early convergence detection was breaking out after Phase 1, resulting in incomplete embeddings
+- Native DLL update required (Windows pacmap.dll + Linux libpacmap.so)
+
+⚠️ IMPACT:
+- Previous versions may have produced lower-quality embeddings due to incomplete training
+- All 3 phases are critical for proper local and global structure preservation
+- Affects: All users on v2.8.30 and earlier
+
 🚀 v2.8.30 - CRITICAL BUG FIX RELEASE - Model Persistence Fixed
 
 🐛 CRITICAL FIX:
 - Fixed model persistence (Save/Load) failure caused by incorrect string marshaling
 - Changed P/Invoke declarations from LPWStr (UTF-16) to CharSet.Ansi for proper const char* compatibility
 - Model files now correctly save and load across all path formats
-- Affects: Windows and Linux platforms
-
-⚠️ BREAKING CHANGE NOTICE:
-- If you experienced silent failures with model.Save() in v2.8.29, upgrade immediately
-- All persistence unit tests now pass
 
 🚀 v2.8.29 - PERFORMANCE OPTIMIZED RELEASE - Production-Ready PACMAP
 

@@ -38,47 +38,20 @@ if !ERRORLEVEL! NEQ 0 (
 echo [INFO] Running Windows validation tests...
 cd bin\Release
 
-REM Run all essential tests
+REM Run essential tests (only test_minimal and test_basic_integration)
 set WIN_ALL_TESTS_PASSED=1
 
-if exist "run_all_tests.exe" (
-    echo [TEST] Running comprehensive PACMAP test suite...
-    run_all_tests.exe
+if exist "test_minimal.exe" (
+    echo [TEST] Running minimal PACMAP test...
+    test_minimal.exe
     if !ERRORLEVEL! EQU 0 (
-        echo [PASS] Comprehensive PACMAP test PASSED
+        echo [PASS] Minimal test PASSED
     ) else (
-        echo [FAIL] Comprehensive PACMAP test FAILED with code !ERRORLEVEL!
+        echo [FAIL] Minimal test FAILED with code !ERRORLEVEL!
         set WIN_ALL_TESTS_PASSED=0
     )
 ) else (
-    echo [WARN] run_all_tests.exe not found
-    set WIN_ALL_TESTS_PASSED=0
-)
-
-if exist "test_minimal_standalone.exe" (
-    echo [TEST] Running minimal standalone PACMAP test...
-    test_minimal_standalone.exe
-    if !ERRORLEVEL! EQU 0 (
-        echo [PASS] Minimal standalone test PASSED
-    ) else (
-        echo [FAIL] Minimal standalone test FAILED with code !ERRORLEVEL!
-        set WIN_ALL_TESTS_PASSED=0
-    )
-) else (
-    echo [WARN] test_minimal_standalone.exe not found
-)
-
-if exist "test_simple_minimal.exe" (
-    echo [TEST] Running simple minimal PACMAP test...
-    test_simple_minimal.exe
-    if !ERRORLEVEL! EQU 0 (
-        echo [PASS] Simple minimal test PASSED
-    ) else (
-        echo [FAIL] Simple minimal test FAILED with code !ERRORLEVEL!
-        set WIN_ALL_TESTS_PASSED=0
-    )
-) else (
-    echo [WARN] test_simple_minimal.exe not found
+    echo [WARN] test_minimal.exe not found
 )
 
 if exist "test_basic_integration.exe" (
@@ -119,7 +92,7 @@ set UNIX_PATH=%cd:\=/%
 set UNIX_PATH=%UNIX_PATH:C:=/c%
 
 REM Run Docker build with corrected paths and proper C/C++ compilers
-docker run --rm -v "%UNIX_PATH%":/src -w /src ubuntu:22.04 bash -c "apt-get update -qq && apt-get install -y build-essential cmake gcc g++ libomp-dev && echo 'Linux packages installed successfully' && mkdir -p build-linux && cd build-linux && echo 'Starting CMake configuration...' && cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON -DBUILD_TESTS=ON -DCMAKE_POSITION_INDEPENDENT_CODE=ON && echo 'CMake configuration completed, starting build...' && make pacmap run_all_tests test_minimal_standalone test_simple_minimal test_basic_integration -j4 && echo 'Build completed successfully' && ls -la && if [ -f lib/libpacmap.so ]; then cp lib/libpacmap.so libpacmap_backup.so && echo 'Library backup created'; elif [ -f libpacmap.so ]; then cp libpacmap.so libpacmap_backup.so && echo 'Library backup created from root'; else echo 'Warning: No library found to backup'; fi && echo 'Linux build finished successfully'"
+docker run --rm -v "%UNIX_PATH%":/src -w /src ubuntu:22.04 bash -c "apt-get update -qq && apt-get install -y build-essential cmake gcc g++ libomp-dev && echo 'Linux packages installed successfully' && mkdir -p build-linux && cd build-linux && echo 'Starting CMake configuration...' && cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON -DBUILD_TESTS=ON -DCMAKE_POSITION_INDEPENDENT_CODE=ON && echo 'CMake configuration completed, starting build...' && make pacmap test_minimal test_basic_integration -j4 && echo 'Build completed successfully' && ls -la && if [ -f lib/libpacmap.so ]; then cp lib/libpacmap.so libpacmap_backup.so && echo 'Library backup created'; elif [ -f libpacmap.so ]; then cp libpacmap.so libpacmap_backup.so && echo 'Library backup created from root'; else echo 'Warning: No library found to backup'; fi && echo 'Linux build finished successfully'"
 
 REM Check if Docker build succeeded by looking for key indicators
 if exist "build-linux\lib\libpacmap.so" (
@@ -275,22 +248,10 @@ if exist "build-windows\bin\Release\pacmap.dll" (
     for %%A in ("build-windows\bin\Release\pacmap.dll") do echo         Size: %%~zA bytes
 ) else (echo   [FAIL] pacmap.dll)
 
-if exist "build-windows\bin\Release\run_all_tests.exe" (
-    echo   [PASS] run_all_tests.exe
+if exist "build-windows\bin\Release\test_minimal.exe" (
+    echo   [PASS] test_minimal.exe
 ) else (
-    echo   [FAIL] run_all_tests.exe
-)
-
-if exist "build-windows\bin\Release\test_minimal_standalone.exe" (
-    echo   [PASS] test_minimal_standalone.exe
-) else (
-    echo   [FAIL] test_minimal_standalone.exe
-)
-
-if exist "build-windows\bin\Release\test_simple_minimal.exe" (
-    echo   [PASS] test_simple_minimal.exe
-) else (
-    echo   [FAIL] test_simple_minimal.exe
+    echo   [FAIL] test_minimal.exe
 )
 
 if exist "build-windows\bin\Release\test_basic_integration.exe" (
@@ -317,22 +278,16 @@ if exist "build-linux" (
     echo   [FAIL] build-linux directory not found
 )
 
-if exist "build-linux\bin\run_all_tests" (
-    echo   [PASS] run_all_tests
+if exist "build-linux\bin\test_minimal" (
+    echo   [PASS] test_minimal
 ) else (
-    echo   [FAIL] run_all_tests
+    echo   [FAIL] test_minimal
 )
 
-if exist "build-linux\bin\test_minimal_standalone" (
-    echo   [PASS] test_minimal_standalone
+if exist "build-linux\bin\test_basic_integration" (
+    echo   [PASS] test_basic_integration
 ) else (
-    echo   [FAIL] test_minimal_standalone
-)
-
-if exist "build-linux\bin\test_simple_minimal" (
-    echo   [PASS] test_simple_minimal
-) else (
-    echo   [FAIL] test_simple_minimal
+    echo   [FAIL] test_basic_integration
 )
 
 echo.

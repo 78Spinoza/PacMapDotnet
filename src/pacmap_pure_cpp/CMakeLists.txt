@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.15)
-project(pacmap VERSION 2.8.28 LANGUAGES C CXX)
+project(pacmap VERSION 2.8.31 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -178,7 +178,7 @@ set_target_properties(test_basic_integration PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
 )
 
-# Minimal test to isolate segfault issue
+# Minimal test executable
 add_executable(test_minimal
     test_minimal.cpp
 )
@@ -190,43 +190,10 @@ set_target_properties(test_minimal PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
 )
 
-# OpenMP isolation test to debug segfault
-add_executable(test_openmp_isolation
-    test_openmp_isolation.cpp
-)
-if(WIN32)
-    target_compile_options(test_openmp_isolation PRIVATE /openmp)
-    target_compile_definitions(test_openmp_isolation PRIVATE _OPENMP=201511)
-else()
-    target_compile_options(test_openmp_isolation PRIVATE -fopenmp)
-endif()
-set_target_properties(test_openmp_isolation PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
-)
-
-# Fit-only test to isolate segfault to fit function
-add_executable(test_fit_only
-    test_fit_only.cpp
-)
-target_link_libraries(test_fit_only pacmap)
-if(WIN32)
-    target_compile_definitions(test_fit_only PRIVATE _CRT_SECURE_NO_WARNINGS)
-endif()
-set_target_properties(test_fit_only PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
-)
-
-# Gradient analysis test for cross pattern investigation
-add_executable(test_gradient_analysis
-    test_gradient_analysis.cpp
-)
-target_link_libraries(test_gradient_analysis pacmap)
-if(WIN32)
-    target_compile_definitions(test_gradient_analysis PRIVATE _CRT_SECURE_NO_WARNINGS)
-endif()
-set_target_properties(test_gradient_analysis PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
-)
+# Other test executables disabled - source files in tmp folder if needed
+# add_executable(test_openmp_isolation test_openmp_isolation.cpp)
+# add_executable(test_fit_only test_fit_only.cpp)
+# add_executable(test_gradient_analysis test_gradient_analysis.cpp)
 
 # add_executable(test_mathematical_correctness
 #     test_mathematical_correctness.cpp

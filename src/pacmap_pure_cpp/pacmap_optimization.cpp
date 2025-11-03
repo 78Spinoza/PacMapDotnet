@@ -258,13 +258,9 @@ void optimize_embedding(PacMapModel* model, double* embedding_out, pacmap_progre
 
             monitor_optimization_progress(iter, total_iters, loss, get_current_phase(iter, model->phase1_iters, model->phase2_iters), callback);
 
-            // Early termination check
-            if (iter > 200 && should_terminate_early(loss_history)) {
-                if (callback) callback("Early Termination - Converged", iter, total_iters,
-                        static_cast<float>(iter) / total_iters * 100.0f,
-                        "Convergence detected");
-                break;
-            }
+            // NOTE: Early termination disabled for PacMAP - all 3 phases must complete
+            // PacMAP requires Phase 1 (global), Phase 2 (balance), Phase 3 (local) to work correctly
+            // Early stopping during Phase 1 prevents proper local structure refinement
         }
     }
 

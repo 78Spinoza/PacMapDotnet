@@ -1,6 +1,51 @@
 # PacMapDotnet Version History
 
-## Version 2.8.30 - CRITICAL BUG FIX (Current)
+## Version 2.8.31 - CRITICAL BUG FIX - Early Termination (Current)
+
+### 🐛 CRITICAL FIX - PacMAP 3-Phase Algorithm
+- **FIXED EARLY TERMINATION BUG**: PacMAP now completes all 3 required phases
+- **ROOT CAUSE**: Early convergence detection was breaking out of optimization loop during Phase 1
+- **IMPACT**: Previous versions produced incomplete/lower-quality embeddings by skipping Phases 2 & 3
+- **PHASES FIXED**:
+  - Phase 1: Global structure (30% of iterations)
+  - Phase 2: Balance local + global (20% of iterations)
+  - Phase 3: Local refinement (50% of iterations)
+
+### 🔧 TECHNICAL DETAILS
+- **Modified File**: `pacmap_optimization.cpp` line 261-267
+- **Change**: Removed early termination check that called `should_terminate_early()` and broke out of loop
+- **Algorithm Design**: All 3 phases are critical for proper manifold learning
+- **Native DLL**: Requires rebuilding both Windows DLL and Linux SO
+
+### ✅ VALIDATION
+- **Embedding Quality**: All 3 phases now execute completely
+- **Phase Progression**: Logs show "Phase 1 → Phase 2 → Phase 3 → Optimization Complete"
+- **No Premature Exit**: Training runs to completion (100%) instead of stopping at ~20%
+- **Cross-Platform**: Fix applies to both Windows and Linux native libraries
+
+### ⚠️ CRITICAL UPGRADE NOTICE
+- **All users on v2.8.30 and earlier should upgrade immediately**
+- **Native DLL/SO update required** - not just C# code
+- **Quality Impact**: Previous embeddings may have poor local structure preservation
+- **Replace Native Binaries**: New `pacmap.dll` (Windows) and `libpacmap.so` (Linux) required
+
+### 📊 WHAT WAS BROKEN
+- Early termination triggered after ~200 iterations in Phase 1
+- Message: "Early Termination - Converged" at ~20% progress
+- Phases 2 & 3 were completely skipped
+- Resulted in embeddings with only global structure, missing local refinement
+
+### 🎯 WHY IT MATTERS
+PacMAP's 3-phase design is fundamental to its superior performance:
+- **Phase 1**: Establishes global structure and prevents local minima
+- **Phase 2**: Balances local and global forces for smooth transitions
+- **Phase 3**: Refines local neighborhoods for detail preservation
+
+Skipping phases 2 & 3 defeats the core advantage of PacMAP over t-SNE/UMAP.
+
+---
+
+## Version 2.8.30 - CRITICAL BUG FIX - Model Persistence (Previous)
 
 ### 🐛 CRITICAL FIX - Model Persistence
 - **FIXED MODEL SAVE/LOAD FAILURE**: Corrected string marshaling in P/Invoke declarations
