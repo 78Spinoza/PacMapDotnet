@@ -4,7 +4,7 @@
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey)](https://github.com/78Spinoza/PacMapDotnet)
 [![C#](https://img.shields.io/badge/C%23-8.0+-blue)](https://github.com/78Spinoza/PacMapDotnet)
-[![Version](https://img.shields.io/badge/version-2.8.32--66%25--SMALLER-green)](https://github.com/78Spinoza/PacMapDotnet)
+[![Version](https://img.shields.io/badge/version-2.8.33--LARGE--MODEL--FIX-green)](https://github.com/78Spinoza/PacMapDotnet)
 
 **Technology invented in 2021, now available as production-ready code!**
 
@@ -955,7 +955,14 @@ model.Save("trained_model.pacmap");
 var loadedModel = PacMapModel.Load("trained_model.pacmap");
 ```
 
-## 📈 What's New in v2.8.32
+## 📈 What's New in v2.8.33
+
+🐛 **CRITICAL BUG FIX: Large Model Loading**
+✅ **Fixed**: "HNSW uncompressed size too large" error for large datasets
+✅ **Increased HNSW limits**: 100MB → 4GB (handles massive production datasets)
+✅ **Models >100K samples** now save and load correctly
+
+### Previous: v2.8.32
 
 ✅ **66% Smaller Model Files** (32 MB → 11 MB for 100K samples)
 ✅ **3x Faster Save/Load Operations**

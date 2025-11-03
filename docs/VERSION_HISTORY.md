@@ -1,6 +1,36 @@
 # PacMapDotnet Version History
 
-## Version 2.8.32 - BREAKING CHANGE - Persistence Format Optimization (Current)
+## Version 2.8.33 - CRITICAL BUG FIX - Large Model Loading (Current)
+
+### 🐛 CRITICAL FIX - HNSW Size Limits Too Small
+- **PROBLEM**: Models with >100K samples failed to load with "HNSW uncompressed size too large (potential corruption)" error
+- **ROOT CAUSE**: HNSW size limits were hardcoded to 100MB decompressed / 80MB compressed
+- **FIX**: Increased limits to 4GB decompressed / 3GB compressed (near uint32_t maximum)
+- **IMPACT**: Large production datasets now work correctly
+
+### 🔧 TECHNICAL DETAILS
+- **Modified File**: `pacmap_hnsw_utils.cpp:304-305`
+- **Old Limits**:
+  - MAX_DECOMPRESSED_SIZE: 100 × 1024 × 1024 (100 MB)
+  - MAX_COMPRESSED_SIZE: 80 × 1024 × 1024 (80 MB)
+- **New Limits**:
+  - MAX_DECOMPRESSED_SIZE: 4000 × 1024 × 1024 (4 GB)
+  - MAX_COMPRESSED_SIZE: 3000 × 1024 × 1024 (3 GB)
+- **Rationale**: Support massive datasets while maintaining sanity checks for file corruption
+
+### 📊 AFFECTED USE CASES
+- **Fixed**: 100K+ sample datasets with high-dimensional embeddings
+- **Fixed**: Models saved with v2.8.32 that couldn't be loaded
+- **Example**: 100K samples × 27D embedding → 135 MB file now loads correctly
+
+### ✅ VALIDATION
+- **Test**: 100K samples × 100D → 27D embedding (135 MB file) loads successfully
+- **No Breaking Changes**: Models saved with v2.8.32 load with v2.8.33
+- **Backward Compatible**: v2.8.33 can load v2.8.32 files
+
+---
+
+## Version 2.8.32 - BREAKING CHANGE - Persistence Format Optimization
 
 ### 🚀 MAJOR OPTIMIZATION - Persistence File Size Reduction (66% smaller!)
 - **REMOVED DEAD WEIGHT**: Eliminated `adam_m`, `adam_v`, `nn_indices`, `nn_distances`, `nn_weights` from saved models
