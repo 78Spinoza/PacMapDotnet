@@ -135,7 +135,7 @@ namespace persistence_utils {
         endian_utils::write_value(stream, crc, magic, "magic");
         log_debug("[SAVE HEADER] After magic, position: %zd", static_cast<std::streamoff>(stream.tellp()));
 
-        const uint32_t format_version = 1;
+        const uint32_t format_version = 2; // v2.8.32: Removed adam_m/adam_v (never used after training)
         endian_utils::write_value(stream, crc, format_version, "format_version");
         log_debug("[SAVE HEADER] After format_version, position: %zd", static_cast<std::streamoff>(stream.tellp()));
 
@@ -300,13 +300,13 @@ namespace persistence_utils {
     }
 
     static void save_knn_data(std::ostream& stream, uint32_t& crc, const PacMapModel* model) {
-        bool needs_knn = !model->use_quantization;
-        endian_utils::write_value(stream, crc, needs_knn, "needs_knn");
-        if (needs_knn) {
-            save_vector(stream, crc, model->nn_indices, "nn_indices", false);
-            save_vector(stream, crc, model->nn_distances, "nn_distances", false);
-            save_vector(stream, crc, model->nn_weights, "nn_weights", false);
-        }
+        // NOTE: nn_indices, nn_distances, nn_weights removed in v2.8.32
+        // These fields were never populated during fit and never used in transform
+        // Transform uses either HNSW index (fast) or training_data (exact) for k-NN
+        // Removing these saves ~20 MB for 100K samples (biggest file size reduction!)
+        (void)stream; // Suppress unused parameter warning
+        (void)crc;
+        (void)model;
     }
 
     static void save_quantization_data(std::ostream& stream, uint32_t& crc, const PacMapModel* model) {
@@ -475,9 +475,8 @@ namespace persistence_utils {
             endian_utils::write_value(file, crc, model->p25_distance, "p25_distance");
             endian_utils::write_value(file, crc, model->p75_distance, "p75_distance");
 
-            // Save Adam optimizer state
-            save_vector(file, crc, model->adam_m, "adam_m", true);
-            save_vector(file, crc, model->adam_v, "adam_v", true);
+            // Save Adam optimizer CONFIGURATION (not state - adam_m/adam_v removed in v2.8.32)
+            // These parameters configure the optimizer but the state vectors are always reinitialized
             endian_utils::write_value(file, crc, model->adam_beta1, "adam_beta1");
             endian_utils::write_value(file, crc, model->adam_beta2, "adam_beta2");
             endian_utils::write_value(file, crc, model->adam_eps, "adam_eps");
@@ -528,9 +527,10 @@ namespace persistence_utils {
             throw std::runtime_error("Failed to read format version from file: " + std::string(filename));
         }
         log_debug("[LOAD HEADER] Read format_version: %u, position: %zd", format_version, static_cast<std::streamoff>(stream.tellg()));
-        if (format_version != 1) {
+        if (format_version != 2) {
             throw std::runtime_error("Unsupported format version: " + std::to_string(format_version) +
-                " in file: " + std::string(filename));
+                " (expected v2 - v2.8.32+). Old v1 models with adam_m/adam_v are no longer supported. " +
+                "Please re-fit your model with the latest version. File: " + std::string(filename));
         }
 
         char version[17] = { 0 };
@@ -791,15 +791,12 @@ namespace persistence_utils {
     }
 
     static void load_knn_data(std::istream& stream, PacMapModel* model, const char* filename) {
-        bool needs_knn;
-        if (!endian_utils::read_value(stream, needs_knn, "needs_knn")) {
-            throw std::runtime_error("Failed to read k-NN flag from file: " + std::string(filename));
-        }
-        if (needs_knn) {
-            load_vector(stream, model->nn_indices, "nn_indices", filename, false);
-            load_vector(stream, model->nn_distances, "nn_distances", filename, false);
-            load_vector(stream, model->nn_weights, "nn_weights", filename, false);
-        }
+        // NOTE: nn_indices, nn_distances, nn_weights removed in v2.8.32
+        // These fields were never populated during fit and never used in transform
+        // Old v1 models that include these fields are no longer supported (format v2 required)
+        (void)stream;
+        (void)model;
+        (void)filename;
     }
 
     static void load_quantization_data(std::istream& stream, PacMapModel* model, const char* filename) {
@@ -1104,23 +1101,13 @@ namespace persistence_utils {
                 throw std::runtime_error("Failed to read distance percentiles from file: " + std::string(filename));
             }
 
-            // Load Adam optimizer state
-            log_debug("[LOAD] About to load adam_m vector");
-            load_vector(file, model->adam_m, "adam_m", filename, true);
-            log_debug("[LOAD] Successfully loaded adam_m vector, size=%zu", model->adam_m.size());
-
-            log_debug("[LOAD] About to load adam_v vector");
-            load_vector(file, model->adam_v, "adam_v", filename, true);
-            log_debug("[LOAD] Successfully loaded adam_v vector, size=%zu", model->adam_v.size());
-
-            log_debug("[LOAD] About to read Adam optimizer parameters");
+            // Load Adam optimizer CONFIGURATION (not state - adam_m/adam_v removed in v2.8.32)
+            // These parameters configure the optimizer but the state vectors are always reinitialized
             if (!endian_utils::read_value(file, model->adam_beta1, "adam_beta1") ||
                 !endian_utils::read_value(file, model->adam_beta2, "adam_beta2") ||
                 !endian_utils::read_value(file, model->adam_eps, "adam_eps")) {
-                throw std::runtime_error("Failed to read Adam optimizer parameters from file: " + std::string(filename));
+                throw std::runtime_error("Failed to read Adam optimizer configuration from file: " + std::string(filename));
             }
-            log_debug("[LOAD] Successfully loaded Adam optimizer parameters: beta1=%.6f, beta2=%.6f, eps=%.2e",
-                      model->adam_beta1, model->adam_beta2, model->adam_eps);
 
             bool save_embedding;
             log_debug("[LOAD] About to read save_embedding flag");
