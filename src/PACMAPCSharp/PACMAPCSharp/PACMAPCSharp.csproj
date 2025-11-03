@@ -12,7 +12,7 @@
     <!-- Enhanced NuGet metadata -->
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <PackageId>PacMapSharp</PackageId>
-    <Version>2.8.29</Version>
+    <Version>2.8.30</Version>
     <Authors>Amin Gholiha</Authors>
     <Company>ID Soft AB</Company>
     <Product>PacMapSharp Enhanced with HNSW</Product>
@@ -25,6 +25,18 @@
     <PackageProjectUrl>https://github.com/78Spinoza/PacMapDotnet</PackageProjectUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageReleaseNotes><![CDATA[
+🚀 v2.8.30 - CRITICAL BUG FIX RELEASE - Model Persistence Fixed
+
+🐛 CRITICAL FIX:
+- Fixed model persistence (Save/Load) failure caused by incorrect string marshaling
+- Changed P/Invoke declarations from LPWStr (UTF-16) to CharSet.Ansi for proper const char* compatibility
+- Model files now correctly save and load across all path formats
+- Affects: Windows and Linux platforms
+
+⚠️ BREAKING CHANGE NOTICE:
+- If you experienced silent failures with model.Save() in v2.8.29, upgrade immediately
+- All persistence unit tests now pass
+
 🚀 v2.8.29 - PERFORMANCE OPTIMIZED RELEASE - Production-Ready PACMAP
 
 ✅ MASSIVE PERFORMANCE OPTIMIZATIONS (3.1-12.5x speedup):

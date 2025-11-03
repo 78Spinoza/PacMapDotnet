@@ -1,6 +1,33 @@
 # PacMapDotnet Version History
 
-## Version 2.8.24 - MULTI-METRIC EXPANSION (Current)
+## Version 2.8.30 - CRITICAL BUG FIX (Current)
+
+### 🐛 CRITICAL FIX - Model Persistence
+- **FIXED MODEL SAVE/LOAD FAILURE**: Corrected string marshaling in P/Invoke declarations
+- **ROOT CAUSE**: Changed from LPWStr (UTF-16) to CharSet.Ansi for proper const char* compatibility
+- **IMPACT**: Model files now correctly save and load across all path formats on Windows and Linux
+- **SILENT FAILURE RESOLVED**: Save operations that previously returned success but created no file now work correctly
+
+### 🔧 TECHNICAL DETAILS
+- **Modified Files**: `PacMapModel.cs` lines 237-241 (Windows) and 286-290 (Linux)
+- **Changed Marshaling**: Removed `[MarshalAs(UnmanagedType.LPWStr)]` and added `CharSet = CharSet.Ansi`
+- **Native Compatibility**: Now properly converts C# strings to ANSI/UTF-8 `const char*` for C++ `std::ofstream`
+- **Path Corruption Fixed**: Complex paths like `C:\Users\AG\Desktop\Data2\0927\ForSuper\clean\Data2025-11-02_19-36.pac` now work correctly
+
+### ✅ VALIDATION
+- **Unit Tests**: All persistence tests now pass (`Test_Model_Persistence`, `Test_Separate_Objects_Save_Load`)
+- **File Creation Verified**: Files are correctly created with expected size (17KB for 100×10 test dataset)
+- **Load/Transform Verified**: Saved models load correctly and transform operations work as expected
+- **Cross-Platform**: Fix applies to both Windows DLL and Linux SO
+
+### ⚠️ UPGRADE NOTICE
+- **If you experienced silent failures with `model.Save()` in v2.8.29, upgrade immediately**
+- **No native DLL/SO rebuild required** - fix is C# only
+- **Backward Compatible**: Existing code continues to work without changes
+
+---
+
+## Version 2.8.24 - MULTI-METRIC EXPANSION (Previous)
 
 ### 🚀 MULTI-METRIC BREAKTHROUGH
 - **FOUR DISTANCE METRICS**: Complete implementation of Euclidean, Manhattan, Cosine, and Hamming distances

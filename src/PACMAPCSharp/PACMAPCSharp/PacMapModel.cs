@@ -234,11 +234,11 @@ namespace PacMapSharp
                                                         double[] confidenceScore, int[] outlierLevel,
                                                         double[] percentileRank, double[] zScore);
 
-        [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_save_model")]
-        private static extern int WindowsSaveModel(IntPtr model, [MarshalAs(UnmanagedType.LPWStr)] string filename);
+        [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_save_model", CharSet = CharSet.Ansi)]
+        private static extern int WindowsSaveModel(IntPtr model, string filename);
 
-        [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_load_model")]
-        private static extern IntPtr WindowsLoadModel([MarshalAs(UnmanagedType.LPWStr)] string filename);
+        [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_load_model", CharSet = CharSet.Ansi)]
+        private static extern IntPtr WindowsLoadModel(string filename);
 
         [DllImport(WindowsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_destroy")]
         private static extern void WindowsDestroy(IntPtr model);
@@ -283,11 +283,11 @@ namespace PacMapSharp
                                                       double[] confidenceScore, int[] outlierLevel,
                                                       double[] percentileRank, double[] zScore);
 
-        [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_save_model")]
-        private static extern int LinuxSaveModel(IntPtr model, [MarshalAs(UnmanagedType.LPWStr)] string filename);
+        [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_save_model", CharSet = CharSet.Ansi)]
+        private static extern int LinuxSaveModel(IntPtr model, string filename);
 
-        [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_load_model")]
-        private static extern IntPtr LinuxLoadModel([MarshalAs(UnmanagedType.LPWStr)] string filename);
+        [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_load_model", CharSet = CharSet.Ansi)]
+        private static extern IntPtr LinuxLoadModel(string filename);
 
         [DllImport(LinuxDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "pacmap_destroy")]
         private static extern void LinuxDestroy(IntPtr model);
