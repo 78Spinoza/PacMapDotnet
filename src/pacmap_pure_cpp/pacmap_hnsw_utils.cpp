@@ -301,8 +301,8 @@ namespace hnsw_utils {
             }
 
             // Security validation - allow very large models (up to 4GB per HNSW index)
-            const uint32_t MAX_DECOMPRESSED_SIZE = 4000 * 1024 * 1024; // 4GB limit (~4 billion bytes, close to uint32_t max)
-            const uint32_t MAX_COMPRESSED_SIZE = 3000 * 1024 * 1024;    // 3GB limit
+            const uint32_t MAX_DECOMPRESSED_SIZE = 4000U * 1024U * 1024U; // 4GB limit (~4 billion bytes, close to uint32_t max)
+            const uint32_t MAX_COMPRESSED_SIZE = 3000U * 1024U * 1024U;    // 3GB limit
 
             if (uncompressed_size > MAX_DECOMPRESSED_SIZE) {
                 throw std::runtime_error("HNSW uncompressed size too large (potential corruption)");

@@ -539,9 +539,12 @@ namespace persistence_utils {
             throw std::runtime_error("Failed to read library version from file: " + std::string(filename));
         }
         log_debug("[LOAD HEADER] Read version: '%s', position: %zd", version, static_cast<std::streamoff>(stream.tellg()));
+        // Don't enforce library version match - only format version matters
+        // Models saved with different library versions can be loaded as long as format version is compatible
         if (strcmp(version, PACMAP_WRAPPER_VERSION_STRING) != 0) {
-            throw std::runtime_error("Library version mismatch: expected " + std::string(PACMAP_WRAPPER_VERSION_STRING) +
-                ", got " + std::string(version) + " in file: " + std::string(filename));
+            send_error_to_callback(("WARNING: Library version mismatch: file saved with " + std::string(version) +
+                ", loading with " + std::string(PACMAP_WRAPPER_VERSION_STRING) +
+                " - proceeding anyway (format version is compatible)").c_str());
         }
 
         if (!endian_utils::read_value(stream, header_size, "header_size")) {

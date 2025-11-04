@@ -25,13 +25,13 @@
     <PackageProjectUrl>https://github.com/78Spinoza/PacMapDotnet</PackageProjectUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageReleaseNotes><![CDATA[
-🐛 v2.8.34 - CRITICAL BUG FIX - Large Model Loading (Clean Rebuild)
+🐛 v2.8.34 - CRITICAL BUG FIX - Large Model Loading + Version Check Fix
 
 🔧 FIXES:
 - Increased HNSW size limits from 100MB/80MB to 4GB/3GB
 - Large models (>100K samples) can now save and load correctly
 - Fixed "HNSW uncompressed size too large" error for production datasets
-- Clean rebuild with correct DLL version matching
+- Removed strict library version check (only format version matters now)
 
 🚀 v2.8.32 - BREAKING CHANGE - MASSIVE File Size Optimization (66% smaller!)
 
