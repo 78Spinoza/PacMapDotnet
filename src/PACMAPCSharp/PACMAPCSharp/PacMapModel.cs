@@ -82,12 +82,16 @@ namespace PacMapSharp
         public double[] ProjectionCoordinates { get; }
 
         /// <summary>
-        /// Gets the indices of nearest neighbors in the original training data
+        /// Gets the indices of nearest neighbors in the EMBEDDING space (ordered by embedding distance, not original space).
+        /// Ordered from nearest to farthest: [0] = closest neighbor, [Length-1] = farthest neighbor.
+        /// Indices reference the original training data samples.
         /// </summary>
         public int[] NearestNeighborIndices { get; }
 
         /// <summary>
-        /// Gets the distances to nearest neighbors in the original feature space
+        /// Gets the distances to nearest neighbors in the EMBEDDING space (not original feature space).
+        /// Ordered from nearest to farthest: [0] = closest neighbor, [Length-1] = farthest neighbor.
+        /// Used for confidence scoring and outlier detection.
         /// </summary>
         public double[] NearestNeighborDistances { get; }
 
@@ -318,7 +322,7 @@ namespace PacMapSharp
         #region Constants
 
         // Expected DLL version - must match C++ PACMAP_WRAPPER_VERSION_STRING
-        private const string EXPECTED_DLL_VERSION = "2.8.34";
+        private const string EXPECTED_DLL_VERSION = "2.8.35";
 
         #endregion
 

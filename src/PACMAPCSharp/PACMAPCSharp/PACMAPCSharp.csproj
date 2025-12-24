@@ -12,7 +12,7 @@
     <!-- Enhanced NuGet metadata -->
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <PackageId>PacMapSharp</PackageId>
-    <Version>2.8.34</Version>
+    <Version>2.8.35</Version>
     <Authors>Amin Gholiha</Authors>
     <Company>ID Soft AB</Company>
     <Product>PacMapSharp Enhanced with HNSW</Product>
@@ -25,6 +25,31 @@
     <PackageProjectUrl>https://github.com/78Spinoza/PacMapDotnet</PackageProjectUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageReleaseNotes><![CDATA[
+🎯 v2.8.35 - QUALITY RELEASE - Unbiased Statistics + API Consistency
+
+✨ MAJOR IMPROVEMENTS:
+- Fixed biased embedding statistics (was using first 1000 points only!)
+- Now uses HNSW k-NN distances for unbiased p95/p99/mean/std calculation
+- Fixed neighbor ordering: [0]=nearest, [last]=farthest (consistent across API)
+- Comprehensive documentation updates for embedding vs original space
+
+🔧 TECHNICAL FIXES:
+- Embedding statistics now from n_obs×k distances (e.g., 100K×40 = 4M distances)
+- Reservoir sampling fallback when HNSW disabled (2000 points, randomized)
+- Transform neighbor ordering reversed to match fit (nearest-first)
+- Updated C# XML docs and C++ header comments for clarity
+
+📊 IMPACT:
+- More reliable ConfidenceScore calculations
+- Better outlier detection thresholds
+- Consistent API expectations (breaking change: array ordering)
+- Old models will still load but have biased stats (recommend retrain)
+
+⚠️ BREAKING CHANGE:
+- NearestNeighborDistances/Indices now ordered nearest-first (was farthest-first)
+- Code relying on old ordering needs update
+- Example code fixed to reflect new ordering
+
 🐛 v2.8.34 - CRITICAL BUG FIX - Large Model Loading + Version Check Fix
 
 🔧 FIXES:

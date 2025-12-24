@@ -4,7 +4,7 @@
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey)](https://github.com/78Spinoza/PacMapDotnet)
 [![C#](https://img.shields.io/badge/C%23-8.0+-blue)](https://github.com/78Spinoza/PacMapDotnet)
-[![Version](https://img.shields.io/badge/version-2.8.34--LARGE--MODEL--FIX-green)](https://github.com/78Spinoza/PacMapDotnet)
+[![Version](https://img.shields.io/badge/version-2.8.35--QUALITY--RELEASE-green)](https://github.com/78Spinoza/PacMapDotnet)
 
 **Technology invented in 2021, now available as production-ready code!**
 
@@ -697,15 +697,15 @@ cp build_windows/bin/Release/pacmap.dll ../PACMAPCSharp/PACMAPCSharp/
 #### Windows x64 Binary
 - **Location**: `src/PACMAPCSharp/PACMAPCSharp/pacmap.dll`
 - **Architecture**: x64 (64-bit)
-- **Size**: ~301KB (optimized with latest performance improvements)
+- **Size**: ~293KB (optimized with latest performance improvements)
 - **Features**: OpenMP 8-thread parallelization, AVX2/AVX512 SIMD, HNSW optimization
-- **Build Date**: October 17, 2025 (v2.8.29 Performance Optimized)
+- **Build Date**: December 24, 2025 (v2.8.35 Quality Release)
 
 #### Linux x64 Binary
 - **Location**: `src/pacmap_pure_cpp/build/bin/Release/libpacmap.so`
 - **Architecture**: x64 (64-bit)
 - **Features**: GCC 11 compiled, OpenMP parallelization, cross-platform compatible
-- **Build Date**: October 17, 2025 (v2.8.29 Performance Optimized)
+- **Build Date**: December 24, 2025 (v2.8.35 Quality Release)
 
 #### 🎯 Deployment Benefits
 - **Zero Build Dependencies**: No C++ compiler, CMake, or Visual Studio required
@@ -734,12 +734,12 @@ cd src/pacmap_pure_cpp
 **✅ NuGet package available with cross-platform binaries!**
 
 - **Package Name**: `PacMapSharp`
-- **Version**: `2.8.29` (Performance Optimized)
+- **Version**: `2.8.35` (Quality Release - Unbiased Statistics)
 - **Size**: ~451KB (includes both Windows and Linux binaries)
 - **Location**: Available in project build output
 
 **🎯 Package Contents:**
-- ✅ **Windows x64 DLL**: `pacmap.dll` (301KB) - Production optimized
+- ✅ **Windows x64 DLL**: `pacmap.dll` (293KB) - Production optimized
 - ✅ **Linux x64 SO**: `libpacmap.so` (641KB) - Docker ready
 - ✅ **.NET Assembly**: Full C# wrapper with comprehensive API
 - ✅ **Documentation**: Complete XML documentation
@@ -748,7 +748,7 @@ cd src/pacmap_pure_cpp
 **🚀 Installation via NuGet (Coming Soon):**
 ```bash
 # Package ready for upload to NuGet.org
-Install-Package PacMapSharp -Version 2.8.29
+Install-Package PacMapSharp -Version 2.8.35
 ```
 
 **📋 Package Features:**
@@ -886,7 +886,19 @@ If you use this implementation in your research, please cite the original PaCMAP
 
 ## 🗺️ Roadmap
 
-### ✅ v2.8.32 (Current) - MASSIVE File Size Optimization (66% smaller!)
+### ✅ v2.8.35 (Current) - QUALITY RELEASE - Unbiased Statistics + API Consistency
+- ✅ **Fixed Biased Statistics**: Now uses HNSW k-NN distances for unbiased p95/p99/mean/std (COMPLETED)
+- ✅ **Fixed Neighbor Ordering**: Consistent nearest-first ordering across fit/transform API (COMPLETED)
+- ✅ **Comprehensive Documentation**: Clarified embedding vs original space in all docs (COMPLETED)
+- ✅ **Better AI Inference**: More reliable ConfidenceScore and outlier detection (COMPLETED)
+- ⚠️ **Breaking Change**: NearestNeighborDistances/Indices ordering reversed (COMPLETED)
+
+### ✅ v2.8.34 - Large Model Loading Fix
+- ✅ **HNSW Size Limits**: Increased from 100MB/80MB to 4GB/3GB (COMPLETED)
+- ✅ **Large Models**: Models with >100K samples now load correctly (COMPLETED)
+- ✅ **Version Check**: Removed strict library version check (COMPLETED)
+
+### ✅ v2.8.32 - MASSIVE File Size Optimization (66% smaller!)
 - ✅ **Dead Weight Removal**: Eliminated adam_m, adam_v, nn_* vectors from persistence (COMPLETED)
 - ✅ **66% Size Reduction**: 32 MB → 11 MB for 100K samples (COMPLETED)
 - ✅ **3x Faster Save/Load**: Optimized persistence format with zero functionality loss (COMPLETED)
@@ -919,7 +931,7 @@ If you use this implementation in your research, please cite the original PaCMAP
 
 ### NuGet Package (Recommended)
 ```bash
-dotnet add package PacMapSharp --version 2.8.32
+dotnet add package PacMapSharp --version 2.8.35
 ```
 
 ### Build from Source
@@ -955,12 +967,24 @@ model.Save("trained_model.pacmap");
 var loadedModel = PacMapModel.Load("trained_model.pacmap");
 ```
 
-## 📈 What's New in v2.8.33
+## 📈 What's New in v2.8.35
 
-🐛 **CRITICAL BUG FIX: Large Model Loading**
+🎯 **QUALITY RELEASE: Unbiased Statistics + API Consistency**
+✅ **Fixed biased embedding statistics** - was using only first 1000 points sequentially!
+✅ **Now uses HNSW k-NN distances** for unbiased p95/p99/mean/std (e.g., 100K×40 = 4M distances)
+✅ **Fixed neighbor ordering** - [0]=nearest, [39]=farthest (consistent across fit/transform)
+✅ **Comprehensive documentation** - clarified embedding vs original space throughout
+
+**Impact**: More reliable ConfidenceScore, better outlier detection, consistent API
+
+⚠️ **Breaking Change**: NearestNeighborDistances/Indices now ordered nearest-first
+
+### Previous: v2.8.34
+
+🐛 **Large Model Loading Fix**
 ✅ **Fixed**: "HNSW uncompressed size too large" error for large datasets
 ✅ **Increased HNSW limits**: 100MB → 4GB (handles massive production datasets)
-✅ **Models >100K samples** now save and load correctly
+✅ **Removed strict version check**: Only format version matters now
 
 ### Previous: v2.8.32
 

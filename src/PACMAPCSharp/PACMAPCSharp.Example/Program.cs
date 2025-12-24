@@ -387,7 +387,7 @@ namespace PACMAPExample
 
                         // Show nearest neighbors info
                         Console.WriteLine($"    Nearest neighbors: {result.NeighborCount} analyzed");
-                        var nearestDist = result.NearestNeighborDistances[0];
+                        var nearestDist = result.NearestNeighborDistances[0];  // [0] = closest neighbor
                         Console.WriteLine($"    Closest training point distance: {nearestDist:F3}");
                     }
                 }

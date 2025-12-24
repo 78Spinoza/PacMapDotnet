@@ -502,39 +502,10 @@ namespace fit_utils {
             for (float e : embedding_vec) init_std += (e - init_mean) * (e - init_mean);
             init_std = std::sqrt(init_std / embedding_vec.size());
       
-            // Compute embedding statistics for transform safety
+            // Embedding statistics will be computed during HNSW index construction
+            // to avoid biased sampling from first N points (v2.8.35 fix)
             std::vector<float> embedding_distances;
-            int sample_size = std::min(n_obs, 1000);
-            for (int i = 0; i < sample_size; i++) {
-                for (int j = i + 1; j < sample_size; j++) {
-                    float dist = 0.0f;
-                    for (int d = 0; d < embedding_dim; d++) {
-                        float diff = embedding[static_cast<size_t>(i) * static_cast<size_t>(embedding_dim) + static_cast<size_t>(d)] -
-                                    embedding[static_cast<size_t>(j) * static_cast<size_t>(embedding_dim) + static_cast<size_t>(d)];
-                        dist += diff * diff;
-                    }
-                    embedding_distances.push_back(std::sqrt(dist));
-                }
-            }
-
-            if (!embedding_distances.empty()) {
-                std::sort(embedding_distances.begin(), embedding_distances.end());
-                model->min_embedding_distance = embedding_distances.front();
-                model->p95_embedding_distance = embedding_distances[static_cast<size_t>(0.95 * embedding_distances.size())];
-                model->p99_embedding_distance = embedding_distances[static_cast<size_t>(0.99 * embedding_distances.size())];
-                model->mean_embedding_distance = std::accumulate(embedding_distances.begin(), embedding_distances.end(), 0.0f) / embedding_distances.size();
-
-                float variance = 0.0f;
-                for (float dist : embedding_distances) {
-                    float diff = dist - model->mean_embedding_distance;
-                    variance += diff * diff;
-                }
-                model->std_embedding_distance = std::sqrt(variance / embedding_distances.size());
-
-                // Outlier thresholds
-                model->mild_embedding_outlier_threshold = model->mean_embedding_distance + 2.5f * model->std_embedding_distance;
-                model->extreme_embedding_outlier_threshold = model->mean_embedding_distance + 4.0f * model->std_embedding_distance;
-            }
+            embedding_distances.reserve(model->n_samples * model->n_neighbors);  // Pre-allocate for k-NN distances
 
     
             // Build embedding space HNSW index for AI inference and transform analysis
@@ -562,9 +533,43 @@ namespace fit_utils {
                 for (size_t i = 0; i < model->embedding.size(); ++i) {
                     embedding_float[i] = static_cast<float>(model->embedding[i]);
                 }
+
+                // v2.8.35: Collect k-NN distances during index construction for unbiased statistics
                 for (int i = 0; i < model->n_samples; i++) {
                     const float* embedding_point = &embedding_float[static_cast<size_t>(i) * static_cast<size_t>(model->n_components)];
                     model->embedding_space_index->addPoint(embedding_point, static_cast<size_t>(i));
+
+                    // After adding enough points, query k-NN to collect distances for statistics
+                    if (i >= model->n_neighbors) {
+                        auto knn_result = model->embedding_space_index->searchKnn(embedding_point, model->n_neighbors);
+
+                        while (!knn_result.empty()) {
+                            float dist_sq = knn_result.top().first;  // L2Space returns squared distance
+                            float dist = std::sqrt(std::max(0.0f, dist_sq));
+                            embedding_distances.push_back(dist);
+                            knn_result.pop();
+                        }
+                    }
+                }
+
+                // v2.8.35: Calculate embedding statistics from collected k-NN distances
+                if (!embedding_distances.empty()) {
+                    std::sort(embedding_distances.begin(), embedding_distances.end());
+                    model->min_embedding_distance = embedding_distances.front();
+                    model->p95_embedding_distance = embedding_distances[static_cast<size_t>(0.95 * embedding_distances.size())];
+                    model->p99_embedding_distance = embedding_distances[static_cast<size_t>(0.99 * embedding_distances.size())];
+                    model->mean_embedding_distance = std::accumulate(embedding_distances.begin(), embedding_distances.end(), 0.0f) / embedding_distances.size();
+
+                    float variance = 0.0f;
+                    for (float dist : embedding_distances) {
+                        float diff = dist - model->mean_embedding_distance;
+                        variance += diff * diff;
+                    }
+                    model->std_embedding_distance = std::sqrt(variance / embedding_distances.size());
+
+                    // Outlier thresholds
+                    model->mild_embedding_outlier_threshold = model->mean_embedding_distance + 2.5f * model->std_embedding_distance;
+                    model->extreme_embedding_outlier_threshold = model->mean_embedding_distance + 4.0f * model->std_embedding_distance;
                 }
 
                 if (progress_callback) {
@@ -576,6 +581,61 @@ namespace fit_utils {
                 // Embedding space index creation failed - not critical for basic functionality
                 model->embedding_space_index = nullptr;
                 model->embedding_space = nullptr;
+
+                // v2.8.35: Fallback to sampling-based statistics if HNSW fails
+                if (embedding_distances.empty()) {
+                    // Use reservoir sampling for unbiased statistics
+                    std::mt19937 rng(model->random_seed >= 0 ? model->random_seed : std::random_device{}());
+                    int sample_size = std::min(n_obs, 2000);  // Increased from 1000
+                    std::vector<int> sampled_indices;
+
+                    // Reservoir sampling
+                    for (int i = 0; i < n_obs; i++) {
+                        if (i < sample_size) {
+                            sampled_indices.push_back(i);
+                        } else {
+                            int j = std::uniform_int_distribution<int>(0, i)(rng);
+                            if (j < sample_size) {
+                                sampled_indices[j] = i;
+                            }
+                        }
+                    }
+
+                    // Calculate pairwise distances from sampled points
+                    for (size_t i = 0; i < sampled_indices.size(); i++) {
+                        for (size_t j = i + 1; j < sampled_indices.size(); j++) {
+                            int idx_i = sampled_indices[i];
+                            int idx_j = sampled_indices[j];
+                            float dist = 0.0f;
+                            for (int d = 0; d < embedding_dim; d++) {
+                                float diff = embedding[static_cast<size_t>(idx_i) * static_cast<size_t>(embedding_dim) + static_cast<size_t>(d)] -
+                                            embedding[static_cast<size_t>(idx_j) * static_cast<size_t>(embedding_dim) + static_cast<size_t>(d)];
+                                dist += diff * diff;
+                            }
+                            embedding_distances.push_back(std::sqrt(dist));
+                        }
+                    }
+
+                    // Calculate statistics
+                    if (!embedding_distances.empty()) {
+                        std::sort(embedding_distances.begin(), embedding_distances.end());
+                        model->min_embedding_distance = embedding_distances.front();
+                        model->p95_embedding_distance = embedding_distances[static_cast<size_t>(0.95 * embedding_distances.size())];
+                        model->p99_embedding_distance = embedding_distances[static_cast<size_t>(0.99 * embedding_distances.size())];
+                        model->mean_embedding_distance = std::accumulate(embedding_distances.begin(), embedding_distances.end(), 0.0f) / embedding_distances.size();
+
+                        float variance = 0.0f;
+                        for (float dist : embedding_distances) {
+                            float diff = dist - model->mean_embedding_distance;
+                            variance += diff * diff;
+                        }
+                        model->std_embedding_distance = std::sqrt(variance / embedding_distances.size());
+
+                        model->mild_embedding_outlier_threshold = model->mean_embedding_distance + 2.5f * model->std_embedding_distance;
+                        model->extreme_embedding_outlier_threshold = model->mean_embedding_distance + 4.0f * model->std_embedding_distance;
+                    }
+                }
+
                 if (progress_callback) {
                     progress_callback("Warning", 100, 100, 100.0f,
                                     ("Embedding space HNSW index creation failed: " + std::string(e.what())).c_str());

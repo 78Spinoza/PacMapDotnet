@@ -41,7 +41,7 @@ namespace transform_utils {
                 }
 
                 // Normalize point using SAME preprocessing as training (min-max + mean centering)
-                // § CRITICAL FIX: Apply exact same min-max scaling + mean centering as fit process
+                // ï¿½ CRITICAL FIX: Apply exact same min-max scaling + mean centering as fit process
                 // Python reference (pacmap.py lines 371-375):
                 //   X -= xmin          # Min offset
                 //   X /= xmax          # Scale to [0,1]
@@ -210,6 +210,11 @@ namespace transform_utils {
                         embedding_neighbors.push_back(neighbor_idx);
                         embedding_distances.push_back(distance);
                     }
+
+                    // v2.8.35: Reverse to get nearest-first ordering (consistent with fit)
+                    // HNSW searchKnn returns farthest-first, so we reverse for intuitive API
+                    std::reverse(embedding_neighbors.begin(), embedding_neighbors.end());
+                    std::reverse(embedding_distances.begin(), embedding_distances.end());
                 }
 
                 // Store EMBEDDING SPACE neighbor information (this is what AI needs)

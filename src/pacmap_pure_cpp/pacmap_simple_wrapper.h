@@ -33,7 +33,7 @@ extern "C" {
 #define PACMAP_ERROR_FITTING_FAILED -10
 
 // Version information
-#define PACMAP_WRAPPER_VERSION_STRING "2.8.34"
+#define PACMAP_WRAPPER_VERSION_STRING "2.8.35"
 
 // Distance metrics
     typedef enum {
@@ -129,8 +129,10 @@ extern "C" {
     // Returns detailed information about nearest neighbors, confidence, and outlier detection
     // Parameters:
     //   - embedding: Output embedding coordinates [n_new_obs * embedding_dim]
-    //   - nn_indices: Output nearest neighbor indices [n_new_obs * n_neighbors] (can be NULL)
-    //   - nn_distances: Output nearest neighbor distances [n_new_obs * n_neighbors] (can be NULL)
+    //   - nn_indices: Output nearest neighbor indices in EMBEDDING space [n_new_obs * n_neighbors]
+    //                 Ordered nearest-first: [0]=closest, [n_neighbors-1]=farthest (can be NULL)
+    //   - nn_distances: Output nearest neighbor distances in EMBEDDING space [n_new_obs * n_neighbors]
+    //                   Ordered nearest-first: [0]=closest, [n_neighbors-1]=farthest (can be NULL)
     //   - confidence_score: Output confidence scores [n_new_obs] (0.0-1.0, can be NULL)
     //   - outlier_level: Output outlier levels [n_new_obs] (PacMapOutlierLevel enum, can be NULL)
     //   - percentile_rank: Output percentile ranks [n_new_obs] (0-100, can be NULL)
